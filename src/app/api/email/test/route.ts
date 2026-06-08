@@ -1,0 +1,17 @@
+import { NextResponse } from 'next/server'
+import { Resend } from 'resend'
+
+export async function POST() {
+  const resend = new Resend(process.env.RESEND_API_KEY)
+  try {
+    await resend.emails.send({
+      from: 'Petites Herbes <onboarding@resend.dev>',
+      to: process.env.EMAIL_DESTINATION || 'petitesherbes@gmail.com',
+      subject: '✅ Test — GAEC Les Petites Herbes',
+      html: '<h1>Test réussi !</h1><p>L\'application de gestion des semis est bien configurée.</p>',
+    })
+    return NextResponse.json({ ok: true })
+  } catch (err) {
+    return NextResponse.json({ error: 'Erreur' }, { status: 500 })
+  }
+}
