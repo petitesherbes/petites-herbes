@@ -35,8 +35,10 @@ export interface ParametresProduction {
   litres_par_caisse: number
   litres_par_tapis: number
   litres_par_godet: number
-  prix_plateau: number | null   // €/plateau individuel (TAPIS, 67×96×8mm) — 1 caisse = 24 plateaux
-  prix_godet: number | null     // €/plaque godets (TEKU TK914S, 14 godets) — 1 série = 1 plaque
+  prix_plateau: number | null     // €/plateau individuel (TAPIS, 67×96×8mm)
+  prix_godet: number | null       // €/plaque godets (TEKU TK914S)
+  tapis_par_caisse: number | null // nombre de plateaux par caisse (defaut 24)
+  godets_par_serie: number | null // nombre de godets par plaque/serie (defaut 14)
   cout_eau_m3: number | null
   cout_electricite_kwh: number | null
   updated_at: string

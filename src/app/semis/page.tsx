@@ -6,7 +6,8 @@ import { supabase } from '@/lib/supabase'
 import { Espece, Template, SemisLigneForm, Format, ParametresProduction, Contenant } from '@/types'
 import {
   calculerPoidsGraines, calculerProdEstimee, calculerDates,
-  calculerCoutGraines, calculerCoutTerreau, calculerCoutContenant, recapSemis
+  calculerCoutGraines, calculerCoutTerreau, calculerCoutContenant, recapSemis,
+  tapisParCaisse, godetsParSerie
 } from '@/lib/calculs'
 import { format } from 'date-fns'
 import { useRouter } from 'next/navigation'
@@ -98,7 +99,7 @@ export default function NouveauSemisPage() {
 
   const calculerLigne = useCallback((l: LigneAvecId) => {
     if (!l.espece || !params) return { poids: 0, prod: 0, coutG: 0, coutT: 0, coutC: 0, total: 0 }
-    const poids = calculerPoidsGraines(l.espece, l.format, l.quantite)
+    const poids = calculerPoidsGraines(l.espece, l.format, l.quantite, params)
     const prod = calculerProdEstimee(l.espece, poids)
     const coutG = calculerCoutGraines(poids, l.espece.prix_graine_kg)
     const coutT = calculerCoutTerreau(l.format, l.quantite, params)
@@ -254,9 +255,9 @@ export default function NouveauSemisPage() {
         {/* Bandeau récap sticky */}
         <div className="sticky top-0 z-10 bg-green-900 text-white rounded-xl p-3 text-sm shadow-lg">
           <div className="flex flex-wrap gap-x-4 gap-y-1">
-            <span>🟩 <strong>{recap.tapis}</strong> caisses ({recap.tapis * 24} tapis)</span>
+            <span>🟩 <strong>{recap.tapis}</strong> caisses ({recap.tapis * tapisParCaisse(params)} tapis)</span>
             <span>🟫 <strong>{recap.terreau}</strong> caisses</span>
-            <span>🟧 <strong>{recap.godets}</strong> séries ({recap.godets * 14} godets)</span>
+            <span>🟧 <strong>{recap.godets}</strong> séries ({recap.godets * godetsParSerie(params)} godets)</span>
           </div>
           <div className="flex gap-4 mt-2 pt-2 border-t border-green-700 text-green-200">
             <span>⚖️ {totalPoids.toFixed(0)}g graines</span>
@@ -304,7 +305,7 @@ export default function NouveauSemisPage() {
           <div className="bg-green-50 rounded-lg p-3">
             <div className="font-semibold text-green-800">🟩 Tapis</div>
             <div className="text-xl font-bold">{recap.tapis}</div>
-            <div className="text-xs text-gray-500">{recap.tapis * 24} tapis</div>
+            <div className="text-xs text-gray-500">{recap.tapis * tapisParCaisse(params)} tapis</div>
           </div>
           <div className="bg-stone-50 rounded-lg p-3">
             <div className="font-semibold text-stone-700">🟫 Terreau</div>
@@ -314,7 +315,7 @@ export default function NouveauSemisPage() {
           <div className="bg-orange-50 rounded-lg p-3">
             <div className="font-semibold text-orange-700">🟧 Godets</div>
             <div className="text-xl font-bold">{recap.godets}</div>
-            <div className="text-xs text-gray-500">{recap.godets * 14} godets</div>
+            <div className="text-xs text-gray-500">{recap.godets * godetsParSerie(params)} godets</div>
           </div>
           <div className="bg-gray-50 rounded-lg p-3">
             <div className="font-semibold text-gray-700">💶 Coût</div>

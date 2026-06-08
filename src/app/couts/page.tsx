@@ -205,22 +205,26 @@ function Parametres({ params, contenants, onSave }: {
     cout_terreau_litre: params?.cout_terreau_litre?.toString() || '0.15',
     litres_par_caisse:  params?.litres_par_caisse?.toString()  || '15',
     // TAPIS — plateaux de culture
-    prix_plateau: params?.prix_plateau?.toString() || '0.08',
+    prix_plateau:     params?.prix_plateau?.toString()     || '0.08',
+    tapis_par_caisse: params?.tapis_par_caisse?.toString() || '24',
     // GODETS
-    prix_godet:        params?.prix_godet?.toString()       || '0.078',
-    litres_par_godet:  params?.litres_par_godet?.toString() || '0.3',
+    prix_godet:       params?.prix_godet?.toString()       || '0.078',
+    godets_par_serie: params?.godets_par_serie?.toString() || '14',
+    litres_par_godet: params?.litres_par_godet?.toString() || '0.3',
   })
   const [saving, setSaving] = useState(false)
 
   // Apercu des couts calcules
-  const prixPlateau   = parseFloat(form.prix_plateau) || 0
-  const prixGodet     = parseFloat(form.prix_godet) || 0
-  const litresGodet   = parseFloat(form.litres_par_godet) || 0
-  const coutTerreau   = parseFloat(form.cout_terreau_litre) || 0
-  const litresCaisse  = parseFloat(form.litres_par_caisse) || 0
+  const prixPlateau    = parseFloat(form.prix_plateau) || 0
+  const tapisCaisse    = parseInt(form.tapis_par_caisse) || 24
+  const prixGodet      = parseFloat(form.prix_godet) || 0
+  const godetsSerie    = parseInt(form.godets_par_serie) || 14
+  const litresGodet    = parseFloat(form.litres_par_godet) || 0
+  const coutTerreau    = parseFloat(form.cout_terreau_litre) || 0
+  const litresCaisse   = parseFloat(form.litres_par_caisse) || 0
 
   const coutCaisseTerreau = litresCaisse * coutTerreau
-  const coutCaisseTapis   = 24 * prixPlateau
+  const coutCaisseTapis   = tapisCaisse * prixPlateau
   const coutSerieGodets   = prixGodet + litresGodet * coutTerreau
 
   async function sauvegarder() {
@@ -230,7 +234,9 @@ function Parametres({ params, contenants, onSave }: {
         cout_terreau_litre: parseFloat(form.cout_terreau_litre),
         litres_par_caisse:  parseFloat(form.litres_par_caisse),
         prix_plateau:       parseFloat(form.prix_plateau),
+        tapis_par_caisse:   parseInt(form.tapis_par_caisse),
         prix_godet:         parseFloat(form.prix_godet),
+        godets_par_serie:   parseInt(form.godets_par_serie),
         litres_par_godet:   parseFloat(form.litres_par_godet),
         updated_at: new Date().toISOString(),
       }).eq('id', params.id)
@@ -259,12 +265,13 @@ function Parametres({ params, contenants, onSave }: {
       <div className="bg-white rounded-lg border border-green-200 p-4 space-y-3">
         <h3 className="font-semibold text-sm text-green-800">Tapis (plateaux de culture)</h3>
         <div className="bg-green-50 rounded-lg p-2 text-xs text-green-700">
-          Substrat : plateau 67x96x8mm perfore. 1 caisse = 24 plateaux.
+          Substrat : plateau 67x96x8mm perfore.
         </div>
+        {champ('tapis_par_caisse', 'Plateaux par caisse', 'Nombre de tapis dans une caisse (ex: 24)')}
         {champ('prix_plateau', 'Prix plateau (€/piece)', 'Cout reel = produit + transport, ex: 0.08€')}
         <div className="bg-gray-50 rounded-lg p-2 text-sm">
           Cout substrat / caisse : <strong>{coutCaisseTapis.toFixed(2)}€</strong>
-          <span className="text-xs text-gray-400 ml-1">(24 × {prixPlateau.toFixed(3)}€)</span>
+          <span className="text-xs text-gray-400 ml-1">({tapisCaisse} × {prixPlateau.toFixed(3)}€)</span>
         </div>
       </div>
 
@@ -272,10 +279,11 @@ function Parametres({ params, contenants, onSave }: {
       <div className="bg-white rounded-lg border border-orange-200 p-4 space-y-3">
         <h3 className="font-semibold text-sm text-orange-800">Godets (TEKU TK914S)</h3>
         <div className="bg-orange-50 rounded-lg p-2 text-xs text-orange-700">
-          Plaque recyclable 14 godets. 1 serie = 1 plaque + terreau.
+          Plaque recyclable. 1 serie = 1 plaque + terreau.
         </div>
+        {champ('godets_par_serie', 'Godets par serie (plaque)', 'Nombre de godets par plaque (ex: 14)')}
         {champ('prix_godet', 'Prix plaque godets (€/plaque)', 'TEKU TK914S, ex: 0.078€/plaque')}
-        {champ('litres_par_godet', 'Litres terreau par serie (14 godets)', 'Volume total pour une serie de 14 godets')}
+        {champ('litres_par_godet', 'Litres terreau par serie', `Volume total pour une serie de ${godetsSerie} godets`)}
         <div className="bg-gray-50 rounded-lg p-2 text-sm">
           Cout substrat / serie : <strong>{coutSerieGodets.toFixed(2)}€</strong>
           <span className="text-xs text-gray-400 ml-1">
@@ -341,9 +349,9 @@ function Simulateur({ params, contenants, marge, setMarge }: {
   const cTerreau = contenants.find(c => c.type === 'TERREAU')
 
   // Couts par unite (caisse / serie) — substrat + contenant
-  // TAPIS : pas de terreau, juste le plateau × 24
-  const prixPlateau = params?.prix_plateau ?? 0
-  const coutTapis = 24 * prixPlateau
+  const prixPlateau  = params?.prix_plateau ?? 0
+  const nbTapis      = params?.tapis_par_caisse ?? 24
+  const coutTapis    = nbTapis * prixPlateau
 
   // TERREAU : terreau + bac eventuellement
   const coutTerreauCaisse = params
@@ -353,6 +361,7 @@ function Simulateur({ params, contenants, marge, setMarge }: {
 
   // GODETS : plaque + terreau
   const prixGodet   = params?.prix_godet ?? 0
+  const nbGodets    = params?.godets_par_serie ?? 14
   const litresGodet = params?.litres_par_godet ?? 0
   const coutGodet   = prixGodet + litresGodet * (params?.cout_terreau_litre ?? 0)
 
@@ -385,9 +394,9 @@ function Simulateur({ params, contenants, marge, setMarge }: {
         <div className="divide-y divide-gray-50">
           {[
             {
-              label: 'Caisse tapis (24 plateaux)',
+              label: `Caisse tapis (${nbTapis} plateaux)`,
               cout: coutTapis,
-              detail: `24 × ${prixPlateau.toFixed(3)}€ — pas de terreau`,
+              detail: `${nbTapis} × ${prixPlateau.toFixed(3)}€ — pas de terreau`,
               unite: 'caisse',
             },
             {
@@ -397,7 +406,7 @@ function Simulateur({ params, contenants, marge, setMarge }: {
               unite: 'caisse',
             },
             {
-              label: 'Serie godets (14 godets)',
+              label: `Serie godets (${nbGodets} godets)`,
               cout: coutGodet,
               detail: `${prixGodet.toFixed(3)}€ plaque + ${(litresGodet * (params?.cout_terreau_litre ?? 0)).toFixed(3)}€ terreau`,
               unite: 'serie',

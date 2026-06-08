@@ -1,9 +1,24 @@
 import { Espece, Format, ParametresProduction, Contenant } from '@/types'
 import { addDays, format } from 'date-fns'
 
-export function calculerPoidsGraines(espece: Espece, format: Format, quantite: number): number {
-  if (format === 'TAPIS') return (espece.g_tapis ?? 0) * 24 * quantite
-  if (format === 'GODET') return (espece.g_godet ?? 0) * 14 * quantite
+/** Nombre de plateaux par caisse (configurable, defaut 24) */
+export function tapisParCaisse(params?: ParametresProduction | null): number {
+  return params?.tapis_par_caisse ?? 24
+}
+
+/** Nombre de godets par serie/plaque (configurable, defaut 14) */
+export function godetsParSerie(params?: ParametresProduction | null): number {
+  return params?.godets_par_serie ?? 14
+}
+
+export function calculerPoidsGraines(
+  espece: Espece,
+  format: Format,
+  quantite: number,
+  params?: ParametresProduction | null
+): number {
+  if (format === 'TAPIS')   return (espece.g_tapis ?? 0) * tapisParCaisse(params) * quantite
+  if (format === 'GODET')   return (espece.g_godet ?? 0) * godetsParSerie(params) * quantite
   if (format === 'TERREAU') return (espece.g_caisse ?? 0) * quantite
   return 0
 }
@@ -27,27 +42,27 @@ export function calculerCoutGraines(poidsG: number, prixKg: number | null): numb
 }
 
 /**
- * Calcule le coût du substrat/terreau selon le format :
- * - TAPIS   : 0€  (utilise des plateaux de culture, pas de terreau)
- * - TERREAU : quantite × litres_par_caisse × cout_terreau_litre
- * - GODET   : quantite × litres_par_godet  × cout_terreau_litre
+ * Calcule le cout du substrat/terreau selon le format :
+ * - TAPIS   : 0€ (utilise des plateaux de culture, pas de terreau)
+ * - TERREAU : quantite x litres_par_caisse x cout_terreau_litre
+ * - GODET   : quantite x litres_par_godet  x cout_terreau_litre
  */
 export function calculerCoutTerreau(
   format: Format,
   quantite: number,
   params: ParametresProduction
 ): number {
-  if (format === 'TAPIS') return 0
+  if (format === 'TAPIS')   return 0
   if (format === 'TERREAU') return quantite * params.litres_par_caisse * params.cout_terreau_litre
-  if (format === 'GODET') return quantite * params.litres_par_godet * params.cout_terreau_litre
+  if (format === 'GODET')   return quantite * params.litres_par_godet  * params.cout_terreau_litre
   return 0
 }
 
 /**
- * Calcule le coût des contenants selon le format :
- * - TAPIS  : quantite × 24 plateaux × prix_plateau  (Growing medium 67×96×8mm)
- * - GODET  : quantite × prix_godet                  (Plaque TEKU TK914S, 14 godets)
- * - TERREAU: quantite × cout_unitaire (table contenants)
+ * Calcule le cout des contenants selon le format :
+ * - TAPIS  : quantite x tapis_par_caisse x prix_plateau
+ * - GODET  : quantite x prix_godet (1 plaque = 1 serie)
+ * - TERREAU: quantite x cout_unitaire (table contenants)
  */
 export function calculerCoutContenant(
   format: Format,
@@ -55,15 +70,13 @@ export function calculerCoutContenant(
   contenants: Contenant[],
   params?: ParametresProduction | null
 ): number {
-  if (format === 'TAPIS') {
-    const prix = params?.prix_plateau ?? null
-    if (prix != null) return quantite * 24 * prix
+  if (format === 'TAPIS' && params?.prix_plateau != null) {
+    return quantite * tapisParCaisse(params) * params.prix_plateau
   }
-  if (format === 'GODET') {
-    const prix = params?.prix_godet ?? null
-    if (prix != null) return quantite * prix
+  if (format === 'GODET' && params?.prix_godet != null) {
+    return quantite * params.prix_godet
   }
-  // Fallback : table contenants (pour TERREAU ou si params non disponible)
+  // Fallback : table contenants
   const type = format === 'GODET' ? 'GODET' : format === 'TAPIS' ? 'TAPIS' : 'TERREAU'
   const contenant = contenants.find(c => c.type === type && c.actif)
   if (!contenant) return 0
@@ -71,8 +84,8 @@ export function calculerCoutContenant(
 }
 
 export function recapSemis(lignes: { format: Format; quantite: number }[]) {
-  const tapis = lignes.filter(l => l.format === 'TAPIS').reduce((s, l) => s + l.quantite, 0)
+  const tapis   = lignes.filter(l => l.format === 'TAPIS').reduce((s, l) => s + l.quantite, 0)
   const terreau = lignes.filter(l => l.format === 'TERREAU').reduce((s, l) => s + l.quantite, 0)
-  const godets = lignes.filter(l => l.format === 'GODET').reduce((s, l) => s + l.quantite, 0)
+  const godets  = lignes.filter(l => l.format === 'GODET').reduce((s, l) => s + l.quantite, 0)
   return { tapis, terreau, godets }
 }
