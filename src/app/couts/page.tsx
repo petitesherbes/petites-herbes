@@ -38,13 +38,13 @@ export default function CoutsPage() {
 
   return (
     <div className="p-4 space-y-4">
-      <h1 className="text-xl font-bold text-green-900">💶 Coûts de production</h1>
+      <h1 className="text-xl font-bold text-green-900">Couts de production</h1>
 
       <div className="flex rounded-lg overflow-hidden border border-gray-200">
         {[
-          { val: 'dashboard', label: '📊 Dashboard' },
-          { val: 'params', label: '⚙️ Paramètres' },
-          { val: 'simulateur', label: '🧮 Simulateur' },
+          { val: 'dashboard', label: 'Dashboard' },
+          { val: 'params', label: 'Parametres' },
+          { val: 'simulateur', label: 'Simulateur' },
         ].map(o => (
           <button key={o.val} onClick={() => setOnglet(o.val as typeof onglet)}
             className={`flex-1 py-2 text-xs font-medium transition-colors
@@ -64,16 +64,16 @@ export default function CoutsPage() {
 function Dashboard({ semisList }: { semisList: SemisComplet[] }) {
   const totalGraines = semisList.reduce((s, sem) =>
     s + sem.semis_lignes.reduce((a, l) => a + Number(l.cout_graines || 0), 0), 0)
-  const totalTerreau = semisList.reduce((s, sem) =>
+  const totalSubstrat = semisList.reduce((s, sem) =>
     s + sem.semis_lignes.reduce((a, l) => a + Number(l.cout_terreau || 0), 0), 0)
   const totalContenants = semisList.reduce((s, sem) =>
     s + sem.semis_lignes.reduce((a, l) => a + Number(l.cout_contenant || 0), 0), 0)
-  const total = totalGraines + totalTerreau + totalContenants
+  const total = totalGraines + totalSubstrat + totalContenants
 
   const pieData = [
     { name: 'Graines', value: totalGraines, color: '#2E7D32' },
-    { name: 'Terreau', value: totalTerreau, color: '#5D4037' },
-    { name: 'Contenants', value: totalContenants, color: '#E65100' },
+    { name: 'Substrat', value: totalSubstrat, color: '#5D4037' },
+    { name: 'Contenants/Plateaux', value: totalContenants, color: '#E65100' },
   ].filter(d => d.value > 0)
 
   const parSemaine: Record<string, number> = {}
@@ -101,7 +101,7 @@ function Dashboard({ semisList }: { semisList: SemisComplet[] }) {
           <div className="text-xl font-bold text-green-900">{total.toFixed(2)}€</div>
         </div>
         <div className="bg-white rounded-lg border border-gray-200 p-3">
-          <div className="text-xs text-gray-500">Coût moyen / semis</div>
+          <div className="text-xs text-gray-500">Cout moyen / semis</div>
           <div className="text-xl font-bold text-green-900">
             {semisList.length > 0 ? (total / semisList.length).toFixed(2) : '0.00'}€
           </div>
@@ -118,7 +118,7 @@ function Dashboard({ semisList }: { semisList: SemisComplet[] }) {
 
       {pieData.length > 0 && (
         <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <h3 className="text-sm font-semibold mb-3">Répartition des coûts</h3>
+          <h3 className="text-sm font-semibold mb-3">Repartition des couts</h3>
           <div className="flex items-center gap-4">
             <PieChart width={120} height={120}>
               <Pie data={pieData} cx={55} cy={55} innerRadius={30} outerRadius={55} dataKey="value">
@@ -140,7 +140,7 @@ function Dashboard({ semisList }: { semisList: SemisComplet[] }) {
 
       {barData.length > 0 && (
         <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <h3 className="text-sm font-semibold mb-3">Coût par semaine</h3>
+          <h3 className="text-sm font-semibold mb-3">Cout par semaine</h3>
           <ResponsiveContainer width="100%" height={140}>
             <BarChart data={barData}>
               <XAxis dataKey="semaine" tick={{ fontSize: 10 }} />
@@ -154,7 +154,7 @@ function Dashboard({ semisList }: { semisList: SemisComplet[] }) {
 
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
         <div className="px-3 py-2 bg-gray-50 font-semibold text-sm border-b border-gray-200">
-          Top espèces (coût graines)
+          Top especes (cout graines)
         </div>
         <TopEspeces semisList={semisList} />
       </div>
@@ -175,7 +175,7 @@ function TopEspeces({ semisList }: { semisList: SemisComplet[] }) {
   const max = top5[0]?.cout || 1
 
   if (top5.length === 0) return (
-    <div className="px-3 py-4 text-sm text-gray-400 text-center">Aucune donnée — créez des semis d'abord</div>
+    <div className="px-3 py-4 text-sm text-gray-400 text-center">Aucune donnee — creez des semis d&apos;abord</div>
   )
 
   return (
@@ -201,60 +201,113 @@ function Parametres({ params, contenants, onSave }: {
   onSave: () => void
 }) {
   const [form, setForm] = useState({
+    // Terreau
     cout_terreau_litre: params?.cout_terreau_litre?.toString() || '0.15',
-    litres_par_caisse: params?.litres_par_caisse?.toString() || '15',
-    litres_par_tapis: params?.litres_par_tapis?.toString() || '3',
-    litres_par_godet: params?.litres_par_godet?.toString() || '0.3',
+    litres_par_caisse:  params?.litres_par_caisse?.toString()  || '15',
+    // TAPIS — plateaux de culture
+    prix_plateau: params?.prix_plateau?.toString() || '0.08',
+    // GODETS
+    prix_godet:        params?.prix_godet?.toString()       || '0.078',
+    litres_par_godet:  params?.litres_par_godet?.toString() || '0.3',
   })
   const [saving, setSaving] = useState(false)
+
+  // Apercu des couts calcules
+  const prixPlateau   = parseFloat(form.prix_plateau) || 0
+  const prixGodet     = parseFloat(form.prix_godet) || 0
+  const litresGodet   = parseFloat(form.litres_par_godet) || 0
+  const coutTerreau   = parseFloat(form.cout_terreau_litre) || 0
+  const litresCaisse  = parseFloat(form.litres_par_caisse) || 0
+
+  const coutCaisseTerreau = litresCaisse * coutTerreau
+  const coutCaisseTapis   = 24 * prixPlateau
+  const coutSerieGodets   = prixGodet + litresGodet * coutTerreau
 
   async function sauvegarder() {
     setSaving(true)
     if (params) {
       await supabase.from('parametres_production').update({
         cout_terreau_litre: parseFloat(form.cout_terreau_litre),
-        litres_par_caisse: parseFloat(form.litres_par_caisse),
-        litres_par_tapis: parseFloat(form.litres_par_tapis),
-        litres_par_godet: parseFloat(form.litres_par_godet),
+        litres_par_caisse:  parseFloat(form.litres_par_caisse),
+        prix_plateau:       parseFloat(form.prix_plateau),
+        prix_godet:         parseFloat(form.prix_godet),
+        litres_par_godet:   parseFloat(form.litres_par_godet),
         updated_at: new Date().toISOString(),
       }).eq('id', params.id)
     }
     setSaving(false)
     onSave()
-    alert('Paramètres sauvegardés !')
+    alert('Parametres sauvegardes !')
   }
 
-  const fields = [
-    { key: 'cout_terreau_litre', label: 'Prix du terreau (€/litre)' },
-    { key: 'litres_par_caisse', label: 'Litres par caisse terreau' },
-    { key: 'litres_par_tapis', label: 'Litres par plateau tapis' },
-    { key: 'litres_par_godet', label: 'Litres par godet' },
-  ]
+  function champ(key: keyof typeof form, label: string, note?: string) {
+    return (
+      <div key={key}>
+        <label className="block text-sm text-gray-600 mb-1">{label}</label>
+        {note && <div className="text-xs text-gray-400 mb-1">{note}</div>}
+        <input type="number" step="0.001" value={form[key]}
+          onChange={e => setForm(prev => ({ ...prev, [key]: e.target.value }))}
+          className="w-full border border-gray-200 rounded-lg p-2.5 text-sm" />
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-4">
-      <div className="bg-white rounded-lg border border-gray-200 p-4 space-y-3">
-        <h3 className="font-semibold text-sm">Terreau</h3>
-        {fields.map(f => (
-          <div key={f.key}>
-            <label className="block text-sm text-gray-600 mb-1">{f.label}</label>
-            <input type="number" step="0.01" value={form[f.key as keyof typeof form]}
-              onChange={e => setForm(prev => ({ ...prev, [f.key]: e.target.value }))}
-              className="w-full border border-gray-200 rounded-lg p-2.5 text-sm" />
-          </div>
-        ))}
+
+      {/* TAPIS */}
+      <div className="bg-white rounded-lg border border-green-200 p-4 space-y-3">
+        <h3 className="font-semibold text-sm text-green-800">Tapis (plateaux de culture)</h3>
+        <div className="bg-green-50 rounded-lg p-2 text-xs text-green-700">
+          Substrat : plateau 67x96x8mm perfore. 1 caisse = 24 plateaux.
+        </div>
+        {champ('prix_plateau', 'Prix plateau (€/piece)', 'Cout reel = produit + transport, ex: 0.08€')}
+        <div className="bg-gray-50 rounded-lg p-2 text-sm">
+          Cout substrat / caisse : <strong>{coutCaisseTapis.toFixed(2)}€</strong>
+          <span className="text-xs text-gray-400 ml-1">(24 × {prixPlateau.toFixed(3)}€)</span>
+        </div>
       </div>
 
-      <div className="bg-white rounded-lg border border-gray-200 p-4 space-y-3">
-        <h3 className="font-semibold text-sm">Contenants</h3>
-        {contenants.map(c => (
-          <ContenantRow key={c.id} contenant={c} onSave={onSave} />
-        ))}
+      {/* GODETS */}
+      <div className="bg-white rounded-lg border border-orange-200 p-4 space-y-3">
+        <h3 className="font-semibold text-sm text-orange-800">Godets (TEKU TK914S)</h3>
+        <div className="bg-orange-50 rounded-lg p-2 text-xs text-orange-700">
+          Plaque recyclable 14 godets. 1 serie = 1 plaque + terreau.
+        </div>
+        {champ('prix_godet', 'Prix plaque godets (€/plaque)', 'TEKU TK914S, ex: 0.078€/plaque')}
+        {champ('litres_par_godet', 'Litres terreau par serie (14 godets)', 'Volume total pour une serie de 14 godets')}
+        <div className="bg-gray-50 rounded-lg p-2 text-sm">
+          Cout substrat / serie : <strong>{coutSerieGodets.toFixed(2)}€</strong>
+          <span className="text-xs text-gray-400 ml-1">
+            ({prixGodet.toFixed(3)}€ plaque + {(litresGodet * coutTerreau).toFixed(3)}€ terreau)
+          </span>
+        </div>
       </div>
+
+      {/* TERREAU */}
+      <div className="bg-white rounded-lg border border-stone-200 p-4 space-y-3">
+        <h3 className="font-semibold text-sm text-stone-700">Terreau (caisses)</h3>
+        {champ('cout_terreau_litre', 'Prix terreau (€/litre)')}
+        {champ('litres_par_caisse', 'Litres par caisse terreau')}
+        <div className="bg-gray-50 rounded-lg p-2 text-sm">
+          Cout substrat / caisse : <strong>{coutCaisseTerreau.toFixed(2)}€</strong>
+          <span className="text-xs text-gray-400 ml-1">({litresCaisse}L × {coutTerreau}€/L)</span>
+        </div>
+      </div>
+
+      {/* Contenants TERREAU */}
+      {contenants.filter(c => c.type === 'TERREAU').length > 0 && (
+        <div className="bg-white rounded-lg border border-gray-200 p-4 space-y-3">
+          <h3 className="font-semibold text-sm">Contenants / bacs terreau</h3>
+          {contenants.filter(c => c.type === 'TERREAU').map(c => (
+            <ContenantRow key={c.id} contenant={c} onSave={onSave} />
+          ))}
+        </div>
+      )}
 
       <button onClick={sauvegarder} disabled={saving}
         className="w-full bg-green-700 text-white py-3 rounded-lg font-semibold disabled:opacity-50">
-        {saving ? 'Sauvegarde...' : '💾 Sauvegarder'}
+        {saving ? 'Sauvegarde...' : 'Sauvegarder'}
       </button>
     </div>
   )
@@ -285,20 +338,30 @@ function Simulateur({ params, contenants, marge, setMarge }: {
   marge: number
   setMarge: (v: number) => void
 }) {
-  const cTapis = contenants.find(c => c.type === 'TAPIS')
   const cTerreau = contenants.find(c => c.type === 'TERREAU')
-  const cGodets = contenants.find(c => c.type === 'GODET')
 
-  const coutTapis = (params ? params.litres_par_tapis * params.cout_terreau_litre : 0) + (cTapis?.cout_unitaire || 0)
-  const coutTerreau = (params ? params.litres_par_caisse * params.cout_terreau_litre : 0) + (cTerreau?.cout_unitaire || 0)
-  const coutGodets = (params ? params.litres_par_godet * 14 * params.cout_terreau_litre : 0) + (cGodets?.cout_unitaire || 0)
+  // Couts par unite (caisse / serie) — substrat + contenant
+  // TAPIS : pas de terreau, juste le plateau × 24
+  const prixPlateau = params?.prix_plateau ?? 0
+  const coutTapis = 24 * prixPlateau
+
+  // TERREAU : terreau + bac eventuellement
+  const coutTerreauCaisse = params
+    ? params.litres_par_caisse * params.cout_terreau_litre
+    : 0
+  const coutTerreauTotal = coutTerreauCaisse + (cTerreau?.cout_unitaire || 0)
+
+  // GODETS : plaque + terreau
+  const prixGodet   = params?.prix_godet ?? 0
+  const litresGodet = params?.litres_par_godet ?? 0
+  const coutGodet   = prixGodet + litresGodet * (params?.cout_terreau_litre ?? 0)
 
   const factor = 1 + marge / 100
 
   return (
     <div className="space-y-4">
       <div className="bg-white rounded-lg border border-gray-200 p-4 space-y-3">
-        <h3 className="font-semibold text-sm">Taux de marge souhaité</h3>
+        <h3 className="font-semibold text-sm">Taux de marge souhaite</h3>
         <div className="flex items-center gap-3">
           <input type="range" min={50} max={1000} step={50} value={marge}
             onChange={e => setMarge(parseInt(e.target.value))}
@@ -309,7 +372,7 @@ function Simulateur({ params, contenants, marge, setMarge }: {
           {[100, 200, 300, 400, 500].map(v => (
             <button key={v} onClick={() => setMarge(v)}
               className={`py-1 rounded border ${marge === v ? 'border-green-600 text-green-600 font-semibold' : 'border-gray-200'}`}>
-              ×{(1 + v / 100).toFixed(0)} ({v}%)
+              x{(1 + v / 100).toFixed(0)} ({v}%)
             </button>
           ))}
         </div>
@@ -317,20 +380,36 @@ function Simulateur({ params, contenants, marge, setMarge }: {
 
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
         <div className="px-3 py-2 bg-gray-50 font-semibold text-sm border-b border-gray-200">
-          Prix de vente recommandés
+          Prix de vente recommandes (hors graines)
         </div>
         <div className="divide-y divide-gray-50">
           {[
-            { label: '🟩 Caisse tapis (×24 tapis)', cout: coutTapis, unite: 'caisse' },
-            { label: '🟫 Caisse terreau', cout: coutTerreau, unite: 'caisse' },
-            { label: '🟧 Série godets (×14)', cout: coutGodets, unite: 'série' },
+            {
+              label: 'Caisse tapis (24 plateaux)',
+              cout: coutTapis,
+              detail: `24 × ${prixPlateau.toFixed(3)}€ — pas de terreau`,
+              unite: 'caisse',
+            },
+            {
+              label: 'Caisse terreau',
+              cout: coutTerreauTotal,
+              detail: `${params?.litres_par_caisse || 0}L × ${params?.cout_terreau_litre || 0}€/L`,
+              unite: 'caisse',
+            },
+            {
+              label: 'Serie godets (14 godets)',
+              cout: coutGodet,
+              detail: `${prixGodet.toFixed(3)}€ plaque + ${(litresGodet * (params?.cout_terreau_litre ?? 0)).toFixed(3)}€ terreau`,
+              unite: 'serie',
+            },
           ].map(r => (
             <div key={r.label} className="px-3 py-3">
               <div className="text-sm font-medium">{r.label}</div>
+              <div className="text-xs text-gray-400 mt-0.5">{r.detail}</div>
               <div className="flex justify-between mt-1 text-sm">
-                <span className="text-gray-500">Coût: {r.cout.toFixed(2)}€</span>
+                <span className="text-gray-500">Cout substrat : {r.cout.toFixed(3)}€</span>
                 <span className="font-bold text-green-800">
-                  Prix: {(r.cout * factor).toFixed(2)}€/{r.unite}
+                  Min. vente : {(r.cout * factor).toFixed(2)}€/{r.unite}
                 </span>
               </div>
             </div>
@@ -339,7 +418,7 @@ function Simulateur({ params, contenants, marge, setMarge }: {
       </div>
 
       <div className="bg-blue-50 rounded-lg p-3 text-xs text-blue-700">
-        💡 Ces prix incluent uniquement terreau et contenants. Ajoutez le coût des graines par espèce pour un prix plus précis.
+        Ces prix incluent uniquement le substrat et les contenants. Ajoutez le cout des graines par espece pour un prix de vente precis.
       </div>
     </div>
   )

@@ -26,23 +26,44 @@ export function calculerCoutGraines(poidsG: number, prixKg: number | null): numb
   return (poidsG / 1000) * prixKg
 }
 
+/**
+ * Calcule le coût du substrat/terreau selon le format :
+ * - TAPIS   : 0€  (utilise des plateaux de culture, pas de terreau)
+ * - TERREAU : quantite × litres_par_caisse × cout_terreau_litre
+ * - GODET   : quantite × litres_par_godet  × cout_terreau_litre
+ */
 export function calculerCoutTerreau(
   format: Format,
   quantite: number,
   params: ParametresProduction
 ): number {
-  let litres = 0
-  if (format === 'TAPIS') litres = quantite * params.litres_par_tapis
-  else if (format === 'TERREAU') litres = quantite * params.litres_par_caisse
-  else if (format === 'GODET') litres = quantite * params.litres_par_godet
-  return litres * params.cout_terreau_litre
+  if (format === 'TAPIS') return 0
+  if (format === 'TERREAU') return quantite * params.litres_par_caisse * params.cout_terreau_litre
+  if (format === 'GODET') return quantite * params.litres_par_godet * params.cout_terreau_litre
+  return 0
 }
 
+/**
+ * Calcule le coût des contenants selon le format :
+ * - TAPIS  : quantite × 24 plateaux × prix_plateau  (Growing medium 67×96×8mm)
+ * - GODET  : quantite × prix_godet                  (Plaque TEKU TK914S, 14 godets)
+ * - TERREAU: quantite × cout_unitaire (table contenants)
+ */
 export function calculerCoutContenant(
   format: Format,
   quantite: number,
-  contenants: Contenant[]
+  contenants: Contenant[],
+  params?: ParametresProduction | null
 ): number {
+  if (format === 'TAPIS') {
+    const prix = params?.prix_plateau ?? null
+    if (prix != null) return quantite * 24 * prix
+  }
+  if (format === 'GODET') {
+    const prix = params?.prix_godet ?? null
+    if (prix != null) return quantite * prix
+  }
+  // Fallback : table contenants (pour TERREAU ou si params non disponible)
   const type = format === 'GODET' ? 'GODET' : format === 'TAPIS' ? 'TAPIS' : 'TERREAU'
   const contenant = contenants.find(c => c.type === type && c.actif)
   if (!contenant) return 0

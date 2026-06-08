@@ -102,7 +102,7 @@ export default function NouveauSemisPage() {
     const prod = calculerProdEstimee(l.espece, poids)
     const coutG = calculerCoutGraines(poids, l.espece.prix_graine_kg)
     const coutT = calculerCoutTerreau(l.format, l.quantite, params)
-    const coutC = calculerCoutContenant(l.format, l.quantite, contenants)
+    const coutC = calculerCoutContenant(l.format, l.quantite, contenants, params)
     return { poids, prod, coutG, coutT, coutC, total: coutG + coutT + coutC }
   }, [params, contenants, especes])
 
