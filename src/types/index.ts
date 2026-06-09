@@ -88,6 +88,66 @@ export interface TemplateLigne {
   espece?: Espece
 }
 
+// ─── Commandes / BL ──────────────────────────────────────────
+
+export type ProduitCategorie = 'TAPIS' | 'BARQUETTE' | 'GODET' | 'BOTTE' | 'FLEUR' | 'LIVRAISON' | 'CHAMP' | 'AUTRE'
+export type BLStatut = 'brouillon' | 'envoye' | 'livre' | 'facture'
+
+export interface Client {
+  id: string
+  nom: string
+  adresse: string | null
+  code_postal: string | null
+  ville: string | null
+  pays: string
+  email: string | null
+  telephone: string | null
+  siret: string | null
+  tva_intra: string | null
+  actif: boolean
+  created_at: string
+}
+
+export interface Produit {
+  id: string
+  reference: string | null
+  designation: string
+  categorie: ProduitCategorie
+  prix_ht: number
+  tva_pct: number
+  unite: string
+  bio: boolean
+  actif: boolean
+  created_at: string
+}
+
+export interface BLLigne {
+  id: string
+  bl_id: string
+  produit_id: string | null
+  designation: string
+  reference: string | null
+  quantite: number
+  prix_ht: number
+  tva_pct: number
+  ordre: number
+  produit?: Produit
+}
+
+export interface BonLivraison {
+  id: string
+  numero: string
+  client_id: string | null
+  date_livraison: string
+  statut: BLStatut
+  note: string | null
+  created_at: string
+  client?: Client
+  bl_lignes?: BLLigne[]
+}
+
+// ─────────────────────────────────────────────────────────────
+
 export interface StockMouvement {
   id: string
   espece_id: string

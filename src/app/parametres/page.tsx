@@ -2,10 +2,12 @@
 export const dynamic = 'force-dynamic'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { Espece, Template } from '@/types'
 
 export default function ParametresPage() {
+  const router = useRouter()
   const [onglet, setOnglet] = useState<'especes' | 'templates' | 'email'>('especes')
   const [especes, setEspeces] = useState<Espece[]>([])
   const [templates, setTemplates] = useState<Template[]>([])
@@ -43,6 +45,13 @@ export default function ParametresPage() {
           </button>
         ))}
       </div>
+
+      {/* Raccourci Couts */}
+      <button onClick={() => router.push('/couts')}
+        className="w-full flex items-center justify-between p-3 bg-amber-50 border border-amber-200 rounded-xl text-sm">
+        <span className="font-medium text-amber-800">Dashboard couts de production</span>
+        <span className="text-amber-600">›</span>
+      </button>
 
       {onglet === 'especes' && <EspecesPanel especes={especes} onEdit={setEditEspece} onRefresh={charger} />}
       {onglet === 'templates' && <TemplatesPanel templates={templates} onRefresh={charger} />}
