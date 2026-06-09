@@ -6,8 +6,10 @@ import { fr } from 'date-fns/locale'
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params
+
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -17,7 +19,7 @@ export async function POST(
   const { data: bl, error } = await supabase
     .from('bons_livraison')
     .select('*, client:clients(*), bl_lignes(*)')
-    .eq('id', params.id)
+    .eq('id', id)
     .single()
 
   if (error || !bl) {

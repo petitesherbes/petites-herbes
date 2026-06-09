@@ -6,8 +6,10 @@ import { fr } from 'date-fns/locale'
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { token: string } }
+  { params }: { params: Promise<{ token: string }> }
 ) {
+  const { token } = await params
+
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -17,7 +19,7 @@ export async function POST(
   const { data: client, error: eClient } = await supabase
     .from('clients')
     .select('*')
-    .eq('order_token', params.token)
+    .eq('order_token', token)
     .eq('actif', true)
     .single()
 
