@@ -287,7 +287,7 @@ function ProduitModal({ produit, onClose, onSave }: {
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-end" onClick={onClose}>
-      <div className="bg-white w-full max-w-2xl mx-auto rounded-t-2xl p-4 space-y-3 max-h-[90vh] overflow-y-auto"
+      <div className="bg-white w-full max-w-2xl mx-auto rounded-t-2xl p-4 pb-24 space-y-3 max-h-[90vh] overflow-y-auto"
         onClick={e => e.stopPropagation()}>
         <h2 className="text-lg font-bold">{produit ? 'Modifier produit' : 'Nouveau produit'}</h2>
 
@@ -512,7 +512,7 @@ function ClientModal({ client, onClose, onSave }: {
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-end" onClick={onClose}>
-      <div className="bg-white w-full max-w-2xl mx-auto rounded-t-2xl p-4 space-y-3 max-h-[90vh] overflow-y-auto"
+      <div className="bg-white w-full max-w-2xl mx-auto rounded-t-2xl p-4 pb-24 space-y-3 max-h-[90vh] overflow-y-auto"
         onClick={e => e.stopPropagation()}>
         <h2 className="text-lg font-bold">{client ? 'Modifier client' : 'Nouveau client'}</h2>
 
