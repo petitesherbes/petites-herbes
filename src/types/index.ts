@@ -118,6 +118,7 @@ export interface Produit {
   tva_pct: number
   unite: string
   bio: boolean
+  description: string | null
   photo_url: string | null
   actif: boolean
   created_at: string

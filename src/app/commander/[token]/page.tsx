@@ -229,6 +229,11 @@ export default function CommanderPage() {
                         <div className="text-sm font-semibold text-gray-900 leading-tight mb-0.5">
                           {p.designation}
                         </div>
+                        {p.description && (
+                          <div className="text-[11px] text-gray-500 leading-snug mb-1.5 line-clamp-3">
+                            {p.description.split('💧')[0].trim()}
+                          </div>
+                        )}
                         {p.prix_ht > 0 && (
                           <div className="text-xs text-green-700 font-medium mb-2">
                             {p.prix_ht.toFixed(2)} € HT/{p.unite}
