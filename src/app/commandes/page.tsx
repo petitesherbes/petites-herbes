@@ -1,8 +1,9 @@
 'use client'
 export const dynamic = 'force-dynamic'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import Image from 'next/image'
 import { supabase } from '@/lib/supabase'
 import { Client, Produit, BonLivraison, ProduitCategorie, BLStatut } from '@/types'
 import { format, parseISO } from 'date-fns'
@@ -175,16 +176,24 @@ function Catalogue({ produits, onRefresh }: { produits: Produit[]; onRefresh: ()
           </div>
           <div className="divide-y divide-gray-50">
             {produits.filter(p => p.categorie === cat).map(p => (
-              <div key={p.id} className="px-3 py-2.5 flex items-center gap-2">
+              <div key={p.id} className="flex items-center gap-3 px-3 py-2.5">
+                <div className="w-12 h-12 rounded-lg overflow-hidden bg-gray-100 shrink-0 relative">
+                  {p.photo_url ? (
+                    <Image src={p.photo_url} alt={p.designation} fill className="object-cover" sizes="48px" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-xl opacity-30">
+                      {cat === 'FLEUR' ? '🌸' : cat === 'TAPIS' ? '🌱' : cat === 'GODET' ? '🪴' : '📦'}
+                    </div>
+                  )}
+                </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium flex items-center gap-1.5">
+                  <div className="text-sm font-medium flex items-center gap-1.5 flex-wrap">
                     {p.designation}
                     {p.bio && <span className="text-xs bg-green-100 text-green-700 px-1.5 rounded-full">BIO*</span>}
                   </div>
                   <div className="text-xs text-gray-400">
                     {p.reference && `Ref. ${p.reference} · `}
                     {p.prix_ht > 0 ? `${p.prix_ht.toFixed(2)}€ HT/${p.unite}` : 'Prix a definir'}
-                    {' · '}TVA {p.tva_pct}%
                   </div>
                 </div>
                 <button onClick={() => setModal(p)}
@@ -225,8 +234,25 @@ function ProduitModal({ produit, onClose, onSave }: {
     tva_pct:     produit?.tva_pct?.toString() || '5.5',
     unite:       produit?.unite  || 'unite',
     bio:         produit?.bio ?? false,
+    photo_url:   produit?.photo_url || '',
   })
   const [saving, setSaving] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  async function uploadPhoto(file: File) {
+    setUploading(true)
+    // Creer le bucket si necessaire
+    await supabase.storage.createBucket('product-photos', { public: true }).catch(() => {})
+    const ext = file.name.split('.').pop()
+    const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+    const { data, error } = await supabase.storage.from('product-photos').upload(path, file, { upsert: true })
+    if (!error && data) {
+      const { data: { publicUrl } } = supabase.storage.from('product-photos').getPublicUrl(data.path)
+      setForm(p => ({ ...p, photo_url: publicUrl }))
+    }
+    setUploading(false)
+  }
 
   async function sauvegarder() {
     setSaving(true)
@@ -238,6 +264,7 @@ function ProduitModal({ produit, onClose, onSave }: {
       tva_pct:     parseFloat(form.tva_pct) || 5.5,
       unite:       form.unite,
       bio:         form.bio,
+      photo_url:   form.photo_url || null,
     }
     if (produit) {
       await supabase.from('produits').update(data).eq('id', produit.id)
@@ -261,6 +288,37 @@ function ProduitModal({ produit, onClose, onSave }: {
       <div className="bg-white w-full max-w-2xl mx-auto rounded-t-2xl p-4 space-y-3 max-h-[90vh] overflow-y-auto"
         onClick={e => e.stopPropagation()}>
         <h2 className="text-lg font-bold">{produit ? 'Modifier produit' : 'Nouveau produit'}</h2>
+
+        {/* Photo upload */}
+        <div>
+          <label className="text-xs text-gray-500 mb-1 block">Photo du produit</label>
+          <div
+            onClick={() => fileRef.current?.click()}
+            className="relative w-full aspect-[16/7] rounded-xl overflow-hidden bg-gray-50 border-2 border-dashed border-gray-200 cursor-pointer hover:border-green-400 transition-colors flex items-center justify-center">
+            {form.photo_url ? (
+              <Image src={form.photo_url} alt="photo" fill className="object-cover" sizes="600px" />
+            ) : (
+              <div className="text-center text-gray-400">
+                <div className="text-3xl mb-1">📷</div>
+                <div className="text-xs">{uploading ? 'Upload en cours...' : 'Appuyer pour ajouter une photo'}</div>
+              </div>
+            )}
+            {uploading && (
+              <div className="absolute inset-0 bg-white/70 flex items-center justify-center">
+                <div className="w-8 h-8 border-4 border-green-600 border-t-transparent rounded-full animate-spin" />
+              </div>
+            )}
+            {form.photo_url && !uploading && (
+              <div className="absolute bottom-2 right-2 bg-black/40 text-white text-xs px-2 py-1 rounded-full">
+                Changer
+              </div>
+            )}
+          </div>
+          <input
+            ref={fileRef} type="file" accept="image/*" className="hidden"
+            onChange={e => { const f = e.target.files?.[0]; if (f) uploadPhoto(f) }}
+          />
+        </div>
 
         <div>
           <label className="text-xs text-gray-500 mb-1 block">Designation *</label>
@@ -323,7 +381,7 @@ function ProduitModal({ produit, onClose, onSave }: {
           <button onClick={onClose} className="flex-1 py-3 rounded-lg border border-gray-200 text-gray-600 text-sm">
             Annuler
           </button>
-          <button onClick={sauvegarder} disabled={saving || !form.designation}
+          <button onClick={sauvegarder} disabled={saving || !form.designation || uploading}
             className="flex-1 py-3 rounded-lg bg-green-700 text-white font-semibold text-sm disabled:opacity-50">
             {saving ? 'Sauvegarde...' : 'Sauvegarder'}
           </button>
@@ -345,18 +403,41 @@ function ClientsList({ clients, onRefresh }: { clients: Client[]; onRefresh: () 
         + Ajouter un client
       </button>
 
-      {clients.map(c => (
-        <div key={c.id}
-          onClick={() => setModal(c)}
-          className="bg-white rounded-xl border border-gray-200 p-4 cursor-pointer active:bg-gray-50">
-          <div className="font-semibold text-sm">{c.nom}</div>
-          <div className="text-xs text-gray-500 mt-0.5 space-y-0.5">
-            {c.ville && <div>{c.code_postal} {c.ville}</div>}
-            {c.email && <div>{c.email}</div>}
-            {c.telephone && <div>{c.telephone}</div>}
+      {clients.map(c => {
+        const lien = c.order_token
+          ? `${typeof window !== 'undefined' ? window.location.origin : 'https://petites-herbes.vercel.app'}/commander/${c.order_token}`
+          : null
+        return (
+          <div key={c.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div onClick={() => setModal(c)} className="p-4 cursor-pointer active:bg-gray-50">
+              <div className="font-semibold text-sm">{c.nom}</div>
+              <div className="text-xs text-gray-500 mt-0.5 space-y-0.5">
+                {c.ville && <div>{c.code_postal} {c.ville}</div>}
+                {c.email && <div>{c.email}</div>}
+                {c.telephone && <div>{c.telephone}</div>}
+              </div>
+            </div>
+            {lien && (
+              <div className="px-4 pb-3 pt-0 border-t border-gray-50">
+                <div className="text-xs text-gray-400 mb-1">Lien de commande personnel</div>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 bg-gray-50 rounded-lg px-2 py-1.5 text-xs text-gray-600 font-mono truncate">
+                    {lien}
+                  </div>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(lien)
+                      alert('Lien copie !')
+                    }}
+                    className="shrink-0 bg-green-700 text-white text-xs px-3 py-1.5 rounded-lg font-semibold">
+                    Copier
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
-        </div>
-      ))}
+        )
+      })}
 
       {clients.length === 0 && (
         <div className="text-center py-8 text-gray-400 text-sm">

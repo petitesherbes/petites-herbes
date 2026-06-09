@@ -104,6 +104,7 @@ export interface Client {
   telephone: string | null
   siret: string | null
   tva_intra: string | null
+  order_token: string | null
   actif: boolean
   created_at: string
 }
@@ -117,6 +118,7 @@ export interface Produit {
   tva_pct: number
   unite: string
   bio: boolean
+  photo_url: string | null
   actif: boolean
   created_at: string
 }

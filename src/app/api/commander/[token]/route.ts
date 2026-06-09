@@ -1,0 +1,189 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
+import { Resend } from 'resend'
+import { format } from 'date-fns'
+import { fr } from 'date-fns/locale'
+
+export async function POST(
+  req: NextRequest,
+  { params }: { params: { token: string } }
+) {
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
+
+  // Retrouver le client par token
+  const { data: client, error: eClient } = await supabase
+    .from('clients')
+    .select('*')
+    .eq('order_token', params.token)
+    .eq('actif', true)
+    .single()
+
+  if (eClient || !client) {
+    return NextResponse.json({ error: 'Client introuvable' }, { status: 404 })
+  }
+
+  const { lignes, message } = await req.json()
+
+  if (!lignes || lignes.length === 0) {
+    return NextResponse.json({ error: 'Panier vide' }, { status: 400 })
+  }
+
+  // Generer numero BL
+  const { data: paramsDB } = await supabase
+    .from('parametres_production')
+    .select('id, prochain_numero_bl')
+    .single()
+
+  const numero = String(paramsDB?.prochain_numero_bl || 1777).padStart(7, '0')
+  const aujourd_hui = format(new Date(), 'yyyy-MM-dd')
+
+  // Creer le BL
+  const { data: bl, error: eBL } = await supabase
+    .from('bons_livraison')
+    .insert({
+      numero,
+      client_id: client.id,
+      date_livraison: aujourd_hui,
+      statut: 'brouillon',
+      note: message || null,
+    })
+    .select()
+    .single()
+
+  if (eBL || !bl) {
+    return NextResponse.json({ error: 'Erreur creation BL' }, { status: 500 })
+  }
+
+  // Ajouter livraison automatiquement si elle existe dans le catalogue
+  const { data: livraison } = await supabase
+    .from('produits')
+    .select('*')
+    .eq('categorie', 'LIVRAISON')
+    .eq('actif', true)
+    .limit(1)
+    .single()
+
+  const lignesFinales = [...lignes]
+  if (livraison) {
+    lignesFinales.push({
+      produit_id: livraison.id,
+      designation: livraison.designation,
+      reference: livraison.reference,
+      quantite: 1,
+      prix_ht: livraison.prix_ht,
+      tva_pct: livraison.tva_pct,
+    })
+  }
+
+  // Inserer les lignes
+  await supabase.from('bl_lignes').insert(
+    lignesFinales.map((l: { produit_id: string; designation: string; reference: string | null; quantite: number; prix_ht: number; tva_pct: number }, i: number) => ({
+      bl_id: bl.id,
+      produit_id: l.produit_id || null,
+      designation: l.designation,
+      reference: l.reference || null,
+      quantite: l.quantite,
+      prix_ht: l.prix_ht,
+      tva_pct: l.tva_pct,
+      ordre: i,
+    }))
+  )
+
+  // Incrementer le compteur
+  if (paramsDB) {
+    await supabase
+      .from('parametres_production')
+      .update({ prochain_numero_bl: (paramsDB.prochain_numero_bl || 1777) + 1 })
+      .eq('id', paramsDB.id)
+  }
+
+  // Envoyer emails (confirmation chef + notification GAEC)
+  const dateFormatee = format(new Date(), 'dd MMMM yyyy', { locale: fr })
+
+  try {
+    const resend = new Resend(process.env.RESEND_API_KEY)
+
+    const lignesHTML = lignes.map((l: { designation: string; quantite: number; prix_ht: number }) => `
+      <tr>
+        <td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;">${l.designation}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:bold;color:#1B5E20;">× ${l.quantite}</td>
+        ${l.prix_ht > 0 ? `<td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;text-align:right;">${(l.prix_ht * l.quantite).toFixed(2)} €</td>` : '<td></td>'}
+      </tr>
+    `).join('')
+
+    const emailHTML = (titre: string, sousTitre: string) => `
+<!DOCTYPE html>
+<html lang="fr">
+<head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#f5f5f5;font-family:Arial,sans-serif;">
+<div style="max-width:600px;margin:20px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.1);">
+  <div style="background:#1B5E20;padding:28px 32px;color:white;text-align:center;">
+    <div style="font-size:24px;font-weight:bold;">🌿 Les Petites Herbes</div>
+    <div style="font-size:22px;font-weight:bold;margin-top:12px;">${titre}</div>
+    <div style="font-size:14px;opacity:0.8;margin-top:4px;">${sousTitre}</div>
+  </div>
+  <div style="padding:24px 32px;">
+    <table style="font-weight:bold;color:#333;margin-bottom:8px;width:100%;">
+      <tr>
+        <td>Client :</td><td>${client.nom}</td>
+      </tr>
+      <tr>
+        <td>BL N° :</td><td style="color:#1B5E20;">${numero}</td>
+      </tr>
+      <tr>
+        <td>Date :</td><td>${dateFormatee}</td>
+      </tr>
+    </table>
+    ${message ? `<div style="background:#f9f9f9;border-left:3px solid #1B5E20;padding:10px 14px;margin:12px 0;font-size:13px;color:#555;">Message : ${message}</div>` : ''}
+    <table width="100%" style="border-collapse:collapse;margin-top:16px;">
+      <thead>
+        <tr style="background:#f5f5f5;">
+          <th style="padding:8px 12px;text-align:left;font-size:12px;color:#888;text-transform:uppercase;">Produit</th>
+          <th style="padding:8px 12px;text-align:right;font-size:12px;color:#888;text-transform:uppercase;">Qte</th>
+          <th style="padding:8px 12px;text-align:right;font-size:12px;color:#888;text-transform:uppercase;">Montant</th>
+        </tr>
+      </thead>
+      <tbody>${lignesHTML}</tbody>
+    </table>
+  </div>
+  <div style="padding:16px 32px;background:#f9f9f9;border-top:1px solid #eee;font-size:11px;color:#aaa;text-align:center;">
+    GAEC Les Petites Herbes · 15 rue François Arago · 83310 Cogolin · SIRET 983 294 703 00019
+  </div>
+</div>
+</body>
+</html>`
+
+    // Email au chef
+    if (client.email) {
+      await resend.emails.send({
+        from: 'GAEC Les Petites Herbes <onboarding@resend.dev>',
+        to: [client.email],
+        subject: `Commande confirmee — BL N° ${numero}`,
+        html: emailHTML(
+          'Commande confirmee !',
+          `Votre bon de livraison N° ${numero} a ete transmis`
+        ),
+      })
+    }
+
+    // Notification a GAEC
+    const dest = process.env.EMAIL_DESTINATION || 'petitesherbes@gmail.com'
+    await resend.emails.send({
+      from: 'GAEC Les Petites Herbes <onboarding@resend.dev>',
+      to: [dest],
+      subject: `Nouvelle commande de ${client.nom} — BL N° ${numero}`,
+      html: emailHTML(
+        `Nouvelle commande !`,
+        `De : ${client.nom}`
+      ),
+    })
+  } catch (e) {
+    // Email non bloquant
+    console.error('Email error:', e)
+  }
+
+  return NextResponse.json({ ok: true, bl_id: bl.id, numero })
+}
