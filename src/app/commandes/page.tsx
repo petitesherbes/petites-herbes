@@ -5,7 +5,7 @@ import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { supabase } from '@/lib/supabase'
-import { Client, Produit, BonLivraison, ProduitCategorie, BLStatut } from '@/types'
+import { Client, Produit, BonLivraison, ProduitCategorie, BLStatut, MessageTemplate } from '@/types'
 import { format, parseISO } from 'date-fns'
 import { fr } from 'date-fns/locale'
 
@@ -162,10 +162,38 @@ function BLsList({ bls, onRefresh }: { bls: BonLivraison[]; onRefresh: () => voi
 
 function Catalogue({ produits, onRefresh }: { produits: Produit[]; onRefresh: () => void }) {
   const [modal, setModal] = useState<Produit | null | 'nouveau'>(null)
+  const [dispoEdit, setDispoEdit] = useState<string | null>(null) // id du produit en cours d'édition dispo
+  const [qteSaisie, setQteSaisie] = useState('')
   const categories = Array.from(new Set(produits.map(p => p.categorie))) as ProduitCategorie[]
+
+  async function setDispo(p: Produit, etat: 'dispo' | 'qte' | 'indispo', qte?: number) {
+    if (etat === 'indispo') {
+      await supabase.from('produits').update({ disponible: false, quantite_dispo: null }).eq('id', p.id)
+    } else if (etat === 'dispo') {
+      await supabase.from('produits').update({ disponible: true, quantite_dispo: null }).eq('id', p.id)
+    } else if (etat === 'qte') {
+      await supabase.from('produits').update({ disponible: true, quantite_dispo: qte ?? null }).eq('id', p.id)
+    }
+    setDispoEdit(null)
+    onRefresh()
+  }
+
+  function getDispoInfo(p: Produit) {
+    if (!p.disponible) return { label: 'Indispo', color: 'bg-red-100 text-red-600', dot: '🔴' }
+    if (p.quantite_dispo != null) return { label: `Qté: ${p.quantite_dispo}`, color: 'bg-amber-100 text-amber-700', dot: '🟡' }
+    return { label: 'Dispo', color: 'bg-green-100 text-green-700', dot: '🟢' }
+  }
 
   return (
     <div className="space-y-3">
+      {/* Légende */}
+      <div className="flex gap-3 text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
+        <span>🟢 Dispo</span>
+        <span>🟡 Qté limitée</span>
+        <span>🔴 Indisponible</span>
+        <span className="ml-auto text-gray-400">Appuyer sur le badge pour modifier</span>
+      </div>
+
       <button onClick={() => setModal('nouveau')}
         className="w-full py-3 rounded-xl border-2 border-dashed border-green-300 text-green-700 text-sm font-semibold">
         + Ajouter un produit
@@ -177,33 +205,83 @@ function Catalogue({ produits, onRefresh }: { produits: Produit[]; onRefresh: ()
             {CAT_LABEL[cat]}
           </div>
           <div className="divide-y divide-gray-50">
-            {produits.filter(p => p.categorie === cat).map(p => (
-              <div key={p.id} className="flex items-center gap-3 px-3 py-2.5">
-                <div className="w-12 h-12 rounded-lg overflow-hidden bg-gray-100 shrink-0 relative">
-                  {p.photo_url ? (
-                    <Image src={p.photo_url} alt={p.designation} fill className="object-cover" sizes="48px" />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-xl opacity-30">
-                      {cat === 'FLEUR' ? '🌸' : cat === 'TAPIS' ? '🌱' : cat === 'GODET' ? '🪴' : '📦'}
+            {produits.filter(p => p.categorie === cat).map(p => {
+              const dispo = getDispoInfo(p)
+              const editing = dispoEdit === p.id
+              return (
+                <div key={p.id}>
+                  <div className={`flex items-center gap-3 px-3 py-2.5 ${!p.disponible ? 'opacity-50' : ''}`}>
+                    <div className="w-12 h-12 rounded-lg overflow-hidden bg-gray-100 shrink-0 relative">
+                      {p.photo_url ? (
+                        <Image src={p.photo_url} alt={p.designation} fill className="object-cover" sizes="48px" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-xl opacity-30">
+                          {cat === 'FLEUR' ? '🌸' : cat === 'TAPIS' ? '🌱' : cat === 'GODET' ? '🪴' : '📦'}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium flex items-center gap-1.5 flex-wrap">
+                        {p.designation}
+                        {p.bio && <span className="text-xs bg-green-100 text-green-700 px-1.5 rounded-full">BIO*</span>}
+                      </div>
+                      <div className="text-xs text-gray-400">
+                        {p.reference && `Ref. ${p.reference} · `}
+                        {p.prix_ht > 0 ? `${p.prix_ht.toFixed(2)}€ HT/${p.unite}` : 'Prix a definir'}
+                      </div>
+                    </div>
+                    {/* Badge disponibilité cliquable */}
+                    <button
+                      onClick={() => { setDispoEdit(editing ? null : p.id); setQteSaisie(p.quantite_dispo?.toString() || '') }}
+                      className={`text-xs px-2 py-1 rounded-full font-medium shrink-0 ${dispo.color}`}>
+                      {dispo.dot} {dispo.label}
+                    </button>
+                    <button onClick={() => setModal(p)}
+                      className="text-xs text-blue-600 px-2 py-1 rounded border border-blue-200 shrink-0">
+                      Edit
+                    </button>
+                  </div>
+                  {/* Panel édition disponibilité */}
+                  {editing && (
+                    <div className="bg-gray-50 border-t border-gray-100 px-3 py-3 space-y-2">
+                      <div className="text-xs font-semibold text-gray-600 mb-2">Disponibilité de {p.designation}</div>
+                      <div className="grid grid-cols-3 gap-2">
+                        <button onClick={() => setDispo(p, 'dispo')}
+                          className="py-2 rounded-lg bg-green-700 text-white text-xs font-semibold">
+                          🟢 Disponible
+                        </button>
+                        <button onClick={() => setDispo(p, 'indispo')}
+                          className="py-2 rounded-lg bg-red-500 text-white text-xs font-semibold">
+                          🔴 Indisponible
+                        </button>
+                        <button
+                          onClick={() => {
+                            const q = parseInt(qteSaisie)
+                            if (q > 0) setDispo(p, 'qte', q)
+                          }}
+                          className="py-2 rounded-lg bg-amber-500 text-white text-xs font-semibold">
+                          🟡 Avec quantité
+                        </button>
+                      </div>
+                      <div className="flex gap-2 items-center">
+                        <input
+                          type="number"
+                          min="1"
+                          placeholder="Quantité disponible (ex: 5)"
+                          value={qteSaisie}
+                          onChange={e => setQteSaisie(e.target.value)}
+                          className="flex-1 border border-amber-300 rounded-lg p-2 text-sm text-center"
+                        />
+                        <span className="text-xs text-gray-400">{p.unite}s</span>
+                      </div>
+                      <p className="text-xs text-gray-400">
+                        💡 La quantité s&apos;affiche dans la boutique et limite les commandes.
+                      </p>
                     </div>
                   )}
                 </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium flex items-center gap-1.5 flex-wrap">
-                    {p.designation}
-                    {p.bio && <span className="text-xs bg-green-100 text-green-700 px-1.5 rounded-full">BIO*</span>}
-                  </div>
-                  <div className="text-xs text-gray-400">
-                    {p.reference && `Ref. ${p.reference} · `}
-                    {p.prix_ht > 0 ? `${p.prix_ht.toFixed(2)}€ HT/${p.unite}` : 'Prix a definir'}
-                  </div>
-                </div>
-                <button onClick={() => setModal(p)}
-                  className="text-xs text-blue-600 px-2 py-1 rounded border border-blue-200 shrink-0">
-                  Edit
-                </button>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       ))}
@@ -612,7 +690,7 @@ type MessageHistorique = {
 }
 
 function MessagesTab({ clients }: { clients: Client[] }) {
-  const [mode, setMode]           = useState<'compose' | 'historique'>('compose')
+  const [mode, setMode]           = useState<'compose' | 'historique' | 'modeles'>('compose')
   const [sujet, setSujet]         = useState('')
   const [corps, setCorps]         = useState('')
   const [cibleTous, setCibleTous] = useState(true)
@@ -621,23 +699,67 @@ function MessagesTab({ clients }: { clients: Client[] }) {
   const [resultat, setResultat]   = useState<{ ok: boolean; envoyes?: number; total?: number; error?: string } | null>(null)
   const [historique, setHistorique] = useState<MessageHistorique[]>([])
   const [loadHist, setLoadHist]   = useState(false)
+  const [templates, setTemplates] = useState<MessageTemplate[]>([])
+  const [loadTemplates, setLoadTemplates] = useState(false)
+  const [nomTemplate, setNomTemplate] = useState('')
+  const [sauvegardeOuverte, setSauvegardeOuverte] = useState(false)
 
   const avecEmail = clients.filter(c => c.email)
 
-  async function chargerHistorique() {
-    setLoadHist(true)
-    const res = await supabase
-      .from('messages_envoyes')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(30)
-    if (res.data) setHistorique(res.data as MessageHistorique[])
-    setLoadHist(false)
-  }
+  useEffect(() => {
+    chargerTemplates()
+  }, [])
 
   useEffect(() => {
     if (mode === 'historique') chargerHistorique()
   }, [mode])
+
+  async function chargerTemplates() {
+    setLoadTemplates(true)
+    const { data } = await supabase
+      .from('message_templates')
+      .select('*')
+      .order('ordre')
+    if (data) setTemplates(data as MessageTemplate[])
+    setLoadTemplates(false)
+  }
+
+  async function chargerHistorique() {
+    setLoadHist(true)
+    const { data } = await supabase
+      .from('messages_envoyes')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(30)
+    if (data) setHistorique(data as MessageHistorique[])
+    setLoadHist(false)
+  }
+
+  function chargerTemplate(t: MessageTemplate) {
+    setSujet(t.sujet)
+    setCorps(t.corps)
+    setMode('compose')
+  }
+
+  async function sauvegarderTemplate() {
+    if (!nomTemplate.trim() || !sujet.trim() || !corps.trim()) return
+    const maxOrdre = templates.reduce((m, t) => Math.max(m, t.ordre), 0)
+    await supabase.from('message_templates').insert({
+      nom: nomTemplate,
+      sujet,
+      corps,
+      ordre: maxOrdre + 1,
+    })
+    setNomTemplate('')
+    setSauvegardeOuverte(false)
+    chargerTemplates()
+  }
+
+  async function supprimerTemplate(id: string) {
+    if (!confirm('Supprimer ce modèle ?')) return
+    await supabase.from('message_templates').delete().eq('id', id)
+    setTemplates(prev => prev.filter(t => t.id !== id))
+  }
 
   async function envoyer() {
     if (!sujet.trim() || !corps.trim()) return
@@ -682,6 +804,7 @@ function MessagesTab({ clients }: { clients: Client[] }) {
       <div className="flex rounded-lg overflow-hidden border border-gray-200">
         {[
           { val: 'compose',    label: '✏️ Composer' },
+          { val: 'modeles',    label: '📌 Modèles' },
           { val: 'historique', label: '📋 Historique' },
         ].map(o => (
           <button key={o.val} onClick={() => setMode(o.val as typeof mode)}
@@ -692,32 +815,62 @@ function MessagesTab({ clients }: { clients: Client[] }) {
         ))}
       </div>
 
+      {/* ── Modèles ── */}
+      {mode === 'modeles' && (
+        <div className="space-y-3">
+          <p className="text-xs text-gray-500">Cliquez sur un modèle pour le charger dans le composer.</p>
+          {loadTemplates ? (
+            <div className="flex justify-center py-8 text-gray-400 text-sm">Chargement…</div>
+          ) : templates.length === 0 ? (
+            <div className="text-center py-8 text-gray-400 text-sm">
+              Aucun modèle — composez un message et sauvegardez-le.
+            </div>
+          ) : (
+            templates.map(t => (
+              <div key={t.id} className="bg-white rounded-xl border border-gray-200 p-4 space-y-2">
+                <div>
+                  <div className="font-semibold text-sm text-gray-800">{t.nom}</div>
+                  <div className="text-xs text-gray-400 mt-0.5 line-clamp-1">{t.sujet}</div>
+                  <div className="text-xs text-gray-500 mt-1 line-clamp-2 whitespace-pre-line">{t.corps}</div>
+                </div>
+                <div className="flex gap-2 pt-1">
+                  <button
+                    onClick={() => chargerTemplate(t)}
+                    className="flex-1 py-2 rounded-lg bg-green-700 text-white text-xs font-semibold">
+                    ✏️ Utiliser ce modèle
+                  </button>
+                  <button
+                    onClick={() => supprimerTemplate(t.id)}
+                    className="px-3 py-2 rounded-lg border border-red-200 text-red-500 text-xs">
+                    🗑
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
       {/* ── Composer ── */}
       {mode === 'compose' && (
         <div className="space-y-4">
           {/* Destinataires */}
           <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-3">
             <div className="text-sm font-semibold text-gray-700">Destinataires</div>
-
             <div className="flex rounded-lg overflow-hidden border border-gray-200">
-              <button
-                onClick={() => setCibleTous(true)}
+              <button onClick={() => setCibleTous(true)}
                 className={`flex-1 py-2.5 text-xs font-medium transition-colors
                   ${cibleTous ? 'bg-green-700 text-white' : 'bg-white text-gray-600'}`}>
                 📢 Tous les chefs ({avecEmail.length})
               </button>
-              <button
-                onClick={() => setCibleTous(false)}
+              <button onClick={() => setCibleTous(false)}
                 className={`flex-1 py-2.5 text-xs font-medium transition-colors
                   ${!cibleTous ? 'bg-green-700 text-white' : 'bg-white text-gray-600'}`}>
                 👤 Un seul chef
               </button>
             </div>
-
             {!cibleTous && (
-              <select
-                value={destId}
-                onChange={e => setDestId(e.target.value)}
+              <select value={destId} onChange={e => setDestId(e.target.value)}
                 className="w-full border border-gray-200 rounded-lg p-2.5 text-sm bg-white">
                 <option value="">— Choisir un chef —</option>
                 {avecEmail.map(c => (
@@ -725,7 +878,6 @@ function MessagesTab({ clients }: { clients: Client[] }) {
                 ))}
               </select>
             )}
-
             {avecEmail.length === 0 && (
               <div className="text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2">
                 ⚠️ Aucun client n&apos;a d&apos;adresse email enregistrée
@@ -735,30 +887,59 @@ function MessagesTab({ clients }: { clients: Client[] }) {
 
           {/* Sujet + Corps */}
           <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-3">
-            <div className="text-sm font-semibold text-gray-700">Message</div>
-
+            <div className="flex items-center justify-between">
+              <div className="text-sm font-semibold text-gray-700">Message</div>
+              <button onClick={() => setMode('modeles')}
+                className="text-xs text-green-700 border border-green-200 rounded-lg px-2 py-1 bg-green-50">
+                📌 Charger un modèle
+              </button>
+            </div>
             <div>
               <label className="text-xs text-gray-500 mb-1 block">Sujet</label>
-              <input
-                value={sujet}
-                onChange={e => setSujet(e.target.value)}
-                placeholder="ex: Nouveautés de la semaine 🌿"
+              <input value={sujet} onChange={e => setSujet(e.target.value)}
+                placeholder="ex: 🌻 Production disponible cette semaine"
                 className="w-full border border-gray-200 rounded-lg p-2.5 text-sm" />
             </div>
-
             <div>
               <label className="text-xs text-gray-500 mb-1 block">Contenu du message</label>
-              <textarea
-                value={corps}
-                onChange={e => setCorps(e.target.value)}
+              <textarea value={corps} onChange={e => setCorps(e.target.value)}
                 placeholder={"Bonjour,\n\nNous avons de belles nouveautés cette semaine...\n\nÀ bientôt !"}
-                rows={7}
+                rows={8}
                 className="w-full border border-gray-200 rounded-lg p-2.5 text-sm resize-none" />
               <div className="text-xs text-gray-400 mt-1">
-                💡 Un bouton &quot;Passer ma commande&quot; avec le lien personnel de chaque chef sera automatiquement ajouté en bas de l&apos;email.
+                💡 Un bouton &quot;Passer ma commande&quot; avec le lien personnel de chaque chef sera ajouté automatiquement.
               </div>
             </div>
           </div>
+
+          {/* Sauvegarder comme modèle */}
+          {(sujet || corps) && (
+            <div className="bg-gray-50 rounded-xl border border-gray-200 p-3">
+              {!sauvegardeOuverte ? (
+                <button onClick={() => setSauvegardeOuverte(true)}
+                  className="text-xs text-gray-600 w-full text-center">
+                  💾 Sauvegarder comme modèle réutilisable
+                </button>
+              ) : (
+                <div className="space-y-2">
+                  <input value={nomTemplate} onChange={e => setNomTemplate(e.target.value)}
+                    placeholder="Nom du modèle (ex: Disponibilités semaine)"
+                    className="w-full border border-gray-200 rounded-lg p-2 text-sm" />
+                  <div className="flex gap-2">
+                    <button onClick={() => setSauvegardeOuverte(false)}
+                      className="flex-1 py-2 rounded-lg border border-gray-200 text-gray-500 text-xs">
+                      Annuler
+                    </button>
+                    <button onClick={sauvegarderTemplate}
+                      disabled={!nomTemplate.trim()}
+                      className="flex-1 py-2 rounded-lg bg-green-700 text-white text-xs font-semibold disabled:opacity-40">
+                      💾 Sauvegarder
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Résultat */}
           {resultat && (
@@ -771,8 +952,7 @@ function MessagesTab({ clients }: { clients: Client[] }) {
           )}
 
           {/* Bouton envoyer */}
-          <button
-            onClick={envoyer}
+          <button onClick={envoyer}
             disabled={envoi || !sujet.trim() || !corps.trim() || (!cibleTous && !destId)}
             className="w-full py-3.5 rounded-xl bg-green-700 text-white font-bold text-sm disabled:opacity-50 active:bg-green-800">
             {envoi ? (

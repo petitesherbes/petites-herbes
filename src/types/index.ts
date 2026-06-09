@@ -121,6 +121,8 @@ export interface Produit {
   description: string | null
   photo_url: string | null
   actif: boolean
+  disponible: boolean
+  quantite_dispo: number | null
   created_at: string
 }
 
@@ -168,4 +170,13 @@ export interface SemisLigneForm {
   format: Format
   quantite: number
   espece?: Espece
+}
+
+export interface MessageTemplate {
+  id: string
+  nom: string
+  sujet: string
+  corps: string
+  ordre: number
+  created_at: string
 }
