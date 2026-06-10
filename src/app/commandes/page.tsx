@@ -701,6 +701,7 @@ function MessagesTab({ clients }: { clients: Client[] }) {
   const [loadHist, setLoadHist]   = useState(false)
   const [templates, setTemplates] = useState<MessageTemplate[]>([])
   const [loadTemplates, setLoadTemplates] = useState(false)
+  const [tableMissing, setTableMissing] = useState(false)
   const [nomTemplate, setNomTemplate] = useState('')
   const [sauvegardeOuverte, setSauvegardeOuverte] = useState(false)
 
@@ -714,13 +715,39 @@ function MessagesTab({ clients }: { clients: Client[] }) {
     if (mode === 'historique') chargerHistorique()
   }, [mode])
 
+  // Templates intégrés — utilisés en fallback si la table n'existe pas encore
+  const TEMPLATES_FALLBACK: MessageTemplate[] = [
+    { id: 'f1', nom: '🌻 Disponibilités hebdomadaires', ordre: 1, created_at: '',
+      sujet: '🌻 Production disponible cette semaine — commandez avant lundi 15h',
+      corps: `Bonjour,\n\nVotre production de la semaine est disponible ! Rendez-vous sur votre espace personnel pour découvrir nos disponibilités du moment et passer commande en quelques clics.\n\n⏰ Pensez à commander avant lundi 15h, c'est très arrangeant pour nous 🫶\n\nCette semaine vous retrouverez nos tapis de micro-pousses, barquettes, godets, fleurs comestibles et aromates en bottes.\n\nN'oubliez pas de mettre nos cagettes de côté — ou si vous souhaitez vous en débarrasser, nous sommes preneurs !\n\nBonne journée,\nVégétalement 🌱\nLes Petites Herbes` },
+    { id: 'f2', nom: '🛒 Message boutique — offre de la semaine', ordre: 2, created_at: '',
+      sujet: '🌿 Nos disponibilités de la semaine — votre boutique est à jour !',
+      corps: `Bonjour,\n\nUn petit mot de la ferme pour vous donner des nouvelles de la production cette semaine !\n\nVotre boutique personnelle est mise à jour en temps réel : vous y trouverez exactement ce qui est disponible aujourd'hui.\n\nCette semaine au programme :\n• 🌱 Tapis de micro-pousses (tournesol, radis, pois, lentille, basilic...)\n• 🧺 Barquettes fraîches\n• 🪴 Godets d'herbes aromatiques\n• 🌸 Fleurs comestibles de saison\n• 🌿 Bottes d'aromates fraîches\n\n⏰ Pour qu'on puisse préparer les commandes dans les meilleures conditions, merci de commander avant lundi 15h !\n\nÀ très bientôt,\nVégétalement 🌱\nLes Petites Herbes · Cogolin` },
+    { id: 'f3', nom: '⚠️ Rupture de stock', ordre: 3, created_at: '',
+      sujet: '⚠️ Rupture temporaire sur certaines variétés',
+      corps: `Bonjour,\n\nNous vous informons d'une rupture temporaire sur certaines de nos variétés cette semaine.\n\nNotre catalogue en ligne est mis à jour en temps réel — les produits disponibles sont bien visibles sur votre espace personnel.\n\nMerci pour votre compréhension, nous faisons notre maximum pour réapprovisionner rapidement.\n\nÀ très bientôt,\nVégétalement 🌱\nLes Petites Herbes` },
+    { id: 'f4', nom: '📅 Fermeture / Congés', ordre: 4, created_at: '',
+      sujet: '📅 Fermeture exceptionnelle — informations importantes',
+      corps: `Bonjour,\n\nNous vous informons que notre exploitation sera fermée du ___ au ___.\n\nAucune commande ne pourra être traitée pendant cette période. Nous reprendrons les livraisons normalement à partir du ___.\n\nLes commandes passées avant notre fermeture seront bien honorées.\n\nMerci de votre fidélité et à très bientôt !\n\nVégétalement 🌱\nLes Petites Herbes` },
+    { id: 'f5', nom: '🎉 Nouveauté / Arrivage', ordre: 5, created_at: '',
+      sujet: '🎉 Nouveauté à la ferme — découvrez notre dernière arrivée !',
+      corps: `Bonjour,\n\nBonne nouvelle : nous avons une nouveauté à vous proposer cette semaine !\n\n___ [Décrivez ici la nouveauté : nouvelle variété, nouveau produit, nouvelle présentation...]\n\nComme toujours, retrouvez-le directement dans votre espace boutique personnel.\n\nN'hésitez pas à nous faire part de vos retours — vos avis guident vraiment notre production !\n\nÀ bientôt,\nVégétalement 🌱\nLes Petites Herbes` },
+  ]
+
   async function chargerTemplates() {
     setLoadTemplates(true)
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('message_templates')
       .select('*')
       .order('ordre')
-    if (data) setTemplates(data as MessageTemplate[])
+    if (error) {
+      // Table pas encore créée — utiliser les templates intégrés
+      setTemplates(TEMPLATES_FALLBACK)
+      setTableMissing(true)
+    } else {
+      setTemplates(data?.length ? (data as MessageTemplate[]) : TEMPLATES_FALLBACK)
+      setTableMissing(false)
+    }
     setLoadTemplates(false)
   }
 
@@ -818,6 +845,12 @@ function MessagesTab({ clients }: { clients: Client[] }) {
       {/* ── Modèles ── */}
       {mode === 'modeles' && (
         <div className="space-y-3">
+          {tableMissing && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-xs text-amber-800 space-y-1">
+              <div className="font-semibold">⚠️ Modèles intégrés (lecture seule)</div>
+              <div>La table <code className="font-mono">message_templates</code> n&apos;existe pas encore dans Supabase. Les modèles ci-dessous sont intégrés dans l&apos;app. Pour pouvoir en créer de nouveaux, collez le fichier <code className="font-mono">supabase/migrations/012_message_templates.sql</code> dans l&apos;éditeur SQL de Supabase.</div>
+            </div>
+          )}
           <p className="text-xs text-gray-500">Cliquez sur un modèle pour le charger dans le composer.</p>
           {loadTemplates ? (
             <div className="flex justify-center py-8 text-gray-400 text-sm">Chargement…</div>
@@ -839,11 +872,13 @@ function MessagesTab({ clients }: { clients: Client[] }) {
                     className="flex-1 py-2 rounded-lg bg-green-700 text-white text-xs font-semibold">
                     ✏️ Utiliser ce modèle
                   </button>
-                  <button
-                    onClick={() => supprimerTemplate(t.id)}
-                    className="px-3 py-2 rounded-lg border border-red-200 text-red-500 text-xs">
-                    🗑
-                  </button>
+                  {!tableMissing && (
+                    <button
+                      onClick={() => supprimerTemplate(t.id)}
+                      className="px-3 py-2 rounded-lg border border-red-200 text-red-500 text-xs">
+                      🗑
+                    </button>
+                  )}
                 </div>
               </div>
             ))
@@ -913,7 +948,7 @@ function MessagesTab({ clients }: { clients: Client[] }) {
           </div>
 
           {/* Sauvegarder comme modèle */}
-          {(sujet || corps) && (
+          {(sujet || corps) && !tableMissing && (
             <div className="bg-gray-50 rounded-xl border border-gray-200 p-3">
               {!sauvegardeOuverte ? (
                 <button onClick={() => setSauvegardeOuverte(true)}
