@@ -97,6 +97,95 @@ export default function CommandesPage() {
 
 // ─── Liste des BLs ───────────────────────────────────────────
 
+// ─── Feuille de préparation ───────────────────────────────────
+
+function prochainJour(jourCible: number): string {
+  // jourCible : 2=mardi 5=vendredi
+  const today = new Date()
+  const diff = (jourCible - today.getDay() + 7) % 7
+  const d = new Date(today)
+  d.setDate(today.getDate() + (diff === 0 ? 0 : diff))
+  return d.toISOString().slice(0, 10)
+}
+
+function PrepaButtons() {
+  const [loading, setLoading] = useState<'mardi' | 'vendredi' | null>(null)
+  const [open, setOpen] = useState(false)
+  const [dateChoisie, setDateChoisie] = useState('')
+
+  async function generer(date: string) {
+    const jour = new Date(date + 'T12:00:00').toLocaleDateString('fr-FR', { weekday: 'long' })
+    const label = jour.charAt(0).toUpperCase() + jour.slice(1)
+    const isM = new Date(date + 'T12:00:00').getDay() === 2
+    setLoading(isM ? 'mardi' : 'vendredi')
+    try {
+      const res = await fetch('/api/pdf/preparation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date }),
+      })
+      if (!res.ok) {
+        const err = await res.json()
+        alert(err.error || 'Aucune commande pour cette date')
+        return
+      }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `Preparation-${label}-${date.replace(/-/g, '')}.pdf`
+      a.click()
+      URL.revokeObjectURL(url)
+    } finally {
+      setLoading(null)
+    }
+  }
+
+  const mardi    = prochainJour(2)
+  const vendredi = prochainJour(5)
+
+  const fmt = (d: string) => new Date(d + 'T12:00:00').toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })
+
+  return (
+    <div className="bg-green-50 border border-green-200 rounded-xl p-3 space-y-2">
+      <div className="text-xs font-semibold text-green-800">📋 Feuille de préparation</div>
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          onClick={() => generer(mardi)}
+          disabled={loading !== null}
+          className="py-2 rounded-lg bg-green-700 text-white text-xs font-semibold disabled:opacity-50">
+          {loading === 'mardi' ? '…' : `Mardi ${fmt(mardi)}`}
+        </button>
+        <button
+          onClick={() => generer(vendredi)}
+          disabled={loading !== null}
+          className="py-2 rounded-lg bg-green-700 text-white text-xs font-semibold disabled:opacity-50">
+          {loading === 'vendredi' ? '…' : `Vendredi ${fmt(vendredi)}`}
+        </button>
+      </div>
+      <button onClick={() => setOpen(o => !o)} className="text-xs text-green-700 underline">
+        {open ? 'Masquer' : 'Autre date…'}
+      </button>
+      {open && (
+        <div className="flex gap-2 items-center">
+          <input
+            type="date"
+            value={dateChoisie}
+            onChange={e => setDateChoisie(e.target.value)}
+            className="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:border-green-400"
+          />
+          <button
+            onClick={() => { if (dateChoisie) generer(dateChoisie) }}
+            disabled={!dateChoisie || loading !== null}
+            className="py-1.5 px-3 rounded-lg bg-green-700 text-white text-xs font-semibold disabled:opacity-40">
+            {loading ? '…' : 'PDF'}
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function BLsList({ bls, onRefresh }: { bls: BonLivraison[]; onRefresh: () => void }) {
   const router = useRouter()
   const [filtre, setFiltre] = useState<BLStatut | 'tous'>('tous')
@@ -121,6 +210,8 @@ function BLsList({ bls, onRefresh }: { bls: BonLivraison[]; onRefresh: () => voi
 
   return (
     <div className="space-y-3">
+      <PrepaButtons />
+
       <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
         {filtres.map(f => (
           <button key={f.val} onClick={() => setFiltre(f.val)}
