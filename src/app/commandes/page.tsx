@@ -113,16 +113,60 @@ function fmtDate(d: string) {
   return new Date(d + 'T12:00:00').toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })
 }
 
+// ─── WhatsApp helpers ─────────────────────────────────────────
+
+function formatWaPhone(tel: string): string | null {
+  // Nettoyer: garder uniquement les chiffres
+  const digits = tel.replace(/\D/g, '')
+  if (!digits) return null
+  // Déjà un numéro international (33...)
+  if (digits.startsWith('33') && digits.length >= 11) return digits
+  // Numéro FR commençant par 0
+  if (digits.startsWith('0') && digits.length === 10) return '33' + digits.slice(1)
+  // Sinon on renvoie tel quel (pays étranger possible)
+  return digits.length >= 8 ? digits : null
+}
+
+function buildWaMessage(
+  clientNom: string,
+  jourLabel: string,
+  lien: string,
+  produits: { designation: string; bio: boolean; quantite_dispo: number | null }[],
+  messageLibre?: string
+): string {
+  const lignes = [
+    `Bonjour ${clientNom} 👋`,
+    ``,
+    `Votre livraison du *${jourLabel}* approche !`,
+  ]
+  if (messageLibre) {
+    lignes.push(``, messageLibre)
+  }
+  if (produits.length > 0) {
+    lignes.push(``, `🛒 *Disponible cette semaine :*`)
+    for (const p of produits) {
+      const bio   = p.bio ? ' 🌿' : ''
+      const stock = p.quantite_dispo != null && p.quantite_dispo <= 3 ? ` ⚡${p.quantite_dispo} restant` : ''
+      lignes.push(`• ${p.designation}${bio}${stock}`)
+    }
+  }
+  lignes.push(``, `👉 Commander : ${lien}`)
+  return lignes.join('\n')
+}
+
 // ─── Modal rappels ────────────────────────────────────────────
 
 function RappelsModal({ jour, onClose }: { jour: string; onClose: () => void }) {
-  const [clients, setClients] = useState<{ id: string; nom: string; email: string | null }[]>([])
+  const [clients, setClients] = useState<{ id: string; nom: string; email: string | null; telephone: string | null; order_token: string | null }[]>([])
   const [produits, setProduits] = useState<{ designation: string; categorie: string; bio: boolean; quantite_dispo: number | null }[]>([])
   const [loadingClients, setLoadingClients] = useState(true)
   const [message, setMessage] = useState('')
+  const [canal, setCanal] = useState<'whatsapp' | 'email'>('whatsapp')
   const [envoi, setEnvoi] = useState<'idle' | 'envoi' | 'ok' | 'erreur'>('idle')
   const [result, setResult] = useState<{ envoyes: number; total: number; nb_produits?: number } | null>(null)
+  const [waCopie, setWaCopie] = useState<string | null>(null)
   const jourLabel = jour.charAt(0).toUpperCase() + jour.slice(1)
+  const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://petites-herbes.vercel.app'
 
   useEffect(() => {
     fetch(`/api/rappels?jour=${jour}`)
@@ -155,8 +199,8 @@ function RappelsModal({ jour, onClose }: { jour: string; onClose: () => void }) 
     }
   }
 
+  const avecWa    = clients.filter(c => c.telephone && formatWaPhone(c.telephone))
   const avecEmail = clients.filter(c => c.email)
-  const sansEmail = clients.filter(c => !c.email)
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-end" onClick={onClose}>
@@ -168,6 +212,20 @@ function RappelsModal({ jour, onClose }: { jour: string; onClose: () => void }) 
           <button onClick={onClose} className="text-gray-400 text-2xl leading-none">×</button>
         </div>
 
+        {/* Choix canal */}
+        <div className="grid grid-cols-2 rounded-lg overflow-hidden border border-gray-200">
+          <button onClick={() => setCanal('whatsapp')}
+            className={`py-2 text-sm font-semibold transition-colors
+              ${canal === 'whatsapp' ? 'bg-green-700 text-white' : 'bg-white text-gray-600'}`}>
+            💬 WhatsApp
+          </button>
+          <button onClick={() => setCanal('email')}
+            className={`py-2 text-sm font-semibold transition-colors
+              ${canal === 'email' ? 'bg-green-700 text-white' : 'bg-white text-gray-600'}`}>
+            ✉️ Email
+          </button>
+        </div>
+
         {envoi === 'ok' && result ? (
           <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-center space-y-1">
             <div className="text-2xl">✅</div>
@@ -175,90 +233,106 @@ function RappelsModal({ jour, onClose }: { jour: string; onClose: () => void }) 
               {result.envoyes} rappel{result.envoyes > 1 ? 's' : ''} envoyé{result.envoyes > 1 ? 's' : ''} sur {result.total}
             </div>
             {result.nb_produits != null && (
-              <div className="text-sm text-green-700">avec {result.nb_produits} produit{result.nb_produits > 1 ? 's' : ''} disponible{result.nb_produits > 1 ? 's' : ''} en aperçu</div>
+              <div className="text-sm text-green-700">{result.nb_produits} produits en aperçu</div>
             )}
             <button onClick={onClose} className="text-sm text-green-700 underline mt-2">Fermer</button>
           </div>
+        ) : loadingClients ? (
+          <div className="text-sm text-gray-400 text-center py-4">Chargement…</div>
         ) : (
           <>
-            {loadingClients ? (
-              <div className="text-sm text-gray-400 text-center py-4">Chargement…</div>
+            {/* Message personnalisé (commun aux deux canaux) */}
+            <div>
+              <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide block mb-1.5">
+                Message du moment (optionnel)
+              </label>
+              <textarea value={message} onChange={e => setMessage(e.target.value)}
+                placeholder={`ex: Cette semaine : pois gourmands et cresson frais ! Livraison ${jourLabel} comme prévu. 🌿`}
+                rows={3}
+                className="w-full border border-gray-200 rounded-lg p-2.5 text-sm resize-none focus:outline-none focus:border-green-400" />
+            </div>
+
+            {/* Produits qui seront inclus */}
+            {produits.length > 0 && (
+              <div className="bg-green-50 border border-green-100 rounded-lg p-2.5 flex flex-wrap gap-1.5">
+                {produits.map((p, i) => (
+                  <span key={i} className="text-xs bg-white border border-green-200 text-green-800 px-2 py-0.5 rounded-full font-medium">
+                    {p.designation}{p.bio ? ' 🌿' : ''}{p.quantite_dispo != null && p.quantite_dispo <= 3 ? ' ⚡' : ''}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {clients.length === 0 ? (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-700">
+                Aucun client assigné au créneau {jourLabel} — configurez les créneaux dans la fiche client.
+              </div>
+            ) : canal === 'whatsapp' ? (
+              /* ── Mode WhatsApp : un bouton par client ── */
+              <div className="space-y-2">
+                <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                  {avecWa.length} client{avecWa.length > 1 ? 's' : ''} avec numéro WhatsApp
+                </div>
+                {clients.map(c => {
+                  const lien   = c.order_token ? `${baseUrl}/commander/${c.order_token}` : null
+                  const phone  = c.telephone ? formatWaPhone(c.telephone) : null
+                  const waText = lien
+                    ? encodeURIComponent(buildWaMessage(c.nom, jourLabel, lien, produits, message.trim() || undefined))
+                    : null
+                  const waUrl  = phone && waText ? `https://wa.me/${phone}?text=${waText}` : null
+
+                  return (
+                    <div key={c.id} className="flex items-center gap-2 bg-gray-50 rounded-xl p-2.5">
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold text-sm truncate">{c.nom}</div>
+                        <div className="text-xs text-gray-400 truncate">{c.telephone || 'Pas de numéro'}</div>
+                      </div>
+                      {waUrl ? (
+                        <a href={waUrl} target="_blank" rel="noopener noreferrer"
+                          className="shrink-0 bg-[#25D366] text-white text-xs font-bold px-3 py-2 rounded-xl">
+                          WhatsApp
+                        </a>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            if (!lien) return
+                            const txt = buildWaMessage(c.nom, jourLabel, lien, produits, message.trim() || undefined)
+                            navigator.clipboard.writeText(txt)
+                            setWaCopie(c.id)
+                            setTimeout(() => setWaCopie(null), 2000)
+                          }}
+                          className="shrink-0 bg-gray-200 text-gray-600 text-xs font-bold px-3 py-2 rounded-xl">
+                          {waCopie === c.id ? '✓ Copié' : 'Copier msg'}
+                        </button>
+                      )}
+                    </div>
+                  )
+                })}
+                <p className="text-xs text-gray-400 pt-1">
+                  Chaque bouton ouvre WhatsApp avec le message pré-rédigé — vous n&apos;avez plus qu&apos;à envoyer.
+                </p>
+              </div>
             ) : (
-              <>
+              /* ── Mode Email ── */
+              <div className="space-y-3">
                 <div className="space-y-1">
                   <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
-                    Destinataires ({avecEmail.length} avec email)
+                    {avecEmail.length} client{avecEmail.length > 1 ? 's' : ''} avec email
                   </div>
-                  {clients.length === 0 ? (
-                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-700">
-                      Aucun client assigné au créneau {jourLabel} — configurez les créneaux dans la fiche client.
+                  {clients.map(c => (
+                    <div key={c.id} className="flex items-center gap-2 text-sm">
+                      {c.email
+                        ? <><span className="text-green-600 text-xs">✓</span><span className="font-medium">{c.nom}</span><span className="text-gray-400 text-xs truncate">{c.email}</span></>
+                        : <><span className="text-gray-300 text-xs">–</span><span className="text-gray-400">{c.nom}</span><span className="text-xs text-amber-500">pas d&apos;email</span></>
+                      }
                     </div>
-                  ) : (
-                    <div className="space-y-1">
-                      {avecEmail.map(c => (
-                        <div key={c.id} className="flex items-center gap-2 text-sm">
-                          <span className="text-green-600">✓</span>
-                          <span className="font-medium">{c.nom}</span>
-                          <span className="text-gray-400 text-xs">{c.email}</span>
-                        </div>
-                      ))}
-                      {sansEmail.map(c => (
-                        <div key={c.id} className="flex items-center gap-2 text-sm text-gray-400">
-                          <span>–</span>
-                          <span>{c.nom}</span>
-                          <span className="text-xs text-amber-500">pas d&apos;email</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                  ))}
                 </div>
-
-                {/* Produits disponibles inclus dans l'email */}
-                <div>
-                  <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">
-                    Produits inclus dans l&apos;email ({produits.length})
-                  </div>
-                  {produits.length === 0 ? (
-                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-2.5 text-xs text-amber-700">
-                      ⚠️ Aucun produit disponible — marquez des produits comme disponibles dans le catalogue.
-                    </div>
-                  ) : (
-                    <div className="bg-green-50 border border-green-100 rounded-lg p-2.5 flex flex-wrap gap-1.5">
-                      {produits.map((p, i) => (
-                        <span key={i} className="text-xs bg-white border border-green-200 text-green-800 px-2 py-0.5 rounded-full font-medium">
-                          {p.designation}{p.bio ? ' 🌿' : ''}
-                          {p.quantite_dispo != null && p.quantite_dispo <= 3 ? ' ⚡' : ''}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide block mb-1.5">
-                    Message du moment (optionnel)
-                  </label>
-                  <textarea
-                    value={message}
-                    onChange={e => setMessage(e.target.value)}
-                    placeholder={`ex: Cette semaine : de beaux pois gourmands et du cresson tout frais ! Livraison ${jourLabel} comme prévu. 🌿`}
-                    rows={3}
-                    className="w-full border border-gray-200 rounded-lg p-2.5 text-sm resize-none focus:outline-none focus:border-green-400"
-                  />
-                  <p className="text-xs text-gray-400 mt-1">
-                    Affiché en haut de l&apos;email, avant la liste des produits.
-                  </p>
-                </div>
-
-                <button
-                  onClick={envoyer}
-                  disabled={avecEmail.length === 0 || envoi === 'envoi'}
+                <button onClick={envoyer} disabled={avecEmail.length === 0 || envoi === 'envoi'}
                   className="w-full py-3 rounded-xl bg-green-700 text-white font-bold text-sm disabled:opacity-40">
-                  {envoi === 'envoi'
-                    ? 'Envoi en cours…'
-                    : `Envoyer à ${avecEmail.length} client${avecEmail.length > 1 ? 's' : ''}`}
+                  {envoi === 'envoi' ? 'Envoi en cours…' : `Envoyer à ${avecEmail.length} client${avecEmail.length > 1 ? 's' : ''}`}
                 </button>
-              </>
+              </div>
             )}
           </>
         )}

@@ -286,7 +286,7 @@ export async function GET(req: NextRequest) {
   const [{ data: clients, error }, { data: produits }] = await Promise.all([
     supabase
       .from('clients')
-      .select('id, nom, email, order_token, jours_livraison')
+      .select('id, nom, email, telephone, order_token, jours_livraison')
       .eq('actif', true)
       .contains('jours_livraison', [jour])
       .order('nom'),
