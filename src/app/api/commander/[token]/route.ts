@@ -3,6 +3,10 @@ import { createClient } from '@supabase/supabase-js'
 import { Resend } from 'resend'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
+import { renderToBuffer } from '@react-pdf/renderer'
+import React from 'react'
+import BLDocument from '@/lib/pdf/bl-document'
+import type { ParamsDocs, BLPDF } from '@/lib/pdf/types'
 
 export async function POST(
   req: NextRequest,
@@ -102,6 +106,51 @@ export async function POST(
       .eq('id', paramsDB.id)
   }
 
+  // Charger les params documents pour le PDF (optionnel, fallback si absent)
+  const { data: paramsDocsData } = await supabase
+    .from('parametres_documents')
+    .select('*')
+    .limit(1)
+    .single()
+
+  const params_docs: ParamsDocs = paramsDocsData || {
+    nom: 'GAEC Les Petites Herbes', adresse: '15 rue François Arago',
+    code_postal: '83310', ville: 'Cogolin',
+    telephone: '06 09 93 75 89', email: 'petitesherbes@gmail.com',
+    activite: 'Producteur de micro pousses, plantes aromatiques et médicinales',
+    siret: '983 294 703 00019', rcs: 'FREJUS', capital: '2000',
+    tva_intra: 'FR 49 983 294 703', ape_naf: '7010Z', certification_bio: 'FR-BIO-01',
+    iban: 'FR76 1027 8091 1400 0203 1770 467', bic: 'CMCIFR2A',
+    titulaire_iban: 'GAEC Les Petites Herbes', logo_url: null,
+    mention_reserve_propriete: '', mention_article_441: '',
+    conditions_reglement: 'Comptant à réception de facture',
+    delai_paiement_jours: 0, prochain_numero_facture: 485,
+  }
+
+  // Générer le PDF BL
+  let blPdfBuffer: Buffer | null = null
+  try {
+    const blForPDF: BLPDF = {
+      id: bl.id, numero, date_livraison: aujourd_hui,
+      client: {
+        nom: client.nom, adresse: client.adresse, code_postal: client.code_postal,
+        ville: client.ville, pays: client.pays || 'FRANCE', email: client.email,
+        siret: client.siret, tva_intra: client.tva_intra,
+      },
+      lignes: lignesFinales.map((l) => ({
+        reference: l.reference || null,
+        designation: l.designation,
+        quantite: l.quantite,
+        prix_ht: l.prix_ht,
+        tva_pct: l.tva_pct,
+      })),
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    blPdfBuffer = Buffer.from(await renderToBuffer(React.createElement(BLDocument, { bl: blForPDF, params: params_docs }) as any))
+  } catch (pdfErr) {
+    console.error('PDF generation error (non-blocking):', pdfErr)
+  }
+
   // Envoyer emails (confirmation chef + notification GAEC)
   const dateFormatee = format(new Date(), 'dd MMMM yyyy', { locale: fr })
 
@@ -158,9 +207,9 @@ export async function POST(
 </body>
 </html>`
 
-    // Email au chef
+    // Email au chef (avec BL PDF en pièce jointe)
     if (client.email) {
-      await resend.emails.send({
+      const emailPayload: Parameters<typeof resend.emails.send>[0] = {
         from: 'GAEC Les Petites Herbes <onboarding@resend.dev>',
         to: [client.email],
         subject: `Commande confirmee — BL N° ${numero}`,
@@ -168,7 +217,14 @@ export async function POST(
           'Commande confirmee !',
           `Votre bon de livraison N° ${numero} a ete transmis`
         ),
-      })
+      }
+      if (blPdfBuffer) {
+        emailPayload.attachments = [{
+          filename: `BL-${numero}.pdf`,
+          content: blPdfBuffer,
+        }]
+      }
+      await resend.emails.send(emailPayload)
     }
 
     // Notification a GAEC

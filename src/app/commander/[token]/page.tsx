@@ -47,6 +47,7 @@ export default function CommanderPage() {
       .from('produits')
       .select('*')
       .eq('actif', true)
+      .eq('disponible', true)
       .neq('categorie', 'LIVRAISON')
       .order('categorie,designation')
 
@@ -57,9 +58,11 @@ export default function CommanderPage() {
   useEffect(() => { charger() }, [charger])
 
   function setQte(produitId: string, delta: number) {
+    const produit = produits.find(p => p.id === produitId)
+    const max = produit?.quantite_dispo ?? Infinity
     setPanier(prev => {
       const actuel = prev[produitId] || 0
-      const nouveau = Math.max(0, actuel + delta)
+      const nouveau = Math.min(max, Math.max(0, actuel + delta))
       if (nouveau === 0) {
         const { [produitId]: _, ...rest } = prev
         return rest
@@ -235,8 +238,13 @@ export default function CommanderPage() {
                           </div>
                         )}
                         {p.prix_ht > 0 && (
-                          <div className="text-xs text-green-700 font-medium mb-2">
+                          <div className="text-xs text-green-700 font-medium mb-1">
                             {p.prix_ht.toFixed(2)} € HT/{p.unite}
+                          </div>
+                        )}
+                        {p.quantite_dispo != null && (
+                          <div className={`text-[11px] font-semibold mb-1.5 ${p.quantite_dispo <= 3 ? 'text-red-500' : 'text-amber-600'}`}>
+                            {p.quantite_dispo <= 0 ? '⚠️ Épuisé' : `⚡ Plus que ${p.quantite_dispo} dispo`}
                           </div>
                         )}
 

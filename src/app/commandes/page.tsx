@@ -475,13 +475,20 @@ function ProduitModal({ produit, onClose, onSave }: {
 
 function ClientsList({ clients, onRefresh }: { clients: Client[]; onRefresh: () => void }) {
   const [modal, setModal] = useState<Client | null | 'nouveau'>(null)
+  const [factureModal, setFactureModal] = useState<Client | null>(null)
 
   return (
     <div className="space-y-3">
-      <button onClick={() => setModal('nouveau')}
-        className="w-full py-3 rounded-xl border-2 border-dashed border-green-300 text-green-700 text-sm font-semibold">
-        + Ajouter un client
-      </button>
+      <div className="flex gap-2">
+        <button onClick={() => setModal('nouveau')}
+          className="flex-1 py-3 rounded-xl border-2 border-dashed border-green-300 text-green-700 text-sm font-semibold">
+          + Ajouter un client
+        </button>
+        <a href="/parametres-documents"
+          className="py-3 px-4 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium flex items-center gap-1.5">
+          ⚙️ <span className="text-xs">Docs</span>
+        </a>
+      </div>
 
       {clients.map(c => {
         const lien = c.order_token
@@ -518,6 +525,11 @@ function ClientsList({ clients, onRefresh }: { clients: Client[]; onRefresh: () 
                     ⚠️ Pas d&apos;email — ajoutez-en un pour pouvoir inviter ce chef
                   </div>
                 )}
+                <button
+                  onClick={() => setFactureModal(c)}
+                  className="w-full flex items-center justify-center gap-2 bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs px-3 py-2.5 rounded-lg font-semibold">
+                  📑 Générer la facture du mois
+                </button>
               </div>
             )}
           </div>
@@ -535,6 +547,12 @@ function ClientsList({ clients, onRefresh }: { clients: Client[]; onRefresh: () 
           client={modal === 'nouveau' ? null : modal}
           onClose={() => setModal(null)}
           onSave={() => { setModal(null); onRefresh() }}
+        />
+      )}
+      {factureModal && (
+        <FactureModal
+          client={factureModal}
+          onClose={() => setFactureModal(null)}
         />
       )}
     </div>
@@ -1039,6 +1057,101 @@ function MessagesTab({ clients }: { clients: Client[] }) {
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+// ─── Modal génération facture ─────────────────────────────────
+
+function FactureModal({ client, onClose }: { client: Client; onClose: () => void }) {
+  const now = new Date()
+  const moisCourant = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  const [mois, setMois] = useState(moisCourant)
+  const [loading, setLoading] = useState(false)
+  const [erreur, setErreur] = useState('')
+
+  async function generer() {
+    setLoading(true)
+    setErreur('')
+    try {
+      const res = await fetch('/api/pdf/facture', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ client_id: client.id, mois }),
+      })
+      if (!res.ok) {
+        const d = await res.json()
+        setErreur(d.error || 'Erreur inconnue')
+        setLoading(false)
+        return
+      }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      const nom = client.nom.replace(/[^a-z0-9]/gi, '_')
+      a.download = `Facture-${mois}-${nom}.pdf`
+      a.click()
+      URL.revokeObjectURL(url)
+      onClose()
+    } catch {
+      setErreur('Erreur réseau')
+    }
+    setLoading(false)
+  }
+
+  // Générer la liste des 12 derniers mois
+  const moisDispos = Array.from({ length: 12 }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    const val = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+    const label = d.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })
+    return { val, label }
+  })
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-end" onClick={onClose}>
+      <div className="bg-white w-full max-w-2xl mx-auto rounded-t-2xl p-4 pb-12 space-y-4"
+        onClick={e => e.stopPropagation()}>
+        <h2 className="text-lg font-bold">📑 Générer une facture</h2>
+        <p className="text-sm text-gray-600">
+          Client : <strong>{client.nom}</strong>
+        </p>
+
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">Mois à facturer</label>
+          <select value={mois} onChange={e => setMois(e.target.value)}
+            className="w-full border border-gray-200 rounded-lg p-3 text-sm bg-white">
+            {moisDispos.map(m => (
+              <option key={m.val} value={m.val}>{m.label}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="text-xs text-indigo-700 bg-indigo-50 rounded-xl p-3">
+          📋 Tous les BL du mois sélectionné seront regroupés en une seule facture.
+          Le numéro de facture s&apos;incrémente automatiquement.
+        </div>
+
+        {erreur && (
+          <div className="text-xs text-red-600 bg-red-50 rounded-xl p-3">❌ {erreur}</div>
+        )}
+
+        <div className="flex gap-2">
+          <button onClick={onClose}
+            className="flex-1 py-3 rounded-xl border border-gray-200 text-gray-600 text-sm">
+            Annuler
+          </button>
+          <button onClick={generer} disabled={loading}
+            className="flex-1 py-3 rounded-xl bg-indigo-600 text-white font-semibold text-sm disabled:opacity-50">
+            {loading ? (
+              <span className="flex items-center justify-center gap-2">
+                <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                Génération…
+              </span>
+            ) : '📥 Télécharger la facture PDF'}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

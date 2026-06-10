@@ -123,13 +123,17 @@ export default function BLDetailPage() {
         <div className="grid grid-cols-2 gap-2">
           <button onClick={envoyerEmail} disabled={sending || !bl.client?.email}
             className="flex items-center justify-center gap-2 py-3 rounded-xl bg-blue-600 text-white text-sm font-semibold disabled:opacity-40">
-            {sending ? 'Envoi...' : 'Envoyer par email'}
+            {sending ? 'Envoi...' : '✉️ Email'}
           </button>
-          <button onClick={() => window.print()}
-            className="flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-gray-300 text-gray-700 text-sm font-semibold">
-            Imprimer / PDF
-          </button>
+          <a href={`/api/pdf/bl/${id}`} target="_blank" rel="noopener noreferrer"
+            className="flex items-center justify-center gap-2 py-3 rounded-xl bg-green-700 text-white text-sm font-semibold text-center">
+            📄 Télécharger PDF
+          </a>
         </div>
+        <button onClick={() => window.print()}
+          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm">
+          🖨️ Imprimer
+        </button>
 
         {prochainStatut && (
           <button onClick={() => changerStatut(prochainStatut)}
