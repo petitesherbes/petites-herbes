@@ -93,6 +93,8 @@ export interface TemplateLigne {
 export type ProduitCategorie = 'TAPIS' | 'BARQUETTE' | 'GODET' | 'BOTTE' | 'FLEUR' | 'LIVRAISON' | 'CHAMP' | 'AUTRE'
 export type BLStatut = 'brouillon' | 'envoye' | 'livre' | 'facture'
 
+export type JourLivraison = 'mardi' | 'jeudi' | 'vendredi'
+
 export interface Client {
   id: string
   nom: string
@@ -105,6 +107,7 @@ export interface Client {
   siret: string | null
   tva_intra: string | null
   order_token: string | null
+  jours_livraison: JourLivraison[]
   actif: boolean
   created_at: string
 }

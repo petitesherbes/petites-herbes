@@ -99,25 +99,156 @@ export default function CommandesPage() {
 
 // ─── Feuille de préparation ───────────────────────────────────
 
-function prochainJour(jourCible: number): string {
-  // jourCible : 2=mardi 5=vendredi
+const JOURS_NUM: Record<string, number> = { mardi: 2, jeudi: 4, vendredi: 5 }
+
+function prochainJour(num: number): string {
   const today = new Date()
-  const diff = (jourCible - today.getDay() + 7) % 7
+  const diff = (num - today.getDay() + 7) % 7
   const d = new Date(today)
   d.setDate(today.getDate() + (diff === 0 ? 0 : diff))
   return d.toISOString().slice(0, 10)
 }
 
-function PrepaButtons() {
-  const [loading, setLoading] = useState<'mardi' | 'vendredi' | null>(null)
-  const [open, setOpen] = useState(false)
-  const [dateChoisie, setDateChoisie] = useState('')
+function fmtDate(d: string) {
+  return new Date(d + 'T12:00:00').toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })
+}
 
-  async function generer(date: string) {
-    const jour = new Date(date + 'T12:00:00').toLocaleDateString('fr-FR', { weekday: 'long' })
-    const label = jour.charAt(0).toUpperCase() + jour.slice(1)
-    const isM = new Date(date + 'T12:00:00').getDay() === 2
-    setLoading(isM ? 'mardi' : 'vendredi')
+// ─── Modal rappels ────────────────────────────────────────────
+
+function RappelsModal({ jour, onClose }: { jour: string; onClose: () => void }) {
+  const [clients, setClients] = useState<{ id: string; nom: string; email: string | null }[]>([])
+  const [loadingClients, setLoadingClients] = useState(true)
+  const [message, setMessage] = useState('')
+  const [envoi, setEnvoi] = useState<'idle' | 'envoi' | 'ok' | 'erreur'>('idle')
+  const [result, setResult] = useState<{ envoyes: number; total: number } | null>(null)
+  const jourLabel = jour.charAt(0).toUpperCase() + jour.slice(1)
+
+  useEffect(() => {
+    fetch(`/api/rappels?jour=${jour}`)
+      .then(r => r.json())
+      .then(d => { setClients(d.clients || []); setLoadingClients(false) })
+  }, [jour])
+
+  async function envoyer() {
+    setEnvoi('envoi')
+    try {
+      const res = await fetch('/api/rappels', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jour, message: message.trim() || undefined }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setResult({ envoyes: data.envoyes, total: data.total })
+        setEnvoi('ok')
+      } else {
+        alert(data.error || 'Erreur lors de l\'envoi')
+        setEnvoi('erreur')
+      }
+    } catch {
+      setEnvoi('erreur')
+    }
+  }
+
+  const avecEmail = clients.filter(c => c.email)
+  const sansEmail = clients.filter(c => !c.email)
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-end" onClick={onClose}>
+      <div className="bg-white w-full max-w-2xl mx-auto rounded-t-2xl p-4 pb-10 space-y-4 max-h-[85vh] overflow-y-auto"
+        onClick={e => e.stopPropagation()}>
+
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-bold">📨 Rappels {jourLabel}</h2>
+          <button onClick={onClose} className="text-gray-400 text-2xl leading-none">×</button>
+        </div>
+
+        {envoi === 'ok' && result ? (
+          <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-center space-y-1">
+            <div className="text-2xl">✅</div>
+            <div className="font-semibold text-green-800">
+              {result.envoyes} rappel{result.envoyes > 1 ? 's' : ''} envoyé{result.envoyes > 1 ? 's' : ''} sur {result.total}
+            </div>
+            <button onClick={onClose} className="text-sm text-green-700 underline mt-2">Fermer</button>
+          </div>
+        ) : (
+          <>
+            {loadingClients ? (
+              <div className="text-sm text-gray-400 text-center py-4">Chargement…</div>
+            ) : (
+              <>
+                <div className="space-y-1">
+                  <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                    Destinataires ({avecEmail.length} avec email)
+                  </div>
+                  {clients.length === 0 ? (
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-700">
+                      Aucun client assigné au créneau {jourLabel} — configurez les créneaux dans la fiche client.
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      {avecEmail.map(c => (
+                        <div key={c.id} className="flex items-center gap-2 text-sm">
+                          <span className="text-green-600">✓</span>
+                          <span className="font-medium">{c.nom}</span>
+                          <span className="text-gray-400 text-xs">{c.email}</span>
+                        </div>
+                      ))}
+                      {sansEmail.map(c => (
+                        <div key={c.id} className="flex items-center gap-2 text-sm text-gray-400">
+                          <span>–</span>
+                          <span>{c.nom}</span>
+                          <span className="text-xs text-amber-500">pas d&apos;email</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide block mb-1.5">
+                    Message personnalisé (optionnel)
+                  </label>
+                  <textarea
+                    value={message}
+                    onChange={e => setMessage(e.target.value)}
+                    placeholder={`ex: Cette semaine nous avons de beaux pois gourmands et cresson ! La livraison ${jourLabel} prochain arrive bien. 🌿`}
+                    rows={3}
+                    className="w-full border border-gray-200 rounded-lg p-2.5 text-sm resize-none focus:outline-none focus:border-green-400"
+                  />
+                  <p className="text-xs text-gray-400 mt-1">
+                    Ce message apparaît en haut de l&apos;email, avant le bouton de commande.
+                  </p>
+                </div>
+
+                <button
+                  onClick={envoyer}
+                  disabled={avecEmail.length === 0 || envoi === 'envoi'}
+                  className="w-full py-3 rounded-xl bg-green-700 text-white font-bold text-sm disabled:opacity-40">
+                  {envoi === 'envoi'
+                    ? 'Envoi en cours…'
+                    : `Envoyer à ${avecEmail.length} client${avecEmail.length > 1 ? 's' : ''}`}
+                </button>
+              </>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── Boutons préparation + rappels ────────────────────────────
+
+function PrepaButtons() {
+  const [loadingPrepa, setLoadingPrepa] = useState<string | null>(null)
+  const [autreDate, setAutreDate] = useState(false)
+  const [dateChoisie, setDateChoisie] = useState('')
+  const [rappelJour, setRappelJour] = useState<string | null>(null)
+
+  async function genererPrepa(date: string) {
+    const jourLabel = new Date(date + 'T12:00:00').toLocaleDateString('fr-FR', { weekday: 'long' })
+    setLoadingPrepa(date)
     try {
       const res = await fetch('/api/pdf/preparation', {
         method: 'POST',
@@ -133,56 +264,70 @@ function PrepaButtons() {
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `Preparation-${label}-${date.replace(/-/g, '')}.pdf`
+      a.download = `Preparation-${jourLabel}-${date.replace(/-/g, '')}.pdf`
       a.click()
       URL.revokeObjectURL(url)
     } finally {
-      setLoading(null)
+      setLoadingPrepa(null)
     }
   }
 
-  const mardi    = prochainJour(2)
-  const vendredi = prochainJour(5)
-
-  const fmt = (d: string) => new Date(d + 'T12:00:00').toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })
+  const creneaux = [
+    { nom: 'mardi',    num: JOURS_NUM.mardi    },
+    { nom: 'jeudi',    num: JOURS_NUM.jeudi    },
+    { nom: 'vendredi', num: JOURS_NUM.vendredi },
+  ]
 
   return (
-    <div className="bg-green-50 border border-green-200 rounded-xl p-3 space-y-2">
-      <div className="text-xs font-semibold text-green-800">📋 Feuille de préparation</div>
-      <div className="grid grid-cols-2 gap-2">
-        <button
-          onClick={() => generer(mardi)}
-          disabled={loading !== null}
-          className="py-2 rounded-lg bg-green-700 text-white text-xs font-semibold disabled:opacity-50">
-          {loading === 'mardi' ? '…' : `Mardi ${fmt(mardi)}`}
-        </button>
-        <button
-          onClick={() => generer(vendredi)}
-          disabled={loading !== null}
-          className="py-2 rounded-lg bg-green-700 text-white text-xs font-semibold disabled:opacity-50">
-          {loading === 'vendredi' ? '…' : `Vendredi ${fmt(vendredi)}`}
-        </button>
-      </div>
-      <button onClick={() => setOpen(o => !o)} className="text-xs text-green-700 underline">
-        {open ? 'Masquer' : 'Autre date…'}
-      </button>
-      {open && (
-        <div className="flex gap-2 items-center">
-          <input
-            type="date"
-            value={dateChoisie}
-            onChange={e => setDateChoisie(e.target.value)}
-            className="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:border-green-400"
-          />
-          <button
-            onClick={() => { if (dateChoisie) generer(dateChoisie) }}
-            disabled={!dateChoisie || loading !== null}
-            className="py-1.5 px-3 rounded-lg bg-green-700 text-white text-xs font-semibold disabled:opacity-40">
-            {loading ? '…' : 'PDF'}
-          </button>
+    <>
+      <div className="bg-green-50 border border-green-200 rounded-xl p-3 space-y-3">
+        <div className="text-xs font-semibold text-green-800">📋 Feuille de préparation</div>
+        <div className="grid grid-cols-3 gap-2">
+          {creneaux.map(({ nom, num }) => {
+            const date = prochainJour(num)
+            return (
+              <button key={nom}
+                onClick={() => genererPrepa(date)}
+                disabled={loadingPrepa !== null}
+                className="py-2 rounded-lg bg-green-700 text-white text-xs font-semibold disabled:opacity-50 capitalize">
+                {loadingPrepa === date ? '…' : `${nom.charAt(0).toUpperCase() + nom.slice(1)} ${fmtDate(date)}`}
+              </button>
+            )
+          })}
         </div>
+        <button onClick={() => setAutreDate(o => !o)} className="text-xs text-green-700 underline">
+          {autreDate ? 'Masquer' : 'Autre date…'}
+        </button>
+        {autreDate && (
+          <div className="flex gap-2 items-center">
+            <input type="date" value={dateChoisie} onChange={e => setDateChoisie(e.target.value)}
+              className="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:border-green-400" />
+            <button onClick={() => { if (dateChoisie) genererPrepa(dateChoisie) }}
+              disabled={!dateChoisie || loadingPrepa !== null}
+              className="py-1.5 px-3 rounded-lg bg-green-700 text-white text-xs font-semibold disabled:opacity-40">
+              {loadingPrepa ? '…' : 'PDF'}
+            </button>
+          </div>
+        )}
+
+        <div className="border-t border-green-200 pt-2 space-y-1">
+          <div className="text-xs font-semibold text-green-800">📨 Envoyer rappels de commande</div>
+          <div className="grid grid-cols-3 gap-2">
+            {creneaux.map(({ nom }) => (
+              <button key={nom}
+                onClick={() => setRappelJour(nom)}
+                className="py-2 rounded-lg bg-white border border-green-300 text-green-800 text-xs font-semibold capitalize hover:bg-green-100 transition-colors">
+                {nom.charAt(0).toUpperCase() + nom.slice(1)}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {rappelJour && (
+        <RappelsModal jour={rappelJour} onClose={() => setRappelJour(null)} />
       )}
-    </div>
+    </>
   )
 }
 
@@ -585,10 +730,22 @@ function ClientsList({ clients, onRefresh }: { clients: Client[]; onRefresh: () 
         const lien = c.order_token
           ? `${typeof window !== 'undefined' ? window.location.origin : 'https://petites-herbes.vercel.app'}/commander/${c.order_token}`
           : null
+        const joursLiv = c.jours_livraison || []
         return (
           <div key={c.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
             <div onClick={() => setModal(c)} className="p-4 cursor-pointer active:bg-gray-50">
-              <div className="font-semibold text-sm">{c.nom}</div>
+              <div className="flex items-start justify-between gap-2">
+                <div className="font-semibold text-sm">{c.nom}</div>
+                {joursLiv.length > 0 && (
+                  <div className="flex gap-1 flex-wrap justify-end">
+                    {joursLiv.map(j => (
+                      <span key={j} className="text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded-full font-medium capitalize">
+                        {j}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
               <div className="text-xs text-gray-500 mt-0.5 space-y-0.5">
                 {c.ville && <div>{c.code_postal} {c.ville}</div>}
                 {c.email && <div>{c.email}</div>}
@@ -653,6 +810,12 @@ function ClientsList({ clients, onRefresh }: { clients: Client[]; onRefresh: () 
   )
 }
 
+const JOURS_OPTIONS: { val: string; label: string; emoji: string }[] = [
+  { val: 'mardi',    label: 'Mardi',    emoji: '📅' },
+  { val: 'jeudi',    label: 'Jeudi',    emoji: '📅' },
+  { val: 'vendredi', label: 'Vendredi', emoji: '📅' },
+]
+
 function ClientModal({ client, onClose, onSave }: {
   client: Client | null; onClose: () => void; onSave: () => void
 }) {
@@ -667,25 +830,30 @@ function ClientModal({ client, onClose, onSave }: {
     siret:       client?.siret       || '',
     tva_intra:   client?.tva_intra   || '',
   })
+  const [jours, setJours] = useState<string[]>(client?.jours_livraison || [])
   const [saving, setSaving] = useState(false)
+
+  function toggleJour(j: string) {
+    setJours(prev => prev.includes(j) ? prev.filter(x => x !== j) : [...prev, j])
+  }
 
   async function sauvegarder() {
     setSaving(true)
     const data = {
-      nom:         form.nom,
-      adresse:     form.adresse || null,
-      code_postal: form.code_postal || null,
-      ville:       form.ville || null,
-      pays:        form.pays,
-      email:       form.email || null,
-      telephone:   form.telephone || null,
-      siret:       form.siret || null,
-      tva_intra:   form.tva_intra || null,
+      nom:              form.nom,
+      adresse:          form.adresse || null,
+      code_postal:      form.code_postal || null,
+      ville:            form.ville || null,
+      pays:             form.pays,
+      email:            form.email || null,
+      telephone:        form.telephone || null,
+      siret:            form.siret || null,
+      tva_intra:        form.tva_intra || null,
+      jours_livraison:  jours,
     }
     if (client) {
       await supabase.from('clients').update(data).eq('id', client.id)
     } else {
-      // Génère automatiquement le token boutique unique
       const order_token = crypto.randomUUID()
       await supabase.from('clients').insert({ ...data, actif: true, order_token })
     }
@@ -718,6 +886,30 @@ function ClientModal({ client, onClose, onSave }: {
         {f('telephone',   'Telephone',        '06...')}
         {f('siret',       'SIRET (optionnel)', '123 456 789 00012')}
         {f('tva_intra',   'TVA Intra (optionnel)', 'FR 66 452 014 780')}
+
+        {/* Créneaux de livraison */}
+        <div>
+          <label className="text-xs text-gray-500 mb-2 block">Créneau(x) de livraison</label>
+          <div className="grid grid-cols-3 gap-2">
+            {JOURS_OPTIONS.map(({ val, label }) => (
+              <button
+                key={val}
+                type="button"
+                onClick={() => toggleJour(val)}
+                className={`py-2.5 rounded-lg text-sm font-medium border-2 transition-colors
+                  ${jours.includes(val)
+                    ? 'bg-green-700 text-white border-green-700'
+                    : 'bg-white text-gray-600 border-gray-200'}`}>
+                {label}
+              </button>
+            ))}
+          </div>
+          {jours.length === 0 && (
+            <p className="text-xs text-amber-600 mt-1.5">
+              ⚠️ Sans créneau ce client ne recevra pas les rappels automatiques
+            </p>
+          )}
+        </div>
 
         <div className="flex gap-2 pt-2">
           <button onClick={onClose} className="flex-1 py-3 rounded-lg border border-gray-200 text-gray-600 text-sm">
