@@ -129,7 +129,7 @@ export async function POST(req: NextRequest) {
     status: 200,
     headers: {
       'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename="Facture-${numeroFacture}-${clientData.nom.replace(/[^a-z0-9]/gi, '_')}.pdf"`,
+      'Content-Disposition': `attachment; filename="Recap-${mois}-${clientData.nom.replace(/[^a-z0-9]/gi, '_')}.pdf"`,
     },
   })
 }

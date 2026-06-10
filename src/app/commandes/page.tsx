@@ -525,11 +525,14 @@ function ClientsList({ clients, onRefresh }: { clients: Client[]; onRefresh: () 
                     ⚠️ Pas d&apos;email — ajoutez-en un pour pouvoir inviter ce chef
                   </div>
                 )}
-                <button
-                  onClick={() => setFactureModal(c)}
-                  className="w-full flex items-center justify-center gap-2 bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs px-3 py-2.5 rounded-lg font-semibold">
-                  📑 Générer la facture du mois
-                </button>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => setFactureModal(c)}
+                    className="flex items-center justify-center gap-1.5 bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs px-2 py-2.5 rounded-lg font-semibold">
+                    📑 Récap mensuel
+                  </button>
+                  <BLsClientButton client={c} />
+                </div>
               </div>
             )}
           </div>
@@ -591,7 +594,9 @@ function ClientModal({ client, onClose, onSave }: {
     if (client) {
       await supabase.from('clients').update(data).eq('id', client.id)
     } else {
-      await supabase.from('clients').insert({ ...data, actif: true })
+      // Génère automatiquement le token boutique unique
+      const order_token = crypto.randomUUID()
+      await supabase.from('clients').insert({ ...data, actif: true, order_token })
     }
     setSaving(false)
     onSave()
@@ -1061,7 +1066,7 @@ function MessagesTab({ clients }: { clients: Client[] }) {
   )
 }
 
-// ─── Modal génération facture ─────────────────────────────────
+// ─── Récapitulatif mensuel (brouillon pour JLogiciels) ────────
 
 function FactureModal({ client, onClose }: { client: Client; onClose: () => void }) {
   const now = new Date()
@@ -1090,7 +1095,7 @@ function FactureModal({ client, onClose }: { client: Client; onClose: () => void
       const a = document.createElement('a')
       a.href = url
       const nom = client.nom.replace(/[^a-z0-9]/gi, '_')
-      a.download = `Facture-${mois}-${nom}.pdf`
+      a.download = `Recap-${mois}-${nom}.pdf`
       a.click()
       URL.revokeObjectURL(url)
       onClose()
@@ -1100,7 +1105,6 @@ function FactureModal({ client, onClose }: { client: Client; onClose: () => void
     setLoading(false)
   }
 
-  // Générer la liste des 12 derniers mois
   const moisDispos = Array.from({ length: 12 }, (_, i) => {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
     const val = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
@@ -1112,7 +1116,7 @@ function FactureModal({ client, onClose }: { client: Client; onClose: () => void
     <div className="fixed inset-0 bg-black/50 z-50 flex items-end" onClick={onClose}>
       <div className="bg-white w-full max-w-2xl mx-auto rounded-t-2xl p-4 pb-12 space-y-4"
         onClick={e => e.stopPropagation()}>
-        <h2 className="text-lg font-bold">📑 Générer une facture</h2>
+        <h2 className="text-lg font-bold">📑 Récapitulatif mensuel</h2>
         <p className="text-sm text-gray-600">
           Client : <strong>{client.nom}</strong>
         </p>
@@ -1128,8 +1132,8 @@ function FactureModal({ client, onClose }: { client: Client; onClose: () => void
         </div>
 
         <div className="text-xs text-indigo-700 bg-indigo-50 rounded-xl p-3">
-          📋 Tous les BL du mois sélectionné seront regroupés en une seule facture.
-          Le numéro de facture s&apos;incrémente automatiquement.
+          📋 Tous les BL du mois regroupés avec sous-totaux HT/TVA/TTC.
+          À utiliser comme brouillon pour saisir dans JLogiciels.
         </div>
 
         {erreur && (
@@ -1148,10 +1152,53 @@ function FactureModal({ client, onClose }: { client: Client; onClose: () => void
                 <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                 Génération…
               </span>
-            ) : '📥 Télécharger la facture PDF'}
+            ) : '📥 Télécharger le récapitulatif'}
           </button>
         </div>
       </div>
     </div>
+  )
+}
+
+// ─── Bouton "Tous les BLs en PDF" ────────────────────────────
+
+function BLsClientButton({ client }: { client: Client }) {
+  const [loading, setLoading] = useState(false)
+
+  async function telecharger() {
+    setLoading(true)
+    try {
+      const res = await fetch('/api/pdf/bls-client', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ client_id: client.id }),
+      })
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        alert(d.error || 'Aucun BL trouvé pour ce client')
+        setLoading(false)
+        return
+      }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      const nom = client.nom.replace(/[^a-z0-9]/gi, '_')
+      a.download = `BLs-${nom}.pdf`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      alert('Erreur réseau')
+    }
+    setLoading(false)
+  }
+
+  return (
+    <button onClick={telecharger} disabled={loading}
+      className="flex items-center justify-center gap-1.5 bg-green-50 text-green-700 border border-green-200 text-xs px-2 py-2.5 rounded-lg font-semibold disabled:opacity-50">
+      {loading ? (
+        <span className="w-3 h-3 border-2 border-green-600 border-t-transparent rounded-full animate-spin" />
+      ) : '📚 Tous les BLs'}
+    </button>
   )
 }

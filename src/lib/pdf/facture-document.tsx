@@ -122,7 +122,7 @@ export default function FactureDocument({ numero, date, client, groupes, params 
             {params.activite && <Text style={s.companyActiv}>{params.activite}</Text>}
           </View>
           <View style={s.headerRight}>
-            <Text style={s.docLabel}>Facture</Text>
+            <Text style={s.docLabel}>Récapitulatif mensuel</Text>
             <Text style={s.docNumero}>N° {numero}</Text>
             <Text style={s.docDate}>Le : {dateFormatee}</Text>
           </View>
