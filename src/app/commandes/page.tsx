@@ -117,16 +117,21 @@ function fmtDate(d: string) {
 
 function RappelsModal({ jour, onClose }: { jour: string; onClose: () => void }) {
   const [clients, setClients] = useState<{ id: string; nom: string; email: string | null }[]>([])
+  const [produits, setProduits] = useState<{ designation: string; categorie: string; bio: boolean; quantite_dispo: number | null }[]>([])
   const [loadingClients, setLoadingClients] = useState(true)
   const [message, setMessage] = useState('')
   const [envoi, setEnvoi] = useState<'idle' | 'envoi' | 'ok' | 'erreur'>('idle')
-  const [result, setResult] = useState<{ envoyes: number; total: number } | null>(null)
+  const [result, setResult] = useState<{ envoyes: number; total: number; nb_produits?: number } | null>(null)
   const jourLabel = jour.charAt(0).toUpperCase() + jour.slice(1)
 
   useEffect(() => {
     fetch(`/api/rappels?jour=${jour}`)
       .then(r => r.json())
-      .then(d => { setClients(d.clients || []); setLoadingClients(false) })
+      .then(d => {
+        setClients(d.clients || [])
+        setProduits(d.produits || [])
+        setLoadingClients(false)
+      })
   }, [jour])
 
   async function envoyer() {
@@ -169,6 +174,9 @@ function RappelsModal({ jour, onClose }: { jour: string; onClose: () => void }) 
             <div className="font-semibold text-green-800">
               {result.envoyes} rappel{result.envoyes > 1 ? 's' : ''} envoyé{result.envoyes > 1 ? 's' : ''} sur {result.total}
             </div>
+            {result.nb_produits != null && (
+              <div className="text-sm text-green-700">avec {result.nb_produits} produit{result.nb_produits > 1 ? 's' : ''} disponible{result.nb_produits > 1 ? 's' : ''} en aperçu</div>
+            )}
             <button onClick={onClose} className="text-sm text-green-700 underline mt-2">Fermer</button>
           </div>
         ) : (
@@ -205,19 +213,40 @@ function RappelsModal({ jour, onClose }: { jour: string; onClose: () => void }) 
                   )}
                 </div>
 
+                {/* Produits disponibles inclus dans l'email */}
+                <div>
+                  <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">
+                    Produits inclus dans l&apos;email ({produits.length})
+                  </div>
+                  {produits.length === 0 ? (
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-2.5 text-xs text-amber-700">
+                      ⚠️ Aucun produit disponible — marquez des produits comme disponibles dans le catalogue.
+                    </div>
+                  ) : (
+                    <div className="bg-green-50 border border-green-100 rounded-lg p-2.5 flex flex-wrap gap-1.5">
+                      {produits.map((p, i) => (
+                        <span key={i} className="text-xs bg-white border border-green-200 text-green-800 px-2 py-0.5 rounded-full font-medium">
+                          {p.designation}{p.bio ? ' 🌿' : ''}
+                          {p.quantite_dispo != null && p.quantite_dispo <= 3 ? ' ⚡' : ''}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
                 <div>
                   <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide block mb-1.5">
-                    Message personnalisé (optionnel)
+                    Message du moment (optionnel)
                   </label>
                   <textarea
                     value={message}
                     onChange={e => setMessage(e.target.value)}
-                    placeholder={`ex: Cette semaine nous avons de beaux pois gourmands et cresson ! La livraison ${jourLabel} prochain arrive bien. 🌿`}
+                    placeholder={`ex: Cette semaine : de beaux pois gourmands et du cresson tout frais ! Livraison ${jourLabel} comme prévu. 🌿`}
                     rows={3}
                     className="w-full border border-gray-200 rounded-lg p-2.5 text-sm resize-none focus:outline-none focus:border-green-400"
                   />
                   <p className="text-xs text-gray-400 mt-1">
-                    Ce message apparaît en haut de l&apos;email, avant le bouton de commande.
+                    Affiché en haut de l&apos;email, avant la liste des produits.
                   </p>
                 </div>
 
