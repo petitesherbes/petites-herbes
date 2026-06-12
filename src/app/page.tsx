@@ -30,6 +30,8 @@ export default function AccueilPage() {
   const [mouvements, setMouvements]       = useState<StockMouvement[]>([])
   const [nbClients, setNbClients]         = useState(0)
   const [tachesAujourdHui, setTachesAujourdHui] = useState<{id:string;titre:string;priorite:string;completions:{date_completion:string}[]}[]>([])
+  const [blsSemaine, setBlsSemaine]       = useState<{client:{nom:string}|null;created_at:string;montant:number}[]>([])
+  const [statOuverte, setStatOuverte]     = useState<'ca'|'commandes'|'dispos'|'alertes'|null>(null)
 
   useEffect(() => { charger() }, [])
 
@@ -92,13 +94,20 @@ export default function AccueilPage() {
 
     const { data: blSemaine } = await supabase
       .from('bons_livraison')
-      .select('bl_lignes(quantite, prix_ht, tva_pct)')
+      .select('created_at, client:clients(nom), bl_lignes(quantite, prix_ht, tva_pct)')
       .gte('created_at', debutSemaine)
+      .order('created_at', { ascending: false })
     if (blSemaine) {
-      const total = (blSemaine as unknown as Array<{ bl_lignes: Array<{ quantite: number; prix_ht: number; tva_pct: number }> }>)
-        .flatMap(bl => bl.bl_lignes || [])
+      type BLRaw = { created_at: string; client: {nom:string}|null; bl_lignes: {quantite:number;prix_ht:number;tva_pct:number}[] }
+      const raw = blSemaine as unknown as BLRaw[]
+      const total = raw.flatMap(bl => bl.bl_lignes || [])
         .reduce((s, l) => s + l.quantite * l.prix_ht * (1 + l.tva_pct / 100), 0)
       if (total > 0) setCaSemaine(total)
+      setBlsSemaine(raw.map(bl => ({
+        client: bl.client,
+        created_at: bl.created_at,
+        montant: (bl.bl_lignes || []).reduce((s, l) => s + l.quantite * l.prix_ht * (1 + l.tva_pct / 100), 0),
+      })))
     }
     setLoading(false)
   }
@@ -255,35 +264,169 @@ export default function AccueilPage() {
         </div>
       )}
 
-      {/* ── Stats flottantes ── */}
+      {/* ── Stats flottantes (cliquables) ── */}
       <div className="px-4 mt-4">
         <div className="grid grid-cols-2 gap-3">
           <StatCard
-            icon="💶"
-            label="CA semaine"
+            icon="💶" label="CA semaine"
             value={caSemaine != null ? `${caSemaine.toFixed(0)} €` : '—'}
-            accent="green"
+            accent="green" onClick={() => setStatOuverte('ca')}
           />
           <StatCard
-            icon="🔔"
-            label="Nouvelles cmds"
+            icon="🔔" label="Nouvelles cmds"
             value={nouvellesCmds.length > 0 ? String(nouvellesCmds.length) : '—'}
             accent={nouvellesCmds.length > 0 ? 'indigo' : 'gray'}
+            onClick={() => setStatOuverte('commandes')}
           />
           <StatCard
-            icon="✅"
-            label="Dispos récoltés"
+            icon="✅" label="Dispos récoltés"
             value={disponible.length + urgent.length > 0 ? `${disponible.length + urgent.length}` : '—'}
-            accent="green"
+            accent="green" onClick={() => setStatOuverte('dispos')}
           />
           <StatCard
-            icon="⚠️"
-            label="Alertes stock"
+            icon="⚠️" label="Alertes stock"
             value={nbAlertes > 0 ? String(nbAlertes) : 'OK'}
             accent={grainesUrgentes.length > 0 ? 'red' : nbAlertes > 0 ? 'orange' : 'green'}
+            onClick={() => setStatOuverte('alertes')}
           />
         </div>
       </div>
+
+      {/* ── Drawer détail stats ── */}
+      {statOuverte && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end" onClick={() => setStatOuverte(null)}>
+          <div className="bg-white w-full max-w-2xl mx-auto rounded-t-2xl max-h-[80vh] overflow-y-auto"
+            onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <h2 className="font-bold text-gray-800 text-base">
+                {statOuverte === 'ca'        && '💶 CA de la semaine'}
+                {statOuverte === 'commandes' && '🔔 Nouvelles commandes'}
+                {statOuverte === 'dispos'    && '✅ Produits disponibles'}
+                {statOuverte === 'alertes'   && '⚠️ Alertes stock graines'}
+              </h2>
+              <button onClick={() => setStatOuverte(null)} className="text-gray-400 text-2xl leading-none">×</button>
+            </div>
+
+            {/* CA semaine */}
+            {statOuverte === 'ca' && (
+              <div className="divide-y divide-gray-100">
+                {blsSemaine.length === 0 && (
+                  <div className="px-5 py-8 text-center text-gray-400 text-sm">Aucun BL cette semaine</div>
+                )}
+                {blsSemaine.map((bl, i) => (
+                  <div key={i} className="px-5 py-3.5 flex items-center justify-between">
+                    <div>
+                      <div className="font-semibold text-sm text-gray-800">{bl.client?.nom || 'Client inconnu'}</div>
+                      <div className="text-xs text-gray-400 mt-0.5">
+                        {format(parseISO(bl.created_at), "EEE d MMM 'à' HH:mm", { locale: fr })}
+                      </div>
+                    </div>
+                    <span className="font-bold text-green-700">{bl.montant.toFixed(2)} €</span>
+                  </div>
+                ))}
+                {blsSemaine.length > 0 && (
+                  <div className="px-5 py-3.5 flex items-center justify-between bg-green-50">
+                    <span className="font-bold text-green-800">Total semaine</span>
+                    <span className="font-bold text-green-800 text-lg">{caSemaine?.toFixed(2)} €</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Nouvelles commandes */}
+            {statOuverte === 'commandes' && (
+              <div className="divide-y divide-gray-100">
+                {nouvellesCmds.length === 0 && (
+                  <div className="px-5 py-8 text-center text-gray-400 text-sm">Aucune commande récente</div>
+                )}
+                {nouvellesCmds.map(bl => {
+                  const total = ((bl as unknown as {bl_lignes:{quantite:number;prix_ht:number;tva_pct:number}[]}).bl_lignes || [])
+                    .reduce((s, l) => s + l.quantite * l.prix_ht * (1 + l.tva_pct / 100), 0)
+                  return (
+                    <Link key={bl.id} href="/commandes" onClick={() => setStatOuverte(null)}
+                      className="px-5 py-3.5 flex items-center justify-between">
+                      <div>
+                        <div className="font-semibold text-sm text-gray-800">
+                          {(bl.client as unknown as {nom:string})?.nom || 'Client'}
+                        </div>
+                        <div className="text-xs text-gray-400 mt-0.5">
+                          {format(parseISO(bl.created_at), "EEE d MMM 'à' HH:mm", { locale: fr })}
+                        </div>
+                      </div>
+                      <span className="font-bold text-indigo-700">{total.toFixed(2)} €</span>
+                    </Link>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* Dispos */}
+            {statOuverte === 'dispos' && (
+              <div className="divide-y divide-gray-100">
+                {urgent.length === 0 && disponible.length === 0 && (
+                  <div className="px-5 py-8 text-center text-gray-400 text-sm">Rien à récolter pour l&apos;instant</div>
+                )}
+                {[...urgent, ...disponible].map(l => {
+                  const joursRest = l.date_peremption ? differenceInDays(parseISO(l.date_peremption), aujourd) : null
+                  const ico = l.format === 'TAPIS' ? '🟩' : l.format === 'TERREAU' ? '🟫' : '🟧'
+                  return (
+                    <div key={l.id} className="px-5 py-3.5 flex items-center justify-between">
+                      <div>
+                        <div className="font-semibold text-sm text-gray-800">{ico} {l.espece?.nom}</div>
+                        <div className="text-xs text-gray-400 mt-0.5">
+                          ×{l.quantite} · exp. {l.date_peremption ? format(parseISO(l.date_peremption), 'd MMM', { locale: fr }) : '—'}
+                        </div>
+                      </div>
+                      {joursRest !== null && (
+                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${joursRest <= 2 ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+                          {joursRest === 0 ? 'Auj.' : `${joursRest}j`}
+                        </span>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* Alertes stock */}
+            {statOuverte === 'alertes' && (
+              <div className="divide-y divide-gray-100">
+                {grainesUrgentes.length > 0 && (
+                  <div className="px-5 py-2 bg-red-50 text-xs font-bold text-red-600 uppercase tracking-wider">
+                    🔴 Stock critique
+                  </div>
+                )}
+                {grainesUrgentes.map(e => (
+                  <div key={e.id} className="px-5 py-3.5 flex items-center justify-between">
+                    <span className="font-semibold text-sm text-gray-800">{e.nom}</span>
+                    <span className="text-xs font-bold text-red-700 bg-red-100 px-2 py-0.5 rounded-full">
+                      {e.stock_actuel_g >= 1000 ? `${(e.stock_actuel_g/1000).toFixed(1)} kg` : `${e.stock_actuel_g} g`}
+                    </span>
+                  </div>
+                ))}
+                {grainesSurveiller.length > 0 && (
+                  <div className="px-5 py-2 bg-amber-50 text-xs font-bold text-amber-600 uppercase tracking-wider">
+                    🟧 À commander bientôt
+                  </div>
+                )}
+                {grainesSurveiller.map(e => (
+                  <div key={e.id} className="px-5 py-3.5 flex items-center justify-between">
+                    <span className="font-semibold text-sm text-gray-800">{e.nom}</span>
+                    <span className="text-xs text-amber-700">
+                      {e.stock_actuel_g >= 1000 ? `${(e.stock_actuel_g/1000).toFixed(1)} kg` : `${e.stock_actuel_g} g`}
+                    </span>
+                  </div>
+                ))}
+                {nbAlertes === 0 && (
+                  <div className="px-5 py-8 text-center text-gray-400 text-sm">Stocks OK ✅</div>
+                )}
+              </div>
+            )}
+
+            <div className="h-8" />
+          </div>
+        </div>
+      )}
 
       {/* ── Raccourcis ── */}
       <div className="px-4 mt-5">
@@ -462,9 +605,10 @@ export default function AccueilPage() {
 
 // ─── Composants ───────────────────────────────────────────────
 
-function StatCard({ icon, label, value, accent }: {
+function StatCard({ icon, label, value, accent, onClick }: {
   icon: string; label: string; value: string
   accent: 'green' | 'indigo' | 'red' | 'orange' | 'gray'
+  onClick?: () => void
 }) {
   const colors = {
     green:  { bg: 'bg-green-50',  border: 'border-green-200', val: 'text-green-800',  label: 'text-green-600' },
@@ -475,12 +619,14 @@ function StatCard({ icon, label, value, accent }: {
   }[accent]
 
   return (
-    <div className={`${colors.bg} border ${colors.border} rounded-2xl px-4 py-3 bg-white shadow-sm`}>
+    <button onClick={onClick}
+      className={`${colors.bg} border ${colors.border} rounded-2xl px-4 py-3 bg-white shadow-sm text-left w-full active:scale-95 transition-transform`}>
       <div className={`text-xs font-medium ${colors.label} flex items-center gap-1.5`}>
         <span>{icon}</span>{label}
+        {onClick && <span className="ml-auto text-[10px] opacity-40">détail →</span>}
       </div>
       <div className={`text-xl font-bold ${colors.val} mt-1`}>{value}</div>
-    </div>
+    </button>
   )
 }
 

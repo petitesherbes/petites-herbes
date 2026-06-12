@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic'
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { format, parseISO, isToday, isTomorrow, addDays } from 'date-fns'
+import { format, parseISO, isToday, isTomorrow } from 'date-fns'
 import { fr } from 'date-fns/locale'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -20,8 +20,10 @@ type EntreeCahier = {
   id: string; zone_id: string | null; date_operation: string
   type_operation: string; espece_id: string | null; quantite: number | null
   unite: string | null; notes: string | null; auteur: string | null
+  produit_traitement_id: string | null
   zone?: { nom: string } | null
   espece?: { nom: string } | null
+  produit?: { nom: string } | null
 }
 type Tache = {
   id: string; titre: string; description: string | null; type: string
@@ -34,44 +36,55 @@ type Perte = {
   quantite: number; unite: string; raison: string; notes: string | null
   espece?: { nom: string } | null
 }
-type Espece = { id: string; nom: string }
+type Espece          = { id: string; nom: string }
+type EspeceSerre     = { id: string; nom: string; categorie: string }
+type ProduitTraitement = { id: string; nom: string; type: string }
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
-const TYPES_OP = [
+const TYPES_OP_CHAMP = [
   { val: 'semis',       label: 'Semer',      icon: '🌱', color: 'bg-green-100 border-green-400 text-green-800' },
   { val: 'recolte',     label: 'Récolter',   icon: '✂️',  color: 'bg-emerald-100 border-emerald-400 text-emerald-800' },
   { val: 'arrosage',    label: 'Arroser',    icon: '💧', color: 'bg-blue-100 border-blue-400 text-blue-800' },
   { val: 'traitement',  label: 'Traitement', icon: '🌿', color: 'bg-amber-100 border-amber-400 text-amber-800' },
   { val: 'observation', label: 'Observer',   icon: '👁', color: 'bg-purple-100 border-purple-400 text-purple-800' },
   { val: 'taille',      label: 'Tailler',    icon: '✂️',  color: 'bg-orange-100 border-orange-400 text-orange-800' },
-  { val: 'autre',       label: 'Autre',      icon: '📝', color: 'bg-gray-100 border-gray-400 text-gray-700' },
+  { val: 'autre',       label: 'Autre',      icon: '📝', color: 'bg-gray-100 border-gray-300 text-gray-700' },
 ]
+
+const TYPES_OP_SERRE = [
+  { val: 'semis',       label: 'Semer',       icon: '🌱', color: 'bg-green-100 border-green-400 text-green-800' },
+  { val: 'repiquage',   label: 'Repiquer',    icon: '🪴', color: 'bg-lime-100 border-lime-400 text-lime-800' },
+  { val: 'arrosage',    label: 'Arroser',     icon: '💧', color: 'bg-blue-100 border-blue-400 text-blue-800' },
+  { val: 'traitement',  label: 'Traitement',  icon: '🌿', color: 'bg-amber-100 border-amber-400 text-amber-800' },
+  { val: 'recolte',     label: 'Sortir plants',icon: '📦', color: 'bg-emerald-100 border-emerald-400 text-emerald-800' },
+  { val: 'observation', label: 'Observer',    icon: '👁', color: 'bg-purple-100 border-purple-400 text-purple-800' },
+  { val: 'autre',       label: 'Autre',       icon: '📝', color: 'bg-gray-100 border-gray-300 text-gray-700' },
+]
+
+const TYPES_PRODUIT = ['purin','engrais','fongicide','insecticide','autre']
+const CATS_SERRE    = ['plante','aromatique','legume','fleur','autre']
 
 const RAISONS_PERTE = [
   { val: 'germination_ratee', label: 'Germination ratée',  icon: '🫘' },
   { val: 'pourriture',        label: 'Pourriture',         icon: '🍂' },
   { val: 'surproduction',     label: 'Surproduction',      icon: '📦' },
   { val: 'invendu',           label: 'Invendu',            icon: '🏷️' },
-  { val: 'meteo',             label: 'Météo (gel, vent…)', icon: '⛈️' },
-  { val: 'autre',             label: 'Autre raison',       icon: '❓' },
+  { val: 'meteo',             label: 'Météo',              icon: '⛈️' },
+  { val: 'autre',             label: 'Autre',              icon: '❓' },
 ]
 
-const UNITES = ['barquettes', 'kg', 'plateaux', 'L', 'pièces']
 const JOURS_FR = ['dimanche','lundi','mardi','mercredi','jeudi','vendredi','samedi']
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function tacheEstAujourdHui(t: Tache): boolean {
   const today = new Date()
-  if (t.type === 'ponctuelle') {
-    return t.date_echeance === format(today, 'yyyy-MM-dd')
-  }
+  if (t.type === 'ponctuelle') return t.date_echeance === format(today, 'yyyy-MM-dd')
   if (!t.frequence) return false
   const freq = t.frequence.toLowerCase()
   if (freq === 'quotidien') return true
-  const jourFr = JOURS_FR[today.getDay()]
-  return freq.split(',').map(s => s.trim()).includes(jourFr)
+  return freq.split(',').map(s => s.trim()).includes(JOURS_FR[today.getDay()])
 }
 
 function tacheEstCompleteeAujourdHui(t: Tache): boolean {
@@ -112,48 +125,176 @@ function Stepper({ value, onChange, step = 1, min = 0 }: {
   )
 }
 
+// ─── ListeAvecAjout ───────────────────────────────────────────────────────────
+// Sélecteur avec recherche + bouton "Ajouter" pour sauvegarder de nouveaux items
+
+function ListeAvecAjout<T extends { id: string; nom: string }>({ items, valeur, onChange, placeholder, onAjouter, grouper }: {
+  items: T[]
+  valeur: string
+  onChange: (id: string) => void
+  placeholder?: string
+  onAjouter: (nom: string, extra?: string) => Promise<void>
+  grouper?: (item: T) => string
+}) {
+  const [recherche, setRecherche] = useState('')
+  const [ajout, setAjout]         = useState(false)
+  const [nouveauNom, setNouveauNom] = useState('')
+  const [nouvelleCategorie, setNouvelleCategorie] = useState('')
+  const [saving, setSaving]       = useState(false)
+
+  const filtrés = items.filter(i => i.nom.toLowerCase().includes(recherche.toLowerCase()))
+
+  // Grouper par catégorie si besoin
+  const groupes: Record<string, T[]> = {}
+  if (grouper) {
+    for (const item of filtrés) {
+      const g = grouper(item)
+      if (!groupes[g]) groupes[g] = []
+      groupes[g].push(item)
+    }
+  }
+
+  async function sauvegarder() {
+    if (!nouveauNom.trim()) return
+    setSaving(true)
+    await onAjouter(nouveauNom.trim(), nouvelleCategorie || undefined)
+    setSaving(false)
+    setAjout(false); setNouveauNom(''); setNouvelleCategorie('')
+  }
+
+  return (
+    <div className="space-y-2">
+      <input value={recherche} onChange={e => setRecherche(e.target.value)}
+        placeholder={placeholder || 'Rechercher…'}
+        className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-green-400"
+      />
+
+      <div className="max-h-52 overflow-y-auto space-y-1">
+        {/* Sans sélection */}
+        <button onClick={() => onChange('')}
+          className={`w-full text-left px-3 py-2 rounded-lg text-sm border transition-colors
+            ${valeur === '' ? 'bg-gray-200 border-gray-300 font-semibold' : 'bg-gray-50 border-gray-100 text-gray-500'}`}>
+          Aucun
+        </button>
+
+        {grouper && Object.keys(groupes).length > 0
+          ? Object.entries(groupes).map(([groupe, groupItems]) => (
+              <div key={groupe}>
+                <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider px-2 pt-1.5 pb-0.5 capitalize">{groupe}</div>
+                {groupItems.map(i => (
+                  <button key={i.id} onClick={() => onChange(i.id)}
+                    className={`w-full text-left px-3 py-2.5 rounded-lg text-sm border transition-colors font-medium
+                      ${valeur === i.id ? 'bg-green-700 text-white border-green-700' : 'bg-white border-gray-100 text-gray-700 active:bg-green-50'}`}>
+                    {i.nom}
+                  </button>
+                ))}
+              </div>
+            ))
+          : filtrés.map(i => (
+              <button key={i.id} onClick={() => onChange(i.id)}
+                className={`w-full text-left px-3 py-2.5 rounded-lg text-sm border transition-colors font-medium
+                  ${valeur === i.id ? 'bg-green-700 text-white border-green-700' : 'bg-white border-gray-100 text-gray-700 active:bg-green-50'}`}>
+                {i.nom}
+              </button>
+            ))
+        }
+
+        {filtrés.length === 0 && !ajout && (
+          <div className="text-center text-xs text-gray-400 py-3">Aucun résultat</div>
+        )}
+      </div>
+
+      {/* Ajout inline */}
+      {ajout ? (
+        <div className="bg-green-50 border border-green-200 rounded-xl p-3 space-y-2">
+          <input value={nouveauNom} onChange={e => setNouveauNom(e.target.value)}
+            placeholder="Nom…"
+            className="w-full border border-green-300 rounded-lg px-3 py-2 text-sm focus:outline-none"
+          />
+          {nouvelleCategorie !== undefined && (
+            <input value={nouvelleCategorie} onChange={e => setNouvelleCategorie(e.target.value)}
+              placeholder="Catégorie (ex: aromatique, engrais…)"
+              className="w-full border border-green-300 rounded-lg px-3 py-2 text-sm focus:outline-none"
+            />
+          )}
+          <div className="flex gap-2">
+            <button onClick={sauvegarder} disabled={saving || !nouveauNom.trim()}
+              className="flex-1 bg-green-700 text-white py-2 rounded-lg text-sm font-bold active:scale-95 disabled:opacity-50">
+              {saving ? '…' : '✓ Sauvegarder'}
+            </button>
+            <button onClick={() => { setAjout(false); setNouveauNom('') }}
+              className="px-3 py-2 text-gray-500 text-sm">Annuler</button>
+          </div>
+        </div>
+      ) : (
+        <button onClick={() => setAjout(true)}
+          className="w-full text-center text-sm text-green-700 font-semibold py-2 border border-dashed border-green-300 rounded-xl active:bg-green-50">
+          + Ajouter à cette liste
+        </button>
+      )}
+    </div>
+  )
+}
+
 // ─── Page principale ───────────────────────────────────────────────────────────
 
-type Tab = 'zones' | 'cahier' | 'agenda' | 'pertes'
+type Tab = 'cahier' | 'agenda' | 'zones' | 'pertes'
 
 export default function TerrainPage() {
-  const [onglet, setOnglet] = useState<Tab>('cahier')
-  const [zones, setZones]     = useState<Zone[]>([])
-  const [planches, setPlanches] = useState<Planche[]>([])
-  const [entrees, setEntrees]   = useState<EntreeCahier[]>([])
-  const [taches, setTaches]     = useState<Tache[]>([])
-  const [pertes, setPertes]     = useState<Perte[]>([])
-  const [especes, setEspeces]   = useState<Espece[]>([])
+  const [onglet, setOnglet]           = useState<Tab>('cahier')
+  const [zones, setZones]             = useState<Zone[]>([])
+  const [planches, setPlanches]       = useState<Planche[]>([])
+  const [entrees, setEntrees]         = useState<EntreeCahier[]>([])
+  const [taches, setTaches]           = useState<Tache[]>([])
+  const [pertes, setPertes]           = useState<Perte[]>([])
+  const [especes, setEspeces]         = useState<Espece[]>([])
+  const [especesSerre, setEspecesSerre]   = useState<EspeceSerre[]>([])
+  const [produits, setProduits]       = useState<ProduitTraitement[]>([])
 
   useEffect(() => { charger() }, [])
 
   async function charger() {
     const [
-      { data: z }, { data: pl }, { data: ent }, { data: ta }, { data: pe }, { data: esp }
+      { data: z }, { data: pl }, { data: ent }, { data: ta }, { data: pe },
+      { data: esp }, { data: esSerre }, { data: prod }
     ] = await Promise.all([
       supabase.from('zones').select('*').eq('actif', true).order('ordre'),
       supabase.from('zone_planches').select('*').order('ordre'),
       supabase.from('cahier_culture')
-        .select('*, zone:zones(nom), espece:especes(nom)')
+        .select('*, zone:zones(nom), espece:especes(nom), produit:produits_traitement(nom)')
         .order('date_operation', { ascending: false })
         .order('created_at', { ascending: false })
         .limit(50),
       supabase.from('taches')
         .select('*, completions:taches_completions(date_completion)')
-        .eq('actif', true)
-        .order('priorite', { ascending: false }),
+        .eq('actif', true).order('priorite', { ascending: false }),
       supabase.from('pertes')
         .select('*, espece:especes(nom)')
-        .order('date_perte', { ascending: false })
-        .limit(30),
+        .order('date_perte', { ascending: false }).limit(30),
       supabase.from('especes').select('id, nom').eq('actif', true).order('nom'),
+      supabase.from('especes_serre').select('*').eq('actif', true).order('categorie,nom'),
+      supabase.from('produits_traitement').select('*').eq('actif', true).order('type,nom'),
     ])
-    if (z)   setZones(z)
-    if (pl)  setPlanches(pl)
-    if (ent) setEntrees(ent as unknown as EntreeCahier[])
-    if (ta)  setTaches(ta as unknown as Tache[])
-    if (pe)  setPertes(pe as unknown as Perte[])
-    if (esp) setEspeces(esp)
+    if (z)       setZones(z)
+    if (pl)      setPlanches(pl)
+    if (ent)     setEntrees(ent as unknown as EntreeCahier[])
+    if (ta)      setTaches(ta as unknown as Tache[])
+    if (pe)      setPertes(pe as unknown as Perte[])
+    if (esp)     setEspeces(esp)
+    if (esSerre) setEspecesSerre(esSerre)
+    if (prod)    setProduits(prod)
+  }
+
+  async function ajouterEspeceSerre(nom: string, categorie?: string) {
+    await supabase.from('especes_serre').insert({ nom, categorie: categorie || 'plante' })
+    const { data } = await supabase.from('especes_serre').select('*').eq('actif', true).order('categorie,nom')
+    if (data) setEspecesSerre(data)
+  }
+
+  async function ajouterProduit(nom: string, type?: string) {
+    await supabase.from('produits_traitement').insert({ nom, type: type || 'autre' })
+    const { data } = await supabase.from('produits_traitement').select('*').eq('actif', true).order('type,nom')
+    if (data) setProduits(data)
   }
 
   const tabs: { id: Tab; icon: string; label: string }[] = [
@@ -165,40 +306,35 @@ export default function TerrainPage() {
 
   return (
     <div className="pb-24">
-      {/* Header */}
       <div className="bg-green-900 px-5 pt-6 pb-4">
         <div className="text-green-400 text-xs font-semibold uppercase tracking-widest">Terrain & Culture</div>
         <h1 className="text-white text-2xl font-bold mt-1">🌿 Suivi du terrain</h1>
-        <p className="text-green-300 text-sm mt-0.5">
-          {format(new Date(), "EEEE d MMMM yyyy", { locale: fr })}
-        </p>
+        <p className="text-green-300 text-sm mt-0.5">{format(new Date(), "EEEE d MMMM yyyy", { locale: fr })}</p>
       </div>
 
-      {/* Tabs */}
       <div className="flex border-b border-gray-200 bg-white sticky top-0 z-10">
         {tabs.map(t => (
           <button key={t.id} onClick={() => setOnglet(t.id)}
             className={`flex-1 py-3 flex flex-col items-center gap-0.5 text-xs font-semibold transition-colors
               ${onglet === t.id ? 'text-green-800 border-b-2 border-green-700' : 'text-gray-400'}`}>
-            <span className="text-lg leading-none">{t.icon}</span>
-            {t.label}
+            <span className="text-lg leading-none">{t.icon}</span>{t.label}
           </button>
         ))}
       </div>
 
       <div className="px-4 pt-4">
         {onglet === 'cahier' && (
-          <CahierTab zones={zones} especes={especes} entrees={entrees} onSaved={charger} />
+          <CahierTab
+            zones={zones} especes={especes} especesSerre={especesSerre}
+            produits={produits} entrees={entrees}
+            onSaved={charger}
+            onAjouterEspece={ajouterEspeceSerre}
+            onAjouterProduit={ajouterProduit}
+          />
         )}
-        {onglet === 'agenda' && (
-          <AgendaTab taches={taches} zones={zones} onSaved={charger} />
-        )}
-        {onglet === 'zones' && (
-          <ZonesTab zones={zones} planches={planches} onSaved={charger} />
-        )}
-        {onglet === 'pertes' && (
-          <PertesTab pertes={pertes} especes={especes} onSaved={charger} />
-        )}
+        {onglet === 'agenda' && <AgendaTab taches={taches} zones={zones} onSaved={charger} />}
+        {onglet === 'zones'  && <ZonesTab zones={zones} planches={planches} onSaved={charger} />}
+        {onglet === 'pertes' && <PertesTab pertes={pertes} especes={especes} onSaved={charger} />}
       </div>
     </div>
   )
@@ -206,64 +342,83 @@ export default function TerrainPage() {
 
 // ─── Tab : Cahier de culture ───────────────────────────────────────────────────
 
-function CahierTab({ zones, especes, entrees, onSaved }: {
-  zones: Zone[]; especes: Espece[]; entrees: EntreeCahier[]; onSaved: () => void
+function CahierTab({ zones, especes, especesSerre, produits, entrees, onSaved, onAjouterEspece, onAjouterProduit }: {
+  zones: Zone[]; especes: Espece[]; especesSerre: EspeceSerre[]
+  produits: ProduitTraitement[]; entrees: EntreeCahier[]
+  onSaved: () => void
+  onAjouterEspece: (nom: string, cat?: string) => Promise<void>
+  onAjouterProduit: (nom: string, type?: string) => Promise<void>
 }) {
-  const [etape, setEtape] = useState<1 | 2 | 3 | 4>(1)
-  const [zoneId, setZoneId]         = useState<string>('')
-  const [typeOp, setTypeOp]         = useState<string>('')
-  const [especeId, setEspeceId]     = useState<string>('')
-  const [quantite, setQuantite]     = useState(1)
-  const [unite, setUnite]           = useState('barquettes')
-  const [notes, setNotes]           = useState('')
-  const [auteur, setAuteur]         = useState('Moi')
-  const [saving, setSaving]         = useState(false)
-  const [recherche, setRecherche]   = useState('')
+  const [etape, setEtape]       = useState<1 | 2 | 3 | 4>(1)
+  const [zoneId, setZoneId]     = useState('')
+  const [typeOp, setTypeOp]     = useState('')
+  const [especeId, setEspeceId] = useState('')
+  const [produitId, setProduitId] = useState('')
+  const [quantite, setQuantite] = useState(1)
+  const [unite, setUnite]       = useState('barquettes')
+  const [notes, setNotes]       = useState('')
+  const [auteur, setAuteur]     = useState('Moi')
+  const [saving, setSaving]     = useState(false)
 
   useEffect(() => {
     const saved = typeof window !== 'undefined' ? localStorage.getItem('terrain_auteur') : null
     if (saved) setAuteur(saved)
   }, [])
 
-  const avecQuantite = ['semis', 'recolte', 'traitement'].includes(typeOp)
-  const avecEspece   = ['semis', 'recolte'].includes(typeOp)
-  const especesFiltrees = especes.filter(e =>
-    e.nom.toLowerCase().includes(recherche.toLowerCase())
-  )
+  const zoneSelectionnee = zones.find(z => z.id === zoneId)
+  const estSerre         = zoneSelectionnee?.type === 'serre'
+  const estTraitement    = typeOp === 'traitement'
+  const avecEspece       = ['semis', 'recolte', 'repiquage'].includes(typeOp) && !estTraitement
+  const avecQuantite     = ['semis', 'recolte', 'traitement', 'repiquage'].includes(typeOp)
+
+  const typesOp    = estSerre ? TYPES_OP_SERRE : TYPES_OP_CHAMP
+  const unitesDisp = estSerre
+    ? ['plants', 'bottes', 'godets', 'pièces']
+    : estTraitement
+      ? ['L', 'mL', 'kg', 'g', 'doses']
+      : ['barquettes', 'kg', 'plateaux', 'L', 'pièces']
+
+  // Réinitialiser l'unité quand le contexte change
+  useEffect(() => {
+    if (estSerre) setUnite('plants')
+    else if (estTraitement) setUnite('L')
+    else setUnite('barquettes')
+  }, [estSerre, estTraitement])
 
   function reset() {
     setEtape(1); setZoneId(''); setTypeOp(''); setEspeceId('')
-    setQuantite(1); setUnite('barquettes'); setNotes(''); setRecherche('')
+    setProduitId(''); setQuantite(1); setNotes('')
   }
 
   async function sauvegarder() {
     setSaving(true)
     await supabase.from('cahier_culture').insert({
-      zone_id:        zoneId || null,
-      type_operation: typeOp,
-      espece_id:      especeId || null,
-      quantite:       avecQuantite ? quantite : null,
-      unite:          avecQuantite ? unite : null,
-      notes:          notes || null,
+      zone_id:               zoneId || null,
+      type_operation:        typeOp,
+      espece_id:             avecEspece && especeId ? especeId : null,
+      produit_traitement_id: estTraitement && produitId ? produitId : null,
+      quantite:              avecQuantite ? quantite : null,
+      unite:                 avecQuantite ? unite : null,
+      notes:                 notes || null,
       auteur,
     })
     localStorage.setItem('terrain_auteur', auteur)
-    setSaving(false)
-    reset()
-    onSaved()
+    setSaving(false); reset(); onSaved()
   }
 
-  const typeInfo = TYPES_OP.find(t => t.val === typeOp)
-  const zoneInfo = zones.find(z => z.id === zoneId)
+  const typeInfo = typesOp.find(t => t.val === typeOp)
+  const zoneInfo = zoneSelectionnee
+
+  // Produire une description lisible du produit de traitement sélectionné
+  const produitSelectionne = produits.find(p => p.id === produitId)
 
   return (
     <div className="space-y-4">
-      {/* Formulaire rapide */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         <div className="px-4 py-3 bg-green-700 text-white font-bold text-sm flex items-center justify-between">
-          <span>📖 Nouvelle entrée</span>
+          <span>{estSerre ? '🪴 Saisie Serre' : '📖 Saisie terrain'}</span>
           {etape > 1 && (
-            <button onClick={reset} className="text-green-200 text-xs font-normal underline">
+            <button onClick={reset} className="text-green-200 text-xs underline font-normal">
               Recommencer
             </button>
           )}
@@ -272,15 +427,21 @@ function CahierTab({ zones, especes, entrees, onSaved }: {
         <div className="p-4 space-y-4">
           {/* Fil d'Ariane */}
           {etape > 1 && (
-            <div className="flex flex-wrap gap-2 text-xs">
+            <div className="flex flex-wrap gap-1.5 text-xs">
               {zoneInfo && (
-                <span className="bg-green-100 text-green-800 px-2 py-1 rounded-full font-semibold">
+                <span className={`px-2 py-1 rounded-full font-semibold ${estSerre ? 'bg-amber-100 text-amber-800' : 'bg-green-100 text-green-800'}`}>
                   📍 {zoneInfo.nom}
                 </span>
               )}
+              {!zoneInfo && <span className="bg-gray-100 text-gray-600 px-2 py-1 rounded-full font-semibold">📍 Sans zone</span>}
               {typeInfo && (
                 <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full font-semibold">
                   {typeInfo.icon} {typeInfo.label}
+                </span>
+              )}
+              {produitSelectionne && (
+                <span className="bg-amber-100 text-amber-800 px-2 py-1 rounded-full font-semibold">
+                  🌿 {produitSelectionne.nom}
                 </span>
               )}
             </div>
@@ -298,8 +459,11 @@ function CahierTab({ zones, especes, entrees, onSaved }: {
                 {zones.map(z => (
                   <button key={z.id}
                     onClick={() => { setZoneId(z.id); setEtape(2) }}
-                    className="py-4 rounded-xl border-2 border-green-400 bg-green-50 text-green-800 font-bold text-lg active:scale-95 transition-transform">
-                    {z.nom}
+                    className={`py-4 rounded-xl border-2 font-bold text-lg active:scale-95 transition-transform
+                      ${z.type === 'serre'
+                        ? 'border-amber-400 bg-amber-50 text-amber-800'
+                        : 'border-green-400 bg-green-50 text-green-800'}`}>
+                    {z.type === 'serre' ? '🪴' : ''}{z.nom}
                   </button>
                 ))}
               </div>
@@ -311,7 +475,7 @@ function CahierTab({ zones, especes, entrees, onSaved }: {
             <div className="space-y-3">
               <div className="text-sm font-bold text-gray-700">2. Quelle opération ?</div>
               <div className="grid grid-cols-2 gap-2">
-                {TYPES_OP.map(t => (
+                {typesOp.map(t => (
                   <button key={t.val}
                     onClick={() => { setTypeOp(t.val); setEtape(3) }}
                     className={`py-4 rounded-xl border-2 ${t.color} font-bold text-base flex items-center justify-center gap-2 active:scale-95 transition-transform`}>
@@ -322,47 +486,64 @@ function CahierTab({ zones, especes, entrees, onSaved }: {
             </div>
           )}
 
-          {/* Étape 3 : Espèce + Quantité */}
+          {/* Étape 3 : Espèce / Produit + Quantité */}
           {etape === 3 && (
             <div className="space-y-4">
-              {avecEspece && (
+
+              {/* Sélection produit traitement */}
+              {estTraitement && (
                 <div className="space-y-2">
-                  <div className="text-sm font-bold text-gray-700">3a. Quelle espèce ?</div>
-                  <input
-                    value={recherche}
-                    onChange={e => setRecherche(e.target.value)}
-                    placeholder="Rechercher…"
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-green-400"
+                  <div className="text-sm font-bold text-gray-700">3a. Quel produit ?</div>
+                  <ListeAvecAjout
+                    items={produits}
+                    valeur={produitId}
+                    onChange={setProduitId}
+                    placeholder="Rechercher un produit…"
+                    onAjouter={onAjouterProduit}
+                    grouper={(p: ProduitTraitement) => p.type}
                   />
-                  <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto">
-                    <button onClick={() => setEspeceId('')}
-                      className={`py-3 rounded-xl border text-sm font-semibold text-gray-500 border-gray-200 active:scale-95 transition-transform ${especeId === '' ? 'bg-gray-100' : ''}`}>
-                      Sans espèce
-                    </button>
-                    {especesFiltrees.map(e => (
-                      <button key={e.id}
-                        onClick={() => setEspeceId(e.id)}
-                        className={`py-3 rounded-xl border text-sm font-semibold active:scale-95 transition-transform
-                          ${especeId === e.id
-                            ? 'bg-green-700 text-white border-green-700'
-                            : 'bg-white text-gray-700 border-gray-200'}`}>
-                        {e.nom}
-                      </button>
-                    ))}
-                  </div>
                 </div>
               )}
 
+              {/* Sélection espèce (serre ou micropousses) */}
+              {avecEspece && (
+                <div className="space-y-2">
+                  <div className="text-sm font-bold text-gray-700">
+                    3a. {estSerre ? 'Quelle plante ?' : 'Quelle espèce ?'}
+                  </div>
+                  {estSerre ? (
+                    <ListeAvecAjout
+                      items={especesSerre}
+                      valeur={especeId}
+                      onChange={setEspeceId}
+                      placeholder="Rechercher une plante…"
+                      onAjouter={onAjouterEspece}
+                      grouper={(e: EspeceSerre) => e.categorie}
+                    />
+                  ) : (
+                    <ListeAvecAjout
+                      items={especes}
+                      valeur={especeId}
+                      onChange={setEspeceId}
+                      placeholder="Rechercher une espèce…"
+                      onAjouter={async (nom) => { await supabase.from('especes').insert({ nom, actif: true }); onSaved() }}
+                    />
+                  )}
+                </div>
+              )}
+
+              {/* Quantité */}
               {avecQuantite && (
                 <div className="space-y-2">
                   <div className="text-sm font-bold text-gray-700">
-                    {avecEspece ? '3b.' : '3.'} Quantité
+                    {(avecEspece || estTraitement) ? '3b.' : '3.'} Quantité
                   </div>
-                  <div className="flex items-center justify-center py-2">
-                    <Stepper value={quantite} onChange={setQuantite} />
+                  <div className="flex items-center justify-center py-1">
+                    <Stepper value={quantite} onChange={setQuantite}
+                      step={estTraitement ? 0.1 : 1} />
                   </div>
                   <div className="flex gap-2 flex-wrap">
-                    {UNITES.map(u => (
+                    {unitesDisp.map(u => (
                       <button key={u} onClick={() => setUnite(u)}
                         className={`px-3 py-1.5 rounded-full text-sm font-semibold border active:scale-95 transition-transform
                           ${unite === u ? 'bg-green-700 text-white border-green-700' : 'bg-gray-50 text-gray-600 border-gray-200'}`}>
@@ -384,13 +565,11 @@ function CahierTab({ zones, especes, entrees, onSaved }: {
           {etape === 4 && (
             <div className="space-y-3">
               <div className="text-sm font-bold text-gray-700">Note (optionnel)</div>
-              <textarea
-                value={notes}
-                onChange={e => setNotes(e.target.value)}
-                placeholder="Observation, commentaire…"
+              <textarea value={notes} onChange={e => setNotes(e.target.value)}
+                placeholder="Observation, remarque…"
                 rows={2}
-                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-green-400 resize-none"
-              />
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-green-400 resize-none" />
+              <div className="text-xs font-semibold text-gray-500">Qui ?</div>
               <div className="flex gap-2">
                 {['Antoine', 'Lucas', 'Moi'].map(a => (
                   <button key={a} onClick={() => setAuteur(a)}
@@ -417,7 +596,7 @@ function CahierTab({ zones, especes, entrees, onSaved }: {
           </div>
           <div className="divide-y divide-gray-100">
             {entrees.slice(0, 20).map(e => {
-              const op = TYPES_OP.find(t => t.val === e.type_operation)
+              const op = [...TYPES_OP_CHAMP, ...TYPES_OP_SERRE].find(t => t.val === e.type_operation)
               return (
                 <div key={e.id} className="px-4 py-3 flex items-start justify-between gap-2">
                   <div className="flex items-start gap-2.5">
@@ -426,6 +605,7 @@ function CahierTab({ zones, especes, entrees, onSaved }: {
                       <div className="text-sm font-semibold text-gray-800">
                         {op?.label || e.type_operation}
                         {e.espece && <span className="text-gray-500 font-normal"> · {(e.espece as { nom: string }).nom}</span>}
+                        {e.produit && <span className="text-amber-700 font-normal"> · {(e.produit as { nom: string }).nom}</span>}
                       </div>
                       <div className="text-xs text-gray-400 mt-0.5 flex flex-wrap gap-2">
                         {e.zone && <span>📍 {(e.zone as { nom: string }).nom}</span>}
@@ -451,25 +631,23 @@ function CahierTab({ zones, especes, entrees, onSaved }: {
 function AgendaTab({ taches, zones, onSaved }: {
   taches: Tache[]; zones: Zone[]; onSaved: () => void
 }) {
-  const [ajout, setAjout]   = useState(false)
-  const [titre, setTitre]   = useState('')
-  const [type, setType]     = useState<'ponctuelle' | 'recurrente'>('ponctuelle')
+  const [ajout, setAjout]    = useState(false)
+  const [titre, setTitre]    = useState('')
+  const [type, setType]      = useState<'ponctuelle' | 'recurrente'>('ponctuelle')
   const [frequence, setFreq] = useState<string[]>([])
-  const [echeance, setEch]  = useState(format(new Date(), 'yyyy-MM-dd'))
-  const [zoneId, setZoneId] = useState('')
-  const [priorite, setPrio] = useState('normale')
-  const [saving, setSaving] = useState(false)
+  const [echeance, setEch]   = useState(format(new Date(), 'yyyy-MM-dd'))
+  const [zoneId, setZoneId]  = useState('')
+  const [priorite, setPrio]  = useState('normale')
+  const [saving, setSaving]  = useState(false)
 
-  const aujTaches  = taches.filter(t => tacheEstAujourdHui(t))
+  const aujTaches    = taches.filter(t => tacheEstAujourdHui(t))
   const autresTaches = taches.filter(t => !tacheEstAujourdHui(t))
 
   async function cocher(t: Tache) {
     const todayStr = format(new Date(), 'yyyy-MM-dd')
     if (tacheEstCompleteeAujourdHui(t)) {
-      await supabase.from('taches_completions')
-        .delete()
-        .eq('tache_id', t.id)
-        .eq('date_completion', todayStr)
+      await supabase.from('taches_completions').delete()
+        .eq('tache_id', t.id).eq('date_completion', todayStr)
     } else {
       await supabase.from('taches_completions')
         .upsert({ tache_id: t.id, date_completion: todayStr }, { onConflict: 'tache_id,date_completion' })
@@ -486,15 +664,12 @@ function AgendaTab({ taches, zones, onSaved }: {
     if (!titre.trim()) return
     setSaving(true)
     await supabase.from('taches').insert({
-      titre: titre.trim(),
-      type,
+      titre: titre.trim(), type,
       frequence: type === 'recurrente' ? frequence.join(',') || 'quotidien' : null,
       date_echeance: type === 'ponctuelle' ? echeance : null,
-      zone_id: zoneId || null,
-      priorite,
+      zone_id: zoneId || null, priorite,
     })
-    setSaving(false)
-    setAjout(false)
+    setSaving(false); setAjout(false)
     setTitre(''); setType('ponctuelle'); setFreq([]); setPrio('normale'); setZoneId('')
     onSaved()
   }
@@ -505,7 +680,6 @@ function AgendaTab({ taches, zones, onSaved }: {
 
   return (
     <div className="space-y-4">
-      {/* Tâches du jour */}
       <div className="rounded-2xl border border-green-200 overflow-hidden">
         <div className="px-4 py-3 bg-green-700 text-white font-bold text-sm flex justify-between items-center">
           <span>✅ Aujourd&apos;hui</span>
@@ -519,7 +693,7 @@ function AgendaTab({ taches, zones, onSaved }: {
           )}
           {aujTaches.map(t => {
             const faite = tacheEstCompleteeAujourdHui(t)
-            const zone = zones.find(z => z.id === t.zone_id)
+            const zone  = zones.find(z => z.id === t.zone_id)
             return (
               <div key={t.id} className={`px-4 py-3 flex items-start gap-3 ${faite ? 'opacity-50' : ''}`}>
                 <button onClick={() => cocher(t)}
@@ -546,22 +720,17 @@ function AgendaTab({ taches, zones, onSaved }: {
         </div>
       </div>
 
-      {/* Bouton ajouter */}
       <button onClick={() => setAjout(!ajout)}
         className="w-full bg-green-700 text-white py-3.5 rounded-xl font-bold text-base active:scale-95 transition-transform">
         {ajout ? '✕ Annuler' : '+ Ajouter une tâche'}
       </button>
 
-      {/* Formulaire ajout */}
       {ajout && (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-4">
-          <input
-            value={titre} onChange={e => setTitre(e.target.value)}
+          <input value={titre} onChange={e => setTitre(e.target.value)}
             placeholder="Titre de la tâche…"
             className="w-full border border-gray-200 rounded-xl px-3 py-3 text-base font-semibold focus:outline-none focus:border-green-400"
           />
-
-          {/* Type */}
           <div className="flex gap-2">
             {(['ponctuelle', 'recurrente'] as const).map(v => (
               <button key={v} onClick={() => setType(v)}
@@ -571,8 +740,6 @@ function AgendaTab({ taches, zones, onSaved }: {
               </button>
             ))}
           </div>
-
-          {/* Date ou jours */}
           {type === 'ponctuelle' ? (
             <input type="date" value={echeance} onChange={e => setEch(e.target.value)}
               className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-green-400" />
@@ -595,8 +762,6 @@ function AgendaTab({ taches, zones, onSaved }: {
               </div>
             </div>
           )}
-
-          {/* Zone */}
           <div className="flex flex-wrap gap-1.5">
             <button onClick={() => setZoneId('')}
               className={`px-3 py-1.5 rounded-full text-xs font-semibold border active:scale-95 transition-transform
@@ -611,8 +776,6 @@ function AgendaTab({ taches, zones, onSaved }: {
               </button>
             ))}
           </div>
-
-          {/* Priorité */}
           <div className="flex gap-2">
             {(['basse', 'normale', 'haute'] as const).map(p => (
               <button key={p} onClick={() => setPrio(p)}
@@ -622,7 +785,6 @@ function AgendaTab({ taches, zones, onSaved }: {
               </button>
             ))}
           </div>
-
           <button onClick={sauvegarder} disabled={saving || !titre.trim()}
             className="w-full bg-green-700 text-white py-4 rounded-xl font-bold text-base active:scale-95 transition-transform disabled:opacity-50">
             {saving ? 'Enregistrement…' : '✅ Enregistrer la tâche'}
@@ -630,7 +792,6 @@ function AgendaTab({ taches, zones, onSaved }: {
         </div>
       )}
 
-      {/* Autres tâches planifiées */}
       {autresTaches.length > 0 && (
         <div className="rounded-2xl border border-gray-100 overflow-hidden">
           <div className="px-4 py-3 bg-gray-50 font-bold text-sm text-gray-700 border-b border-gray-100">
@@ -668,30 +829,27 @@ function AgendaTab({ taches, zones, onSaved }: {
 function ZonesTab({ zones, planches, onSaved }: {
   zones: Zone[]; planches: Planche[]; onSaved: () => void
 }) {
-  const [ajoutZone, setAjoutZone] = useState(false)
-  const [nomZone, setNomZone]     = useState('')
-  const [typeZone, setTypeZone]   = useState('plein_champ')
-  const [supZone, setSupZone]     = useState('')
+  const [ajoutZone, setAjoutZone]     = useState(false)
+  const [nomZone, setNomZone]         = useState('')
+  const [typeZone, setTypeZone]       = useState('plein_champ')
+  const [supZone, setSupZone]         = useState('')
   const [ajoutPlanche, setAjoutPlanche] = useState<string | null>(null)
-  const [nomPlanche, setNomPlanche]     = useState('')
-  const [saving, setSaving]             = useState(false)
+  const [nomPlanche, setNomPlanche]   = useState('')
+  const [saving, setSaving]           = useState(false)
 
   async function ajouterZone() {
     if (!nomZone.trim()) return
     setSaving(true)
     await supabase.from('zones').insert({
-      nom: nomZone.trim(),
-      type: typeZone,
+      nom: nomZone.trim(), type: typeZone,
       superficie_m2: supZone ? parseFloat(supZone) : null,
       ordre: zones.length + 1,
     })
-    setSaving(false); setAjoutZone(false); setNomZone(''); setSupZone('')
-    onSaved()
+    setSaving(false); setAjoutZone(false); setNomZone(''); setSupZone(''); onSaved()
   }
 
   async function supprimerZone(id: string) {
-    await supabase.from('zones').update({ actif: false }).eq('id', id)
-    onSaved()
+    await supabase.from('zones').update({ actif: false }).eq('id', id); onSaved()
   }
 
   async function ajouterPlanche(zoneId: string) {
@@ -701,13 +859,11 @@ function ZonesTab({ zones, planches, onSaved }: {
       zone_id: zoneId, nom: nomPlanche.trim(),
       ordre: planches.filter(p => p.zone_id === zoneId).length + 1,
     })
-    setSaving(false); setAjoutPlanche(null); setNomPlanche('')
-    onSaved()
+    setSaving(false); setAjoutPlanche(null); setNomPlanche(''); onSaved()
   }
 
   async function supprimerPlanche(id: string) {
-    await supabase.from('zone_planches').delete().eq('id', id)
-    onSaved()
+    await supabase.from('zone_planches').delete().eq('id', id); onSaved()
   }
 
   return (
@@ -716,18 +872,14 @@ function ZonesTab({ zones, planches, onSaved }: {
         const pls = planches.filter(p => p.zone_id === z.id)
         return (
           <div key={z.id} className="rounded-2xl border border-gray-100 overflow-hidden">
-            <div className="px-4 py-3 bg-green-50 flex items-center justify-between">
+            <div className={`px-4 py-3 flex items-center justify-between ${z.type === 'serre' ? 'bg-amber-50' : 'bg-green-50'}`}>
               <div>
                 <span className="font-bold text-green-900 text-base">{z.nom}</span>
                 <span className="ml-2 text-xs text-green-600 capitalize">{z.type.replace('_', ' ')}</span>
-                {z.superficie_m2 && (
-                  <span className="ml-2 text-xs text-gray-400">{z.superficie_m2} m²</span>
-                )}
+                {z.superficie_m2 && <span className="ml-2 text-xs text-gray-400">{z.superficie_m2} m²</span>}
               </div>
               <button onClick={() => supprimerZone(z.id)} className="text-gray-300 active:text-red-400 text-lg leading-none">×</button>
             </div>
-
-            {/* Planches */}
             {pls.length > 0 && (
               <div className="divide-y divide-gray-100">
                 {pls.map(p => (
@@ -742,8 +894,6 @@ function ZonesTab({ zones, planches, onSaved }: {
                 ))}
               </div>
             )}
-
-            {/* Ajout planche */}
             {ajoutPlanche === z.id ? (
               <div className="px-4 py-3 border-t border-gray-100 flex gap-2">
                 <input value={nomPlanche} onChange={e => setNomPlanche(e.target.value)}
@@ -751,9 +901,7 @@ function ZonesTab({ zones, planches, onSaved }: {
                   className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-400"
                 />
                 <button onClick={() => ajouterPlanche(z.id)} disabled={saving}
-                  className="bg-green-700 text-white px-3 py-2 rounded-lg text-sm font-semibold active:scale-95 disabled:opacity-50">
-                  ✓
-                </button>
+                  className="bg-green-700 text-white px-3 py-2 rounded-lg text-sm font-semibold active:scale-95 disabled:opacity-50">✓</button>
                 <button onClick={() => setAjoutPlanche(null)} className="text-gray-400 px-2">✕</button>
               </div>
             ) : (
@@ -766,15 +914,14 @@ function ZonesTab({ zones, planches, onSaved }: {
         )
       })}
 
-      {/* Ajout zone */}
       {ajoutZone ? (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3">
           <input value={nomZone} onChange={e => setNomZone(e.target.value)}
-            placeholder="Nom de la zone (ex: J6, Jardin Nord)"
+            placeholder="Nom de la zone (ex: J6, Serre 2…)"
             className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm font-semibold focus:outline-none focus:border-green-400"
           />
           <div className="flex gap-2">
-            {[['plein_champ', '🌾 Plein champ'], ['serre', '🏠 Serre'], ['jardin', '🌻 Jardin']].map(([v, l]) => (
+            {[['plein_champ', '🌾 Plein champ'], ['serre', '🪴 Serre'], ['jardin', '🌻 Jardin']].map(([v, l]) => (
               <button key={v} onClick={() => setTypeZone(v)}
                 className={`flex-1 py-2 rounded-lg text-xs font-semibold border active:scale-95 transition-transform
                   ${typeZone === v ? 'bg-green-700 text-white border-green-700' : 'bg-gray-50 text-gray-600 border-gray-200'}`}>
@@ -783,8 +930,7 @@ function ZonesTab({ zones, planches, onSaved }: {
             ))}
           </div>
           <input value={supZone} onChange={e => setSupZone(e.target.value)}
-            placeholder="Superficie m² (optionnel)"
-            type="number" inputMode="decimal"
+            placeholder="Superficie m² (optionnel)" type="number" inputMode="decimal"
             className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-green-400"
           />
           <div className="flex gap-2">
@@ -793,9 +939,7 @@ function ZonesTab({ zones, planches, onSaved }: {
               ✓ Ajouter
             </button>
             <button onClick={() => { setAjoutZone(false); setNomZone('') }}
-              className="px-4 py-3 text-gray-500 font-semibold">
-              Annuler
-            </button>
+              className="px-4 py-3 text-gray-500 font-semibold">Annuler</button>
           </div>
         </div>
       ) : (
@@ -826,50 +970,41 @@ function PertesTab({ pertes, especes, onSaved }: {
     if (!designation.trim() || !raison) return
     setSaving(true)
     await supabase.from('pertes').insert({
-      designation: designation.trim(),
-      espece_id: especeId || null,
-      quantite, unite, raison,
-      notes: notes || null,
+      designation: designation.trim(), espece_id: especeId || null,
+      quantite, unite, raison, notes: notes || null,
     })
     setSaving(false)
     setDesignation(''); setEspeceId(''); setQuantite(1); setRaison(''); setNotes(''); setRecherche('')
     onSaved()
   }
 
-  // Stats mensuelles
   const maintenant = new Date()
   const ce_mois = pertes.filter(p => {
     const d = parseISO(p.date_perte)
     return d.getMonth() === maintenant.getMonth() && d.getFullYear() === maintenant.getFullYear()
   })
   const parRaison = RAISONS_PERTE.map(r => ({
-    ...r,
-    count: ce_mois.filter(p => p.raison === r.val).reduce((s, p) => s + p.quantite, 0)
+    ...r, count: ce_mois.filter(p => p.raison === r.val).reduce((s, p) => s + p.quantite, 0)
   })).filter(r => r.count > 0).sort((a, b) => b.count - a.count)
 
-  const especesFiltrees = especes.filter(e =>
-    e.nom.toLowerCase().includes(recherche.toLowerCase())
-  )
+  const especesFiltrees = especes.filter(e => e.nom.toLowerCase().includes(recherche.toLowerCase()))
 
   return (
     <div className="space-y-4">
-      {/* Stats mois */}
       {ce_mois.length > 0 && (
         <div className="bg-red-50 border border-red-200 rounded-2xl p-4">
           <div className="text-sm font-bold text-red-800 mb-2">
-            📉 Ce mois : {ce_mois.reduce((s, p) => s + p.quantite, 0)} {ce_mois[0]?.unite || 'unités'} perdues
+            📉 Ce mois : {ce_mois.reduce((s, p) => s + p.quantite, 0)} unités perdues
           </div>
           {parRaison.map(r => (
             <div key={r.val} className="flex items-center gap-2 text-xs text-red-700 mt-1">
-              <span>{r.icon}</span>
-              <span>{r.label}</span>
+              <span>{r.icon}</span><span>{r.label}</span>
               <span className="ml-auto font-bold">{r.count}</span>
             </div>
           ))}
         </div>
       )}
 
-      {/* Formulaire */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         <div className="px-4 py-3 bg-red-600 text-white font-bold text-sm">📉 Enregistrer une perte</div>
         <div className="p-4 space-y-4">
@@ -877,15 +1012,12 @@ function PertesTab({ pertes, especes, onSaved }: {
             placeholder="Produit perdu (ex: Radis barquettes)"
             className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-red-400"
           />
-
-          {/* Espèce optionnelle */}
           <div className="space-y-2">
-            <div className="text-xs font-semibold text-gray-500">Espèce (optionnel)</div>
+            <div className="text-xs font-semibold text-gray-500">Espèce liée (optionnel)</div>
             <input value={recherche} onChange={e => setRecherche(e.target.value)}
-              placeholder="Filtrer les espèces…"
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-red-300"
-            />
-            <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">
+              placeholder="Filtrer…"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none" />
+            <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
               <button onClick={() => setEspeceId('')}
                 className={`px-3 py-1.5 rounded-full text-xs font-semibold border active:scale-95 transition-transform
                   ${!especeId ? 'bg-red-600 text-white border-red-600' : 'bg-gray-50 text-gray-500 border-gray-200'}`}>
@@ -900,44 +1032,30 @@ function PertesTab({ pertes, especes, onSaved }: {
               ))}
             </div>
           </div>
-
-          {/* Quantité */}
-          <div className="space-y-2">
-            <div className="text-xs font-semibold text-gray-500">Quantité</div>
-            <div className="flex items-center justify-center py-1">
-              <Stepper value={quantite} onChange={setQuantite} />
-            </div>
-            <div className="flex gap-2 flex-wrap">
-              {UNITES.map(u => (
-                <button key={u} onClick={() => setUnite(u)}
-                  className={`px-3 py-1.5 rounded-full text-sm font-semibold border active:scale-95 transition-transform
-                    ${unite === u ? 'bg-red-600 text-white border-red-600' : 'bg-gray-50 text-gray-600 border-gray-200'}`}>
-                  {u}
-                </button>
-              ))}
-            </div>
+          <div className="flex items-center justify-center py-1">
+            <Stepper value={quantite} onChange={setQuantite} />
           </div>
-
-          {/* Raison */}
-          <div className="space-y-2">
-            <div className="text-xs font-semibold text-gray-500">Raison de la perte</div>
-            <div className="grid grid-cols-2 gap-2">
-              {RAISONS_PERTE.map(r => (
-                <button key={r.val} onClick={() => setRaison(r.val)}
-                  className={`py-3 rounded-xl border text-sm font-semibold flex items-center gap-2 px-3 active:scale-95 transition-transform
-                    ${raison === r.val ? 'bg-red-600 text-white border-red-600' : 'bg-gray-50 text-gray-700 border-gray-200'}`}>
-                  <span>{r.icon}</span> {r.label}
-                </button>
-              ))}
-            </div>
+          <div className="flex gap-2 flex-wrap">
+            {['barquettes','kg','plateaux','L','pièces'].map(u => (
+              <button key={u} onClick={() => setUnite(u)}
+                className={`px-3 py-1.5 rounded-full text-sm font-semibold border active:scale-95 transition-transform
+                  ${unite === u ? 'bg-red-600 text-white border-red-600' : 'bg-gray-50 text-gray-600 border-gray-200'}`}>
+                {u}
+              </button>
+            ))}
           </div>
-
+          <div className="grid grid-cols-2 gap-2">
+            {RAISONS_PERTE.map(r => (
+              <button key={r.val} onClick={() => setRaison(r.val)}
+                className={`py-3 rounded-xl border text-sm font-semibold flex items-center gap-2 px-3 active:scale-95 transition-transform
+                  ${raison === r.val ? 'bg-red-600 text-white border-red-600' : 'bg-gray-50 text-gray-700 border-gray-200'}`}>
+                <span>{r.icon}</span> {r.label}
+              </button>
+            ))}
+          </div>
           <textarea value={notes} onChange={e => setNotes(e.target.value)}
-            placeholder="Note optionnelle…"
-            rows={2}
-            className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-red-400 resize-none"
-          />
-
+            placeholder="Note optionnelle…" rows={2}
+            className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none resize-none" />
           <button onClick={sauvegarder} disabled={saving || !designation.trim() || !raison}
             className="w-full bg-red-600 text-white py-4 rounded-xl font-bold text-base active:scale-95 transition-transform disabled:opacity-50">
             {saving ? 'Enregistrement…' : '📉 Enregistrer la perte'}
@@ -945,11 +1063,10 @@ function PertesTab({ pertes, especes, onSaved }: {
         </div>
       </div>
 
-      {/* Historique pertes */}
       {pertes.length > 0 && (
         <div className="rounded-2xl border border-gray-100 overflow-hidden">
           <div className="px-4 py-3 bg-gray-50 font-bold text-sm text-gray-700 border-b border-gray-100">
-            Historique des pertes
+            Historique
           </div>
           <div className="divide-y divide-gray-100">
             {pertes.map(p => {
@@ -957,12 +1074,9 @@ function PertesTab({ pertes, especes, onSaved }: {
               return (
                 <div key={p.id} className="px-4 py-3 flex items-start justify-between gap-2">
                   <div>
-                    <div className="text-sm font-semibold text-gray-800">
-                      {r?.icon} {p.designation}
-                    </div>
+                    <div className="text-sm font-semibold text-gray-800">{r?.icon} {p.designation}</div>
                     <div className="text-xs text-gray-400 mt-0.5 flex flex-wrap gap-2">
-                      <span>{p.quantite} {p.unite}</span>
-                      <span>{r?.label}</span>
+                      <span>{p.quantite} {p.unite}</span><span>{r?.label}</span>
                       {p.notes && <span className="italic">"{p.notes}"</span>}
                     </div>
                   </div>
