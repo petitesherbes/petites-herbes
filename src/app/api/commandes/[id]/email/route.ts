@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { EMAIL_FROM } from '@/lib/email'
 import { Resend } from 'resend'
 import { createClient } from '@supabase/supabase-js'
 import { format, parseISO } from 'date-fns'
@@ -123,7 +124,7 @@ export async function POST(
   try {
     const resend = new Resend(process.env.RESEND_API_KEY)
     await resend.emails.send({
-      from: 'GAEC Les Petites Herbes <onboarding@resend.dev>',
+      from: EMAIL_FROM,
       to: [client.email],
       cc: [process.env.EMAIL_DESTINATION || 'petitesherbes@gmail.com'],
       subject: `Bon de livraison N° ${bl.numero} — ${dateFormatee}`,

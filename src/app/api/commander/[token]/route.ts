@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { EMAIL_FROM } from '@/lib/email'
 import { createClient } from '@supabase/supabase-js'
 import { Resend } from 'resend'
 import { format } from 'date-fns'
@@ -31,11 +32,17 @@ export async function POST(
     return NextResponse.json({ error: 'Client introuvable' }, { status: 404 })
   }
 
-  const { lignes, message } = await req.json()
+  const { lignes, message, date_livraison } = await req.json()
 
   if (!lignes || lignes.length === 0) {
     return NextResponse.json({ error: 'Panier vide' }, { status: 400 })
   }
+
+  // Date de livraison choisie par le client (validée), sinon aujourd'hui
+  const dateLivraisonValide =
+    typeof date_livraison === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date_livraison)
+      ? date_livraison
+      : null
 
   // Generer numero BL
   const { data: paramsDB } = await supabase
@@ -45,6 +52,7 @@ export async function POST(
 
   const numero = String(paramsDB?.prochain_numero_bl || 1777).padStart(7, '0')
   const aujourd_hui = format(new Date(), 'yyyy-MM-dd')
+  const dateLivraison = dateLivraisonValide || aujourd_hui
 
   // Creer le BL
   const { data: bl, error: eBL } = await supabase
@@ -52,7 +60,7 @@ export async function POST(
     .insert({
       numero,
       client_id: client.id,
-      date_livraison: aujourd_hui,
+      date_livraison: dateLivraison,
       statut: 'brouillon',
       note: message || null,
     })
@@ -131,7 +139,7 @@ export async function POST(
   let blPdfBuffer: Buffer | null = null
   try {
     const blForPDF: BLPDF = {
-      id: bl.id, numero, date_livraison: aujourd_hui,
+      id: bl.id, numero, date_livraison: dateLivraison,
       client: {
         nom: client.nom, adresse: client.adresse, code_postal: client.code_postal,
         ville: client.ville, pays: client.pays || 'FRANCE', email: client.email,
@@ -153,6 +161,7 @@ export async function POST(
 
   // Envoyer emails (confirmation chef + notification GAEC)
   const dateFormatee = format(new Date(), 'dd MMMM yyyy', { locale: fr })
+  const dateLivraisonFormatee = format(new Date(dateLivraison + 'T12:00:00'), 'EEEE d MMMM', { locale: fr })
 
   try {
     const resend = new Resend(process.env.RESEND_API_KEY)
@@ -187,6 +196,9 @@ export async function POST(
       <tr>
         <td>Date :</td><td>${dateFormatee}</td>
       </tr>
+      <tr>
+        <td>Livraison :</td><td style="color:#1B5E20;text-transform:capitalize;">${dateLivraisonFormatee}</td>
+      </tr>
     </table>
     ${message ? `<div style="background:#f9f9f9;border-left:3px solid #1B5E20;padding:10px 14px;margin:12px 0;font-size:13px;color:#555;">Message : ${message}</div>` : ''}
     <table width="100%" style="border-collapse:collapse;margin-top:16px;">
@@ -210,7 +222,7 @@ export async function POST(
     // Email au chef (avec BL PDF en pièce jointe)
     if (client.email) {
       const emailPayload: Parameters<typeof resend.emails.send>[0] = {
-        from: 'GAEC Les Petites Herbes <onboarding@resend.dev>',
+        from: EMAIL_FROM,
         to: [client.email],
         subject: `Commande confirmee — BL N° ${numero}`,
         html: emailHTML(
@@ -230,7 +242,7 @@ export async function POST(
     // Notification a GAEC
     const dest = process.env.EMAIL_DESTINATION || 'petitesherbes@gmail.com'
     await resend.emails.send({
-      from: 'GAEC Les Petites Herbes <onboarding@resend.dev>',
+      from: EMAIL_FROM,
       to: [dest],
       subject: `Nouvelle commande de ${client.nom} — BL N° ${numero}`,
       html: emailHTML(

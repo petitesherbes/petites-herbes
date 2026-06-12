@@ -1,4 +1,4 @@
-const CACHE = 'petites-herbes-v1'
+const CACHE = 'petites-herbes-v2'
 const OFFLINE = ['/']
 
 self.addEventListener('install', e => {
@@ -7,15 +7,18 @@ self.addEventListener('install', e => {
 })
 
 self.addEventListener('activate', e => {
-  e.waitUntil(caches.keys().then(keys =>
-    Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
-  ))
-  self.clients.claim()
+  e.waitUntil(
+    caches.keys().then(keys =>
+      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
+    ).then(() => self.clients.claim())
+  )
 })
 
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return
   if (e.request.url.includes('/api/')) return
+
+  // Réseau d'abord (cache en secours hors-ligne) — évite les écrans figés
   e.respondWith(
     fetch(e.request)
       .then(res => {

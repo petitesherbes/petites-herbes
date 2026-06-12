@@ -1,8 +1,32 @@
 @import "tailwindcss";
 
+/* ───────────────────────────────────────────────
+   Identité Les Petites Herbes
+   Vert sauge chaleureux + crème + serif élégant
+   La gamme `green-*` de Tailwind est réchauffée :
+   tout l'outil adopte la nouvelle identité d'un coup.
+   ─────────────────────────────────────────────── */
+@theme {
+  --color-green-50:  #F2F6EC;
+  --color-green-100: #E2EED4;
+  --color-green-200: #C7DCAE;
+  --color-green-300: #A6C682;
+  --color-green-400: #87AF5B;
+  --color-green-500: #6D9543;
+  --color-green-600: #567B33;
+  --color-green-700: #466227;
+  --color-green-800: #394E21;
+  --color-green-900: #2D3E1B;
+
+  --color-cream: #F7F5F0;
+  --color-clay:  #C2683F;
+
+  --font-serif: 'Fraunces', Georgia, 'Times New Roman', serif;
+}
+
 :root {
-  --background: #f9fafb;
-  --foreground: #111827;
+  --background: #F7F5F0;
+  --foreground: #2A2A28;
 }
 
 body {
@@ -15,3 +39,11 @@ body {
 * {
   -webkit-tap-highlight-color: transparent;
 }
+
+.font-serif {
+  font-family: var(--font-serif);
+  font-optical-sizing: auto;
+}
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }

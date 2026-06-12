@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { EMAIL_FROM } from '@/lib/email'
 import { Resend } from 'resend'
 
 interface LigneEmail {
@@ -127,7 +128,7 @@ export async function POST(req: NextRequest) {
 </html>`
 
     await resend.emails.send({
-      from: 'Petites Herbes <onboarding@resend.dev>',
+      from: EMAIL_FROM,
       to: process.env.EMAIL_DESTINATION || 'petitesherbes@gmail.com',
       subject: `[Semis] Bon de production — ${new Date(dateSemis).toLocaleDateString('fr-FR')}${templateNom ? ` (${templateNom})` : ''}`,
       html,

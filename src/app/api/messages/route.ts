@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { EMAIL_FROM } from '@/lib/email'
 import { createClient } from '@supabase/supabase-js'
 import { Resend } from 'resend'
 
@@ -79,7 +80,7 @@ export async function POST(req: NextRequest) {
 
     try {
       await resend.emails.send({
-        from: 'GAEC Les Petites Herbes <onboarding@resend.dev>',
+        from: EMAIL_FROM,
         to: [client.email!],
         subject: sujet,
         html,

@@ -2,7 +2,7 @@
 export const dynamic = 'force-dynamic'
 
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { Client, Produit, ProduitCategorie } from '@/types'
 import Image from 'next/image'
@@ -17,6 +17,21 @@ const CAT_LABEL: Record<ProduitCategorie, string> = {
   CHAMP:'Du champ', AUTRE:'Divers',
 }
 
+// getDay() : mardi=2 jeudi=4 vendredi=5
+const JOUR_IDX: Record<string, number> = { mardi: 2, jeudi: 4, vendredi: 5 }
+const TOUS_JOURS = ['mardi', 'jeudi', 'vendredi']
+
+// Prochaine occurrence du jour (si aujourd'hui = ce jour → semaine prochaine)
+function prochaineDate(jour: string): Date {
+  const d = new Date()
+  const ecart = (JOUR_IDX[jour] - d.getDay() + 7) % 7 || 7
+  d.setDate(d.getDate() + ecart)
+  return d
+}
+function fmtJour(jour: string): string {
+  return prochaineDate(jour).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })
+}
+
 type Panier = Record<string, number>
 type Ecran  = 'chargement' | 'commande' | 'confirmation' | 'erreur'
 type LigneRecurrente = {
@@ -26,6 +41,8 @@ type LigneRecurrente = {
 
 export default function CommanderPage() {
   const { token } = useParams<{ token: string }>()
+  const router    = useRouter()
+  const [apercu, setApercu]     = useState(false)
   const [client, setClient]     = useState<Client | null>(null)
   const [produits, setProduits] = useState<Produit[]>([])
   const [panier, setPanier]     = useState<Panier>({})
@@ -37,6 +54,7 @@ export default function CommanderPage() {
   const [recurrentes, setRecurrentes] = useState<LigneRecurrente[]>([])
   const [sauvegarde, setSauvegarde]   = useState<'idle'|'saving'|'ok'>('idle')
   const [showSavePrompt, setShowSavePrompt] = useState(false)
+  const [jourChoisi, setJourChoisi]   = useState<string | null>(null)
   const catNavRef    = useRef<HTMLDivElement>(null)
   const sectionRefs  = useRef<Record<string, HTMLDivElement | null>>({})
 
@@ -45,6 +63,13 @@ export default function CommanderPage() {
       .from('clients').select('*').eq('order_token', token).eq('actif', true).single()
     if (!c) { setEcran('erreur'); return }
     setClient(c)
+
+    // Jour de livraison par défaut : le plus proche parmi ceux du client
+    const joursDispo: string[] = (c.jours_livraison?.length ? c.jours_livraison : TOUS_JOURS)
+    const plusProche = [...joursDispo].sort((a, b) =>
+      prochaineDate(a).getTime() - prochaineDate(b).getTime()
+    )[0]
+    setJourChoisi(plusProche)
 
     const [{ data: p }, { lignes }] = await Promise.all([
       supabase.from('produits').select('*')
@@ -70,6 +95,13 @@ export default function CommanderPage() {
   }, [token])
 
   useEffect(() => { charger() }, [charger])
+
+  // Mode aperçu (ouvert depuis la gestion via ?apercu=1)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setApercu(new URLSearchParams(window.location.search).get('apercu') === '1')
+    }
+  }, [])
 
   // Scroll spy
   useEffect(() => {
@@ -156,6 +188,9 @@ export default function CommanderPage() {
           prix_ht: p.prix_ht, tva_pct: p.tva_pct,
         })),
         message,
+        date_livraison: jourChoisi
+          ? prochaineDate(jourChoisi).toISOString().slice(0, 10)
+          : null,
       }),
     })
     const data = await res.json()
@@ -172,32 +207,35 @@ export default function CommanderPage() {
 
   // ── Chargement ──────────────────────────────────────────────
   if (ecran === 'chargement') return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-[#F7F5F0]">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-cream">
       <div className="w-12 h-12 rounded-full border-4 border-green-800 border-t-transparent animate-spin mb-4" />
-      <p className="text-green-900 font-medium">Chargement...</p>
+      <p className="text-green-900 font-medium font-serif">Un instant…</p>
     </div>
   )
 
   if (ecran === 'erreur') return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-[#F7F5F0] p-8 text-center">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-cream p-8 text-center">
       <div className="text-5xl mb-4">🌿</div>
-      <h1 className="text-2xl font-bold text-green-900 mb-2">Lien invalide</h1>
+      <h1 className="font-serif text-2xl text-green-900 mb-2">Lien invalide</h1>
       <p className="text-gray-600">Ce lien n&apos;existe pas ou a expiré.<br/>Contactez-nous : petitesherbes@gmail.com</p>
     </div>
   )
 
   // ── Confirmation + prompt sauvegarde ────────────────────────
   if (ecran === 'confirmation' || showSavePrompt) return (
-    <div className="min-h-screen bg-[#F7F5F0]">
-      <div className="bg-green-900 px-6 pt-14 pb-8 text-white text-center">
-        <div className="text-5xl mb-3">✅</div>
-        <h1 className="text-2xl font-bold">Commande confirmée !</h1>
-        <p className="text-green-200 mt-1 text-sm">Bon de livraison N° {blNumero}</p>
+    <div className="min-h-screen bg-cream">
+      <div className="bg-green-900 px-6 pt-14 pb-9 text-white text-center">
+        <div className="text-5xl mb-3">🌿</div>
+        <h1 className="font-serif text-3xl">Merci {client?.nom} !</h1>
+        <p className="text-green-200 mt-2 text-sm">Commande confirmée · Bon N° {blNumero}</p>
+        {jourChoisi && (
+          <p className="inline-block mt-3 bg-green-800 rounded-full px-4 py-1.5 text-white font-semibold text-sm capitalize">🚚 Livraison {fmtJour(jourChoisi)}</p>
+        )}
       </div>
 
       <div className="p-5 space-y-3 max-w-lg mx-auto">
-        <div className="bg-white rounded-2xl p-4 shadow-sm">
-          <h2 className="font-bold text-green-900 mb-3 text-sm">Votre commande</h2>
+        <div className="bg-white rounded-2xl p-4 shadow-sm border border-green-100/60">
+          <h2 className="font-serif text-green-900 mb-3 text-lg">Votre commande</h2>
           {lignesPanier.map(p => (
             <div key={p.id} className="flex justify-between py-2.5 border-b border-gray-50 last:border-0">
               <span className="text-sm">{p.designation}{p.bio && <span className="text-green-600 ml-1 text-xs font-semibold">BIO</span>}</span>
@@ -253,15 +291,31 @@ export default function CommanderPage() {
   const hasHabituelle = recurrentes.length > 0
 
   return (
-    <div className="min-h-screen bg-[#F7F5F0]" style={{ paddingBottom: nbArticles > 0 ? '100px' : '32px' }}>
+    <div className="min-h-screen bg-cream" style={{ paddingBottom: nbArticles > 0 ? '100px' : '32px' }}>
+
+      {/* ── Bandeau aperçu chef (visible seulement depuis la gestion) ── */}
+      {apercu && (
+        <button onClick={() => router.push('/commandes')}
+          className="fixed top-3 left-3 z-30 bg-white/95 backdrop-blur shadow-lg border border-green-200 rounded-full pl-2.5 pr-3.5 py-2 flex items-center gap-1.5 active:scale-95 transition-transform">
+          <span className="text-base">←</span>
+          <span className="text-xs font-bold text-green-800">Mode gestion</span>
+        </button>
+      )}
+
+      {/* ── Hero d'accueil (défile) ── */}
+      <div className="bg-green-900 px-5 pt-8 pb-7 text-center">
+        <div className="text-3xl mb-1">🌿</div>
+        <div className="text-green-300 text-[11px] font-semibold uppercase tracking-[0.2em]">Les Petites Herbes</div>
+        <h1 className="font-serif text-white text-2xl mt-2 leading-tight">Bonjour {client?.nom}</h1>
+        <p className="text-green-200 text-sm mt-1.5">Votre récolte fraîche, cueillie à la commande.</p>
+      </div>
 
       {/* ── Header sticky ── */}
-      <div className="sticky top-0 z-20">
-        <div className="bg-green-900 px-4 py-3 flex items-center gap-3">
-          <div className="w-8 h-8 bg-green-700 rounded-full flex items-center justify-center text-base shrink-0">🌿</div>
+      <div className="sticky top-0 z-20 shadow-sm">
+        <div className="bg-green-900 px-4 py-2.5 flex items-center gap-3">
+          <div className="w-7 h-7 bg-green-700 rounded-full flex items-center justify-center text-sm shrink-0">🌿</div>
           <div className="flex-1 min-w-0">
-            <div className="text-white font-bold text-sm leading-tight truncate">{client?.nom}</div>
-            <div className="text-green-300 text-xs">Les Petites Herbes</div>
+            <div className="text-white font-semibold text-sm leading-tight truncate font-serif">{client?.nom}</div>
           </div>
           {nbArticles > 0 && (
             <div className="bg-white text-green-900 text-xs font-bold px-2.5 py-1 rounded-full shrink-0">
@@ -272,11 +326,11 @@ export default function CommanderPage() {
 
         {categories.length > 1 && (
           <div ref={catNavRef}
-            className="bg-white border-b border-gray-100 flex gap-1.5 overflow-x-auto px-3 py-2 no-scrollbar">
+            className="bg-cream/95 backdrop-blur border-b border-green-100 flex gap-1.5 overflow-x-auto px-3 py-2 no-scrollbar">
             {categories.map(cat => (
               <button key={cat} data-cat={cat} onClick={() => scrollTocat(cat)}
                 className={`shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-colors
-                  ${catActive === cat ? 'bg-green-700 text-white' : 'bg-gray-100 text-gray-600 active:bg-gray-200'}`}>
+                  ${catActive === cat ? 'bg-green-700 text-white' : 'bg-white text-green-800 border border-green-100 active:bg-green-50'}`}>
                 <span>{CAT_EMOJI[cat]}</span><span>{CAT_LABEL[cat]}</span>
               </button>
             ))}
@@ -284,15 +338,15 @@ export default function CommanderPage() {
         )}
       </div>
 
-      <div className="max-w-lg mx-auto px-4 pt-4 space-y-6">
+      <div className="max-w-lg mx-auto px-4 pt-5 space-y-6">
 
         {/* ── Bandeau commande habituelle ── */}
         {hasHabituelle && (
           <div className="bg-white rounded-2xl border border-green-200 p-4 shadow-sm space-y-3">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center text-lg shrink-0">🔁</div>
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 bg-green-100 rounded-full flex items-center justify-center text-lg shrink-0">🔁</div>
               <div>
-                <div className="font-bold text-green-900 text-sm leading-tight">Commande habituelle</div>
+                <div className="font-serif text-green-900 text-lg leading-tight">Votre commande habituelle</div>
                 <div className="text-xs text-gray-500">{recurrentes.length} produit{recurrentes.length > 1 ? 's' : ''} enregistré{recurrentes.length > 1 ? 's' : ''}</div>
               </div>
             </div>
@@ -329,10 +383,10 @@ export default function CommanderPage() {
           if (prods.length === 0) return null
           return (
             <div key={cat} data-cat={cat} ref={el => { sectionRefs.current[cat] = el }}>
-              <div className="flex items-center gap-2 mb-3">
-                <span className="text-xl">{CAT_EMOJI[cat]}</span>
-                <h2 className="font-bold text-green-900 text-base">{CAT_LABEL[cat]}</h2>
-                <span className="text-xs text-gray-400 ml-auto">{prods.length}</span>
+              <div className="flex items-baseline gap-2 mb-3">
+                <span className="text-lg">{CAT_EMOJI[cat]}</span>
+                <h2 className="font-serif text-green-900 text-xl">{CAT_LABEL[cat]}</h2>
+                <span className="text-xs text-green-600/70 ml-auto">{prods.length} produit{prods.length > 1 ? 's' : ''}</span>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -341,23 +395,23 @@ export default function CommanderPage() {
                   const epuise = p.quantite_dispo != null && p.quantite_dispo <= 0
                   return (
                     <div key={p.id}
-                      className={`bg-white rounded-2xl overflow-hidden border-2 transition-all
-                        ${qte > 0 ? 'border-green-600 shadow-md' : epuise ? 'border-gray-100 opacity-60' : 'border-transparent shadow-sm'}`}>
+                      className={`bg-white rounded-3xl overflow-hidden border transition-all
+                        ${qte > 0 ? 'border-green-600 shadow-lg shadow-green-900/5' : epuise ? 'border-gray-100 opacity-60' : 'border-green-100/60 shadow-sm'}`}>
 
-                      <div className="relative w-full aspect-[4/3] bg-gradient-to-br from-green-50 to-green-100 overflow-hidden">
+                      <div className="relative w-full aspect-square bg-gradient-to-br from-green-50 to-green-100 overflow-hidden">
                         {p.photo_url ? (
                           <Image src={p.photo_url} alt={p.designation} fill
                             className="object-cover" sizes="(max-width:640px) 45vw, 200px" />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center">
-                            <span className="text-5xl opacity-30">{CAT_EMOJI[cat]}</span>
+                            <span className="text-6xl opacity-25">{CAT_EMOJI[cat]}</span>
                           </div>
                         )}
                         {p.bio && (
-                          <div className="absolute top-1.5 left-1.5 bg-green-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full">BIO</div>
+                          <div className="absolute top-2 left-2 bg-white/95 text-green-700 text-[9px] font-bold px-2 py-0.5 rounded-full shadow-sm tracking-wide">BIO</div>
                         )}
                         {qte > 0 && (
-                          <div className="absolute top-1.5 right-1.5 bg-green-700 text-white text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center shadow-lg">{qte}</div>
+                          <div className="absolute top-2 right-2 bg-green-700 text-white text-sm font-bold w-7 h-7 rounded-full flex items-center justify-center shadow-lg">{qte}</div>
                         )}
                         {epuise && (
                           <div className="absolute inset-0 bg-white/60 flex items-center justify-center">
@@ -367,7 +421,7 @@ export default function CommanderPage() {
                       </div>
 
                       <div className="p-3">
-                        <div className="text-sm font-semibold text-gray-900 leading-snug mb-1">{p.designation}</div>
+                        <div className="font-serif text-[15px] text-green-900 leading-snug mb-1">{p.designation}</div>
                         {p.description && (
                           <div className="text-[11px] text-gray-400 leading-snug mb-1.5 line-clamp-2">
                             {p.description.split('💧')[0].trim()}
@@ -375,27 +429,27 @@ export default function CommanderPage() {
                         )}
                         <div className="flex items-center justify-between mb-2">
                           {p.prix_ht > 0
-                            ? <span className="text-xs text-green-700 font-semibold">{p.prix_ht.toFixed(2)} €/{p.unite}</span>
+                            ? <span className="text-sm text-green-700 font-bold">{p.prix_ht.toFixed(2)} €<span className="text-[11px] font-normal text-green-600/70">/{p.unite}</span></span>
                             : <span />}
                           {p.quantite_dispo != null && p.quantite_dispo > 0 && p.quantite_dispo <= 5 && (
-                            <span className="text-[10px] font-bold text-amber-600">⚡{p.quantite_dispo}</span>
+                            <span className="text-[10px] font-bold text-clay">⚡{p.quantite_dispo}</span>
                           )}
                         </div>
 
                         {epuise ? (
-                          <div className="w-full py-2.5 rounded-xl bg-gray-100 text-gray-400 text-xs font-semibold text-center">Indisponible</div>
+                          <div className="w-full py-2.5 rounded-2xl bg-gray-100 text-gray-400 text-xs font-semibold text-center">Indisponible</div>
                         ) : qte === 0 ? (
                           <button onClick={() => setQte(p.id, 1)}
-                            className="w-full py-2.5 rounded-xl bg-green-700 text-white text-sm font-bold active:bg-green-800">
+                            className="w-full py-2.5 rounded-2xl bg-green-700 text-white text-sm font-bold active:bg-green-800 transition-colors">
                             + Ajouter
                           </button>
                         ) : (
-                          <div className="flex items-center justify-between bg-green-50 rounded-xl p-1 gap-1">
+                          <div className="flex items-center justify-between bg-green-50 rounded-2xl p-1 gap-1">
                             <button onClick={() => setQte(p.id, -1)}
-                              className="w-10 h-10 flex items-center justify-center bg-white rounded-lg text-green-800 font-bold text-xl shadow-sm active:scale-95 transition-transform">−</button>
+                              className="w-10 h-10 flex items-center justify-center bg-white rounded-xl text-green-800 font-bold text-xl shadow-sm active:scale-95 transition-transform">−</button>
                             <span className="font-bold text-green-900 text-lg min-w-[1.5rem] text-center">{qte}</span>
                             <button onClick={() => setQte(p.id, 1)}
-                              className="w-10 h-10 flex items-center justify-center bg-green-700 rounded-lg text-white font-bold text-xl shadow-sm active:bg-green-800 active:scale-95">+</button>
+                              className="w-10 h-10 flex items-center justify-center bg-green-700 rounded-xl text-white font-bold text-xl shadow-sm active:bg-green-800 active:scale-95">+</button>
                           </div>
                         )}
                       </div>
@@ -407,20 +461,46 @@ export default function CommanderPage() {
           )
         })}
 
+        {/* Jour de livraison */}
+        {(() => {
+          const joursDispo = (client?.jours_livraison?.length ? client.jours_livraison : TOUS_JOURS) as string[]
+          return (
+            <div>
+              <label className="block font-serif text-green-900 text-lg mb-2.5">📅 Jour de livraison</label>
+              <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${joursDispo.length}, 1fr)` }}>
+                {joursDispo.map(j => (
+                  <button key={j} onClick={() => setJourChoisi(j)}
+                    className={`py-3 px-2 rounded-2xl border-2 text-center transition-colors
+                      ${jourChoisi === j
+                        ? 'border-green-600 bg-green-50'
+                        : 'border-green-100 bg-white active:bg-green-50'}`}>
+                    <div className={`text-sm font-bold capitalize ${jourChoisi === j ? 'text-green-800' : 'text-gray-600'}`}>
+                      {j}
+                    </div>
+                    <div className={`text-[11px] mt-0.5 ${jourChoisi === j ? 'text-green-600' : 'text-gray-400'}`}>
+                      {prochaineDate(j).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )
+        })()}
+
         {/* Message libre */}
         <div>
-          <label className="block text-sm font-semibold text-green-900 mb-2">Message (optionnel)</label>
+          <label className="block font-serif text-green-900 text-lg mb-2.5">Un mot pour nous ?</label>
           <textarea value={message} onChange={e => setMessage(e.target.value)}
             placeholder="Instructions particulières, heure préférée..."
             rows={3}
-            className="w-full border-2 border-gray-200 rounded-2xl p-3 text-sm focus:border-green-600 focus:outline-none resize-none bg-white" />
+            className="w-full border-2 border-green-100 rounded-2xl p-3 text-sm focus:border-green-600 focus:outline-none resize-none bg-white" />
         </div>
 
         {produits.length === 0 && (
           <div className="text-center py-14 text-gray-400">
             <div className="text-5xl mb-3">🌱</div>
-            <p className="text-sm font-medium">Aucun produit disponible pour le moment.</p>
-            <p className="text-xs mt-1 text-gray-300">Revenez bientôt !</p>
+            <p className="font-serif text-lg text-green-900">Le panier se repose…</p>
+            <p className="text-xs mt-1 text-gray-400">Aucun produit disponible pour le moment. Revenez bientôt !</p>
           </div>
         )}
 
@@ -432,7 +512,7 @@ export default function CommanderPage() {
 
       {/* ── Bandeau panier sticky ── */}
       {nbArticles > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 px-4 pb-6 pt-2 bg-gradient-to-t from-[#F7F5F0] via-[#F7F5F0]/90 to-transparent">
+        <div className="fixed bottom-0 left-0 right-0 px-4 pb-6 pt-2 bg-gradient-to-t from-cream via-cream/90 to-transparent">
           <div className="max-w-lg mx-auto space-y-2">
             {/* Bouton sauvegarder (subtil, optionnel) */}
             {panierDiffereDeHabituel && sauvegarde !== 'ok' && (

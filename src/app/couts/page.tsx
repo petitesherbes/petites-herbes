@@ -12,25 +12,42 @@ interface SemisComplet extends Semis {
   semis_lignes: (SemisLigne & { espece: Espece })[]
 }
 
+type BLVente = {
+  id: string
+  created_at: string
+  date_livraison: string | null
+  client: { nom: string } | null
+  bl_lignes: { designation: string; quantite: number; prix_ht: number; tva_pct: number }[]
+}
+
 export default function CoutsPage() {
-  const [onglet, setOnglet] = useState<'dashboard' | 'params' | 'simulateur'>('dashboard')
+  const [onglet, setOnglet] = useState<'dashboard' | 'ventes' | 'params' | 'simulateur'>('dashboard')
   const [semisList, setSemisList] = useState<SemisComplet[]>([])
   const [params, setParams] = useState<ParametresProduction | null>(null)
   const [contenants, setContenants] = useState<Contenant[]>([])
+  const [ventes, setVentes] = useState<BLVente[]>([])
   const [loading, setLoading] = useState(true)
   const [marge, setMarge] = useState(300)
 
   useEffect(() => { charger() }, [])
 
   async function charger() {
-    const [{ data: s }, { data: p }, { data: c }] = await Promise.all([
+    const sixMois = new Date()
+    sixMois.setMonth(sixMois.getMonth() - 6)
+
+    const [{ data: s }, { data: p }, { data: c }, { data: v }] = await Promise.all([
       supabase.from('semis').select('*, semis_lignes(*, espece:especes(*))').order('date_semis', { ascending: false }).limit(50),
       supabase.from('parametres_production').select('*').single(),
       supabase.from('contenants').select('*').eq('actif', true),
+      supabase.from('bons_livraison')
+        .select('id, created_at, date_livraison, client:clients(nom), bl_lignes(designation, quantite, prix_ht, tva_pct)')
+        .gte('created_at', sixMois.toISOString())
+        .order('created_at', { ascending: false }),
     ])
     if (s) setSemisList(s as SemisComplet[])
     if (p) setParams(p)
     if (c) setContenants(c)
+    if (v) setVentes(v as unknown as BLVente[])
     setLoading(false)
   }
 
@@ -42,8 +59,9 @@ export default function CoutsPage() {
 
       <div className="flex rounded-lg overflow-hidden border border-gray-200">
         {[
-          { val: 'dashboard', label: 'Dashboard' },
-          { val: 'params', label: 'Parametres' },
+          { val: 'dashboard', label: 'Coûts' },
+          { val: 'ventes', label: '💶 Ventes' },
+          { val: 'params', label: 'Params' },
           { val: 'simulateur', label: 'Simulateur' },
         ].map(o => (
           <button key={o.val} onClick={() => setOnglet(o.val as typeof onglet)}
@@ -55,8 +73,127 @@ export default function CoutsPage() {
       </div>
 
       {onglet === 'dashboard' && <Dashboard semisList={semisList} />}
+      {onglet === 'ventes' && <StatsVentes ventes={ventes} />}
       {onglet === 'params' && <Parametres params={params} contenants={contenants} onSave={charger} />}
       {onglet === 'simulateur' && <Simulateur params={params} contenants={contenants} marge={marge} setMarge={setMarge} />}
+    </div>
+  )
+}
+
+function StatsVentes({ ventes }: { ventes: BLVente[] }) {
+  function totalBL(bl: BLVente): number {
+    return bl.bl_lignes.reduce((s, l) => s + l.quantite * l.prix_ht * (1 + l.tva_pct / 100), 0)
+  }
+
+  const caTotal = ventes.reduce((s, bl) => s + totalBL(bl), 0)
+
+  // CA par mois (6 derniers mois)
+  const parMois = new Map<string, number>()
+  for (const bl of ventes) {
+    const mois = format(parseISO(bl.created_at), 'MMM yy', { locale: fr })
+    parMois.set(mois, (parMois.get(mois) || 0) + totalBL(bl))
+  }
+  const moisData = Array.from(parMois.entries()).reverse().map(([mois, ca]) => ({ mois, ca: Math.round(ca) }))
+
+  // Top clients
+  const parClient = new Map<string, { ca: number; nb: number }>()
+  for (const bl of ventes) {
+    const nom = bl.client?.nom || 'Inconnu'
+    const e = parClient.get(nom) || { ca: 0, nb: 0 }
+    e.ca += totalBL(bl); e.nb += 1
+    parClient.set(nom, e)
+  }
+  const topClients = Array.from(parClient.entries())
+    .map(([nom, v]) => ({ nom, ...v }))
+    .sort((a, b) => b.ca - a.ca)
+    .slice(0, 8)
+
+  // Top produits
+  const parProduit = new Map<string, { ca: number; qte: number }>()
+  for (const bl of ventes) {
+    for (const l of bl.bl_lignes) {
+      if (l.designation.toLowerCase().includes('livraison')) continue
+      const e = parProduit.get(l.designation) || { ca: 0, qte: 0 }
+      e.ca += l.quantite * l.prix_ht * (1 + l.tva_pct / 100)
+      e.qte += l.quantite
+      parProduit.set(l.designation, e)
+    }
+  }
+  const topProduits = Array.from(parProduit.entries())
+    .map(([nom, v]) => ({ nom, ...v }))
+    .sort((a, b) => b.ca - a.ca)
+    .slice(0, 8)
+
+  const maxClientCa = topClients[0]?.ca || 1
+  const maxProduitCa = topProduits[0]?.ca || 1
+
+  if (ventes.length === 0) return (
+    <div className="text-center py-12 text-gray-400">
+      <div className="text-4xl mb-2">💶</div>
+      <p>Aucune vente sur les 6 derniers mois</p>
+    </div>
+  )
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-3">
+        <div className="bg-white rounded-lg border border-gray-200 p-3">
+          <div className="text-xs text-gray-500">CA 6 derniers mois (TTC)</div>
+          <div className="text-xl font-bold text-green-800">{caTotal.toFixed(0)}€</div>
+        </div>
+        <div className="bg-white rounded-lg border border-gray-200 p-3">
+          <div className="text-xs text-gray-500">Bons de livraison</div>
+          <div className="text-xl font-bold text-green-800">{ventes.length}</div>
+        </div>
+      </div>
+
+      {moisData.length > 1 && (
+        <div className="bg-white rounded-lg border border-gray-200 p-3">
+          <div className="text-sm font-semibold text-gray-700 mb-2">CA par mois</div>
+          <ResponsiveContainer width="100%" height={180}>
+            <BarChart data={moisData}>
+              <XAxis dataKey="mois" fontSize={11} />
+              <YAxis fontSize={11} width={40} />
+              <Tooltip formatter={(v) => [`${v}€`, 'CA TTC']} />
+              <Bar dataKey="ca" fill="#2E7D32" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      <div className="bg-white rounded-lg border border-gray-200 p-3">
+        <div className="text-sm font-semibold text-gray-700 mb-3">🏆 Top clients</div>
+        <div className="space-y-2">
+          {topClients.map(c => (
+            <div key={c.nom}>
+              <div className="flex justify-between text-sm mb-0.5">
+                <span className="font-medium truncate">{c.nom}</span>
+                <span className="text-green-800 font-bold shrink-0 ml-2">{c.ca.toFixed(0)}€ <span className="text-gray-400 font-normal text-xs">({c.nb} BL)</span></span>
+              </div>
+              <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                <div className="h-full bg-green-600 rounded-full" style={{ width: `${(c.ca / maxClientCa) * 100}%` }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="bg-white rounded-lg border border-gray-200 p-3">
+        <div className="text-sm font-semibold text-gray-700 mb-3">🌱 Top produits</div>
+        <div className="space-y-2">
+          {topProduits.map(p => (
+            <div key={p.nom}>
+              <div className="flex justify-between text-sm mb-0.5">
+                <span className="font-medium truncate">{p.nom}</span>
+                <span className="text-green-800 font-bold shrink-0 ml-2">{p.ca.toFixed(0)}€ <span className="text-gray-400 font-normal text-xs">(×{p.qte})</span></span>
+              </div>
+              <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${(p.ca / maxProduitCa) * 100}%` }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   )
 }

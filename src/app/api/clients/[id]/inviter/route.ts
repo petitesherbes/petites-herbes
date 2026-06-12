@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { EMAIL_FROM } from '@/lib/email'
 import { createClient } from '@supabase/supabase-js'
 import { Resend } from 'resend'
 
@@ -88,7 +89,7 @@ export async function POST(
   try {
     const resend = new Resend(process.env.RESEND_API_KEY)
     await resend.emails.send({
-      from: 'GAEC Les Petites Herbes <onboarding@resend.dev>',
+      from: EMAIL_FROM,
       to: [client.email],
       subject: '🌿 Votre boutique en ligne — GAEC Les Petites Herbes',
       html,

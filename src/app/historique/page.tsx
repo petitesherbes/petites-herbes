@@ -126,6 +126,22 @@ function SemisDetail({ semis, tapis, terreau, godets }: {
   godets: (SemisLigne & { espece: Espece })[]
 }) {
   const today = format(new Date(), 'yyyy-MM-dd')
+  const [recoltes, setRecoltes] = useState<Record<string, number | null>>(
+    () => Object.fromEntries(semis.semis_lignes.map(l => [l.id, l.recolte_reelle ?? null]))
+  )
+
+  async function saisirRecolte(ligne: SemisLigne & { espece: Espece }) {
+    const actuel = recoltes[ligne.id]
+    const saisie = prompt(
+      `Récolte réelle pour ${ligne.espece?.nom} (en grammes)${ligne.prod_estimee ? `\nEstimé : ${Number(ligne.prod_estimee).toFixed(0)}g` : ''}`,
+      actuel != null ? String(actuel) : ''
+    )
+    if (saisie === null) return
+    const valeur = saisie.trim() === '' ? null : Number(saisie.replace(',', '.'))
+    if (valeur !== null && (isNaN(valeur) || valeur < 0)) { alert('Valeur invalide'); return }
+    await supabase.from('semis_lignes').update({ recolte_reelle: valeur }).eq('id', ligne.id)
+    setRecoltes(prev => ({ ...prev, [ligne.id]: valeur }))
+  }
 
   async function renvoyerEmail() {
     await fetch('/api/email', {
@@ -208,6 +224,24 @@ function SemisDetail({ semis, tapis, terreau, godets }: {
                   {l.date_peremption && <span>Expire: {format(parseISO(l.date_peremption), 'd MMM', { locale: fr })}</span>}
                   {l.cout_total_ligne != null && <span>💶 {Number(l.cout_total_ligne).toFixed(2)}€</span>}
                 </div>
+                {(isDispos || isPerime) && (() => {
+                  const recolte = recoltes[l.id]
+                  const estime  = l.prod_estimee ? Number(l.prod_estimee) : null
+                  const pct     = recolte != null && estime ? Math.round((recolte / estime) * 100) : null
+                  return (
+                    <button onClick={() => saisirRecolte(l)}
+                      className={`mt-1.5 text-xs px-2 py-1 rounded-lg border font-medium
+                        ${recolte != null
+                          ? pct != null && pct >= 90 ? 'border-green-200 bg-green-50 text-green-700'
+                          : pct != null && pct >= 70 ? 'border-amber-200 bg-amber-50 text-amber-700'
+                          : 'border-red-200 bg-red-50 text-red-600'
+                          : 'border-gray-200 bg-gray-50 text-gray-500'}`}>
+                      {recolte != null
+                        ? `📥 Récolté : ${recolte.toFixed(0)}g${pct != null ? ` (${pct}% de l'estimé)` : ''}`
+                        : '📥 Saisir la récolte réelle'}
+                    </button>
+                  )
+                })()}
               </div>
             )
           })}
@@ -221,14 +255,18 @@ function SemisDetail({ semis, tapis, terreau, godets }: {
       {renderGroupe(tapis, 'TAPIS', '🟩')}
       {renderGroupe(terreau, 'TERREAU', '🟫')}
       {renderGroupe(godets, 'GODETS', '🟧')}
-      <div className="px-4 py-3 flex gap-2 border-t border-gray-100">
+      <div className="px-4 py-3 grid grid-cols-3 gap-2 border-t border-gray-100">
+        <a href={`/semis/${semis.id}/modifier`}
+          className="text-center text-sm py-2 rounded-lg border border-green-200 text-green-700 hover:bg-green-50 font-medium">
+          ✏️ Modifier
+        </a>
         <button onClick={sauvegarderTemplate}
-          className="flex-1 text-sm py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">
-          💾 Sauver template
+          className="text-sm py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">
+          💾 Template
         </button>
         <button onClick={renvoyerEmail}
-          className="flex-1 text-sm py-2 rounded-lg border border-blue-200 text-blue-600 hover:bg-blue-50">
-          📧 Renvoyer email
+          className="text-sm py-2 rounded-lg border border-blue-200 text-blue-600 hover:bg-blue-50">
+          📧 Email
         </button>
       </div>
     </div>

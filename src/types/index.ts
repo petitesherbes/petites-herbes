@@ -67,6 +67,7 @@ export interface SemisLigne {
   cout_contenant: number | null
   cout_terreau: number | null
   cout_total_ligne: number | null
+  recolte_reelle: number | null
   espece?: Espece
 }
 

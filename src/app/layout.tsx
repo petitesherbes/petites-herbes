@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import './globals.css'
 import BottomNav from '@/components/BottomNav'
 import PwaRegister from '@/components/PwaRegister'
+import ApercuChef from '@/components/ApercuChef'
 
 export const metadata: Metadata = {
   title: 'GAEC Les Petites Herbes',
@@ -23,11 +24,20 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="fr" className="h-full">
-      <body className="min-h-full flex flex-col bg-gray-50">
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&display=swap"
+          rel="stylesheet"
+        />
+      </head>
+      <body className="min-h-full flex flex-col bg-cream">
         <PwaRegister />
         <main className="flex-1 max-w-2xl mx-auto w-full pb-2">
           {children}
         </main>
+        <ApercuChef />
         <BottomNav />
       </body>
     </html>

@@ -127,6 +127,31 @@ function formatWaPhone(tel: string): string | null {
   return digits.length >= 8 ? digits : null
 }
 
+function buildWaMessageDiffusion(
+  jourLabel: string,
+  produits: { designation: string; bio: boolean; quantite_dispo: number | null }[],
+  messageLibre?: string
+): string {
+  const lignes = [
+    `Bonjour 👋`,
+    ``,
+    `Votre livraison du *${jourLabel}* approche !`,
+  ]
+  if (messageLibre) {
+    lignes.push(``, messageLibre)
+  }
+  if (produits.length > 0) {
+    lignes.push(``, `🛒 *Disponible cette semaine :*`)
+    for (const p of produits) {
+      const bio   = p.bio ? ' 🌿' : ''
+      const stock = p.quantite_dispo != null && p.quantite_dispo <= 3 ? ` ⚡${p.quantite_dispo} restant` : ''
+      lignes.push(`• ${p.designation}${bio}${stock}`)
+    }
+  }
+  lignes.push(``, `📱 Répondez à ce message pour passer votre commande ou consultez votre lien habituel.`)
+  return lignes.join('\n')
+}
+
 function buildWaMessage(
   clientNom: string,
   jourLabel: string,
@@ -154,94 +179,119 @@ function buildWaMessage(
   return lignes.join('\n')
 }
 
-// ─── Modal rappels ────────────────────────────────────────────
+// ─── Modal rappels (WhatsApp / SMS, avec suivi) ───────────────
+
+// Prochaine date de livraison pour un jour donné (ancre par semaine)
+const JOUR_IDX_RAPPEL: Record<string, number> = { mardi: 2, jeudi: 4, vendredi: 5 }
+function prochaineDateLivraison(jour: string): string {
+  const d = new Date()
+  const ecart = ((JOUR_IDX_RAPPEL[jour] ?? 2) - d.getDay() + 7) % 7
+  d.setDate(d.getDate() + ecart)
+  return d.toISOString().slice(0, 10)
+}
+
+type ClientRappel = { id: string; nom: string; email: string | null; telephone: string | null; order_token: string | null }
 
 function RappelsModal({ jour, onClose }: { jour: string; onClose: () => void }) {
-  const [clients, setClients] = useState<{ id: string; nom: string; email: string | null; telephone: string | null; order_token: string | null }[]>([])
+  const [clients, setClients] = useState<ClientRappel[]>([])
   const [produits, setProduits] = useState<{ designation: string; categorie: string; bio: boolean; quantite_dispo: number | null }[]>([])
   const [loadingClients, setLoadingClients] = useState(true)
   const [message, setMessage] = useState('')
-  const [canal, setCanal] = useState<'whatsapp' | 'email'>('whatsapp')
-  const [envoi, setEnvoi] = useState<'idle' | 'envoi' | 'ok' | 'erreur'>('idle')
-  const [result, setResult] = useState<{ envoyes: number; total: number; nb_produits?: number } | null>(null)
+  const [canal, setCanal] = useState<'whatsapp' | 'sms'>('whatsapp')
+  const [contactes, setContactes] = useState<Set<string>>(new Set())
   const [waCopie, setWaCopie] = useState<string | null>(null)
+  const [diffusionCopie, setDiffusionCopie] = useState(false)
   const jourLabel = jour.charAt(0).toUpperCase() + jour.slice(1)
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://petites-herbes.vercel.app'
+  const semaine = prochaineDateLivraison(jour)
 
   useEffect(() => {
-    fetch(`/api/rappels?jour=${jour}`)
-      .then(r => r.json())
-      .then(d => {
-        setClients(d.clients || [])
-        setProduits(d.produits || [])
-        setLoadingClients(false)
-      })
-  }, [jour])
+    async function charger() {
+      const [rappel, { data: suivi }] = await Promise.all([
+        fetch(`/api/rappels?jour=${jour}`).then(r => r.json()),
+        supabase.from('rappels_suivi').select('client_id')
+          .eq('jour_livraison', jour).eq('semaine', semaine),
+      ])
+      setClients(rappel.clients || [])
+      setProduits(rappel.produits || [])
+      setContactes(new Set((suivi || []).map((s: { client_id: string }) => s.client_id)))
+      setLoadingClients(false)
+    }
+    charger()
+  }, [jour, semaine])
 
-  async function envoyer() {
-    setEnvoi('envoi')
-    try {
-      const res = await fetch('/api/rappels', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jour, message: message.trim() || undefined }),
-      })
-      const data = await res.json()
-      if (res.ok) {
-        setResult({ envoyes: data.envoyes, total: data.total })
-        setEnvoi('ok')
-      } else {
-        alert(data.error || 'Erreur lors de l\'envoi')
-        setEnvoi('erreur')
-      }
-    } catch {
-      setEnvoi('erreur')
+  async function marquerContacte(clientId: string, viaCanal: 'whatsapp' | 'sms') {
+    setContactes(prev => new Set(prev).add(clientId))
+    await supabase.from('rappels_suivi').upsert(
+      { client_id: clientId, jour_livraison: jour, semaine, canal: viaCanal },
+      { onConflict: 'client_id,jour_livraison,semaine' }
+    )
+  }
+
+  async function basculerContacte(clientId: string) {
+    if (contactes.has(clientId)) {
+      setContactes(prev => { const n = new Set(prev); n.delete(clientId); return n })
+      await supabase.from('rappels_suivi').delete()
+        .eq('client_id', clientId).eq('jour_livraison', jour).eq('semaine', semaine)
+    } else {
+      await marquerContacte(clientId, canal)
     }
   }
 
-  const avecWa    = clients.filter(c => c.telephone && formatWaPhone(c.telephone))
-  const avecEmail = clients.filter(c => c.email)
+  const avecTel  = clients.filter(c => c.telephone && formatWaPhone(c.telephone))
+  const nbFaits  = clients.filter(c => contactes.has(c.id)).length
+  const restants = avecTel.filter(c => !contactes.has(c.id))
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-end" onClick={onClose}>
-      <div className="bg-white w-full max-w-2xl mx-auto rounded-t-2xl p-4 pb-10 space-y-4 max-h-[85vh] overflow-y-auto"
+      <div className="bg-white w-full max-w-2xl mx-auto rounded-t-2xl p-4 pb-10 space-y-4 max-h-[88vh] overflow-y-auto"
         onClick={e => e.stopPropagation()}>
 
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-bold">📨 Rappels {jourLabel}</h2>
+          <div>
+            <h2 className="text-lg font-bold">📨 Rappels {jourLabel}</h2>
+            <div className="text-xs text-gray-400">Livraison du {new Date(semaine + 'T12:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}</div>
+          </div>
           <button onClick={onClose} className="text-gray-400 text-2xl leading-none">×</button>
         </div>
 
-        {/* Choix canal */}
-        <div className="grid grid-cols-2 rounded-lg overflow-hidden border border-gray-200">
-          <button onClick={() => setCanal('whatsapp')}
-            className={`py-2 text-sm font-semibold transition-colors
-              ${canal === 'whatsapp' ? 'bg-green-700 text-white' : 'bg-white text-gray-600'}`}>
-            💬 WhatsApp
-          </button>
-          <button onClick={() => setCanal('email')}
-            className={`py-2 text-sm font-semibold transition-colors
-              ${canal === 'email' ? 'bg-green-700 text-white' : 'bg-white text-gray-600'}`}>
-            ✉️ Email
-          </button>
-        </div>
-
-        {envoi === 'ok' && result ? (
-          <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-center space-y-1">
-            <div className="text-2xl">✅</div>
-            <div className="font-semibold text-green-800">
-              {result.envoyes} rappel{result.envoyes > 1 ? 's' : ''} envoyé{result.envoyes > 1 ? 's' : ''} sur {result.total}
-            </div>
-            {result.nb_produits != null && (
-              <div className="text-sm text-green-700">{result.nb_produits} produits en aperçu</div>
-            )}
-            <button onClick={onClose} className="text-sm text-green-700 underline mt-2">Fermer</button>
-          </div>
-        ) : loadingClients ? (
+        {loadingClients ? (
           <div className="text-sm text-gray-400 text-center py-4">Chargement…</div>
         ) : (
           <>
-            {/* Message personnalisé (commun aux deux canaux) */}
+            {/* Suivi global */}
+            {clients.length > 0 && (
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="bg-gray-50 rounded-xl py-2">
+                  <div className="text-lg font-bold text-gray-700">{avecTel.length}</div>
+                  <div className="text-[10px] text-gray-400 uppercase tracking-wide">à contacter</div>
+                </div>
+                <div className="bg-green-50 rounded-xl py-2">
+                  <div className="text-lg font-bold text-green-700">{nbFaits}</div>
+                  <div className="text-[10px] text-green-600 uppercase tracking-wide">contactés</div>
+                </div>
+                <div className="bg-amber-50 rounded-xl py-2">
+                  <div className="text-lg font-bold text-amber-600">{restants.length}</div>
+                  <div className="text-[10px] text-amber-500 uppercase tracking-wide">restants</div>
+                </div>
+              </div>
+            )}
+
+            {/* Choix canal */}
+            <div className="grid grid-cols-2 rounded-lg overflow-hidden border border-gray-200">
+              <button onClick={() => setCanal('whatsapp')}
+                className={`py-2 text-sm font-semibold transition-colors
+                  ${canal === 'whatsapp' ? 'bg-green-700 text-white' : 'bg-white text-gray-600'}`}>
+                💬 WhatsApp
+              </button>
+              <button onClick={() => setCanal('sms')}
+                className={`py-2 text-sm font-semibold transition-colors
+                  ${canal === 'sms' ? 'bg-green-700 text-white' : 'bg-white text-gray-600'}`}>
+                💬 SMS
+              </button>
+            </div>
+
+            {/* Message du moment */}
             <div>
               <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide block mb-1.5">
                 Message du moment (optionnel)
@@ -252,7 +302,7 @@ function RappelsModal({ jour, onClose }: { jour: string; onClose: () => void }) 
                 className="w-full border border-gray-200 rounded-lg p-2.5 text-sm resize-none focus:outline-none focus:border-green-400" />
             </div>
 
-            {/* Produits qui seront inclus */}
+            {/* Produits inclus */}
             {produits.length > 0 && (
               <div className="bg-green-50 border border-green-100 rounded-lg p-2.5 flex flex-wrap gap-1.5">
                 {produits.map((p, i) => (
@@ -267,71 +317,98 @@ function RappelsModal({ jour, onClose }: { jour: string; onClose: () => void }) 
               <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-700">
                 Aucun client assigné au créneau {jourLabel} — configurez les créneaux dans la fiche client.
               </div>
-            ) : canal === 'whatsapp' ? (
-              /* ── Mode WhatsApp : un bouton par client ── */
+            ) : (
               <div className="space-y-2">
-                <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
-                  {avecWa.length} client{avecWa.length > 1 ? 's' : ''} avec numéro WhatsApp
+                <div className="flex items-center justify-between">
+                  <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                    {avecTel.length} client{avecTel.length > 1 ? 's' : ''} joignable{avecTel.length > 1 ? 's' : ''}
+                  </div>
+                  {nbFaits > 0 && (
+                    <button
+                      onClick={async () => {
+                        setContactes(new Set())
+                        await supabase.from('rappels_suivi').delete()
+                          .eq('jour_livraison', jour).eq('semaine', semaine)
+                      }}
+                      className="text-xs text-gray-400 underline">Réinitialiser</button>
+                  )}
                 </div>
+
                 {clients.map(c => {
-                  const lien   = c.order_token ? `${baseUrl}/commander/${c.order_token}` : null
-                  const phone  = c.telephone ? formatWaPhone(c.telephone) : null
-                  const waText = lien
-                    ? encodeURIComponent(buildWaMessage(c.nom, jourLabel, lien, produits, message.trim() || undefined))
-                    : null
-                  const waUrl  = phone && waText ? `https://wa.me/${phone}?text=${waText}` : null
+                  const lien  = c.order_token ? `${baseUrl}/commander/${c.order_token}` : null
+                  const phone = c.telephone ? formatWaPhone(c.telephone) : null
+                  const fait  = contactes.has(c.id)
+                  const texteWa  = lien ? buildWaMessage(c.nom, jourLabel, lien, produits, message.trim() || undefined) : ''
+                  const texteSms = texteWa.replace(/\*/g, '')
+                  const waUrl  = phone && lien ? `https://wa.me/${phone}?text=${encodeURIComponent(texteWa)}` : null
+                  const smsUrl = phone && lien ? `sms:+${phone}?body=${encodeURIComponent(texteSms)}` : null
+                  const lienAction = canal === 'whatsapp' ? waUrl : smsUrl
 
                   return (
-                    <div key={c.id} className="flex items-center gap-2 bg-gray-50 rounded-xl p-2.5">
+                    <div key={c.id}
+                      className={`flex items-center gap-2 rounded-xl p-2.5 border transition-colors
+                        ${fait ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-transparent'}`}>
+                      {/* Pastille statut cliquable */}
+                      <button onClick={() => basculerContacte(c.id)}
+                        className={`shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-sm font-bold border-2
+                          ${fait ? 'bg-green-600 border-green-600 text-white' : 'bg-white border-gray-300 text-transparent'}`}
+                        aria-label="Marquer contacté">✓</button>
+
                       <div className="flex-1 min-w-0">
-                        <div className="font-semibold text-sm truncate">{c.nom}</div>
+                        <div className={`font-semibold text-sm truncate ${fait ? 'text-green-800' : ''}`}>{c.nom}</div>
                         <div className="text-xs text-gray-400 truncate">{c.telephone || 'Pas de numéro'}</div>
                       </div>
-                      {waUrl ? (
-                        <a href={waUrl} target="_blank" rel="noopener noreferrer"
-                          className="shrink-0 bg-[#25D366] text-white text-xs font-bold px-3 py-2 rounded-xl">
-                          WhatsApp
+
+                      {lienAction ? (
+                        <a href={lienAction} target="_blank" rel="noopener noreferrer"
+                          onClick={() => marquerContacte(c.id, canal)}
+                          className={`shrink-0 text-white text-xs font-bold px-3 py-2 rounded-xl
+                            ${canal === 'whatsapp' ? 'bg-[#25D366]' : 'bg-blue-500'}`}>
+                          {canal === 'whatsapp' ? 'WhatsApp' : 'SMS'}
                         </a>
-                      ) : (
+                      ) : lien ? (
                         <button
-                          onClick={() => {
-                            if (!lien) return
-                            const txt = buildWaMessage(c.nom, jourLabel, lien, produits, message.trim() || undefined)
-                            navigator.clipboard.writeText(txt)
-                            setWaCopie(c.id)
-                            setTimeout(() => setWaCopie(null), 2000)
-                          }}
+                          onClick={() => { navigator.clipboard.writeText(texteWa); setWaCopie(c.id); setTimeout(() => setWaCopie(null), 2000) }}
                           className="shrink-0 bg-gray-200 text-gray-600 text-xs font-bold px-3 py-2 rounded-xl">
-                          {waCopie === c.id ? '✓ Copié' : 'Copier msg'}
+                          {waCopie === c.id ? '✓ Copié' : 'Copier'}
                         </button>
+                      ) : (
+                        <span className="shrink-0 text-xs text-gray-300">—</span>
                       )}
                     </div>
                   )
                 })}
                 <p className="text-xs text-gray-400 pt-1">
-                  Chaque bouton ouvre WhatsApp avec le message pré-rédigé — vous n&apos;avez plus qu&apos;à envoyer.
+                  Chaque bouton ouvre {canal === 'whatsapp' ? 'WhatsApp' : 'l\'app SMS'} avec le message pré-rédigé et coche le client. La pastille verte se synchronise entre votre téléphone et celui de Lucas.
                 </p>
-              </div>
-            ) : (
-              /* ── Mode Email ── */
-              <div className="space-y-3">
-                <div className="space-y-1">
-                  <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
-                    {avecEmail.length} client{avecEmail.length > 1 ? 's' : ''} avec email
+
+                {/* ── Liste de diffusion WhatsApp ── */}
+                <div className="mt-3 bg-[#f0fdf4] border border-green-200 rounded-xl p-3 space-y-2">
+                  <div className="text-sm font-semibold text-green-800">📢 Envoi groupé (liste de diffusion)</div>
+                  <p className="text-xs text-gray-600 leading-relaxed">
+                    Une <strong>liste de diffusion</strong> WhatsApp envoie le même message à tous vos clients
+                    d&apos;un coup, en privé — chacun le reçoit individuellement, sans groupe visible.
+                  </p>
+                  <p className="text-xs text-gray-500 leading-relaxed">
+                    ⚠️ <em>Condition :</em> chaque contact doit avoir votre numéro enregistré, sinon il ne recevra pas le message.
+                  </p>
+                  <div className="text-xs text-gray-600 space-y-0.5">
+                    <div className="font-semibold">Comment faire :</div>
+                    <div>1. WhatsApp → ✏️ → <em>Nouvelle liste de diffusion</em></div>
+                    <div>2. Ajoutez vos clients du {jourLabel}</div>
+                    <div>3. Collez le message ci-dessous et envoyez</div>
                   </div>
-                  {clients.map(c => (
-                    <div key={c.id} className="flex items-center gap-2 text-sm">
-                      {c.email
-                        ? <><span className="text-green-600 text-xs">✓</span><span className="font-medium">{c.nom}</span><span className="text-gray-400 text-xs truncate">{c.email}</span></>
-                        : <><span className="text-gray-300 text-xs">–</span><span className="text-gray-400">{c.nom}</span><span className="text-xs text-amber-500">pas d&apos;email</span></>
-                      }
-                    </div>
-                  ))}
+                  <button
+                    onClick={() => {
+                      const txt = buildWaMessageDiffusion(jourLabel, produits, message.trim() || undefined)
+                      navigator.clipboard.writeText(txt)
+                      setDiffusionCopie(true)
+                      setTimeout(() => setDiffusionCopie(false), 2500)
+                    }}
+                    className="w-full bg-green-700 text-white text-sm font-bold py-2.5 rounded-xl">
+                    {diffusionCopie ? '✓ Message copié !' : '📋 Copier le message groupé'}
+                  </button>
                 </div>
-                <button onClick={envoyer} disabled={avecEmail.length === 0 || envoi === 'envoi'}
-                  className="w-full py-3 rounded-xl bg-green-700 text-white font-bold text-sm disabled:opacity-40">
-                  {envoi === 'envoi' ? 'Envoi en cours…' : `Envoyer à ${avecEmail.length} client${avecEmail.length > 1 ? 's' : ''}`}
-                </button>
               </div>
             )}
           </>
@@ -867,6 +944,10 @@ function ClientsList({ clients, onRefresh }: { clients: Client[]; onRefresh: () 
                     className="shrink-0 bg-gray-100 text-gray-700 text-xs px-3 py-1.5 rounded-lg font-semibold">
                     Copier
                   </button>
+                  <a href={lien} target="_blank" rel="noopener noreferrer"
+                    className="shrink-0 bg-green-50 text-green-700 text-xs px-3 py-1.5 rounded-lg font-semibold border border-green-200">
+                    👁 Voir
+                  </a>
                 </div>
                 {c.email && (
                   <InviterButton clientId={c.id} clientNom={c.nom} email={c.email} />

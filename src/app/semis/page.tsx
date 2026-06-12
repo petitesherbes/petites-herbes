@@ -31,20 +31,39 @@ export default function NouveauSemisPage() {
   const [saveAsTemplate, setSaveAsTemplate] = useState(false)
   const [nouveauTemplateName, setNouveauTemplateName] = useState('')
   const [avertissements, setAvertissements] = useState<string[]>([])
+  const [demande, setDemande] = useState<{ designation: string; total: number; nbClients: number }[]>([])
+  const [demandeOuverte, setDemandeOuverte] = useState(false)
 
   useEffect(() => { chargerDonnees() }, [])
 
   async function chargerDonnees() {
-    const [{ data: t }, { data: e }, { data: p }, { data: c }] = await Promise.all([
+    const [{ data: t }, { data: e }, { data: p }, { data: c }, { data: rec }] = await Promise.all([
       supabase.from('templates').select('*, templates_lignes(*, espece:especes(*))').order('nom'),
       supabase.from('especes').select('*').eq('actif', true).order('section,nom'),
       supabase.from('parametres_production').select('*').single(),
       supabase.from('contenants').select('*').eq('actif', true),
+      supabase.from('commandes_recurrentes').select('designation, quantite, client_id').eq('actif', true),
     ])
     if (t) setTemplates(t)
     if (e) setEspeces(e)
     if (p) setParams(p)
     if (c) setContenants(c)
+
+    // Agréger la demande des commandes habituelles par produit
+    if (rec && rec.length > 0) {
+      const parProduit = new Map<string, { total: number; clients: Set<string> }>()
+      for (const l of rec) {
+        const entry = parProduit.get(l.designation) || { total: 0, clients: new Set<string>() }
+        entry.total += Number(l.quantite)
+        entry.clients.add(l.client_id)
+        parProduit.set(l.designation, entry)
+      }
+      setDemande(
+        Array.from(parProduit.entries())
+          .map(([designation, v]) => ({ designation, total: v.total, nbClients: v.clients.size }))
+          .sort((a, b) => b.total - a.total)
+      )
+    }
   }
 
   function appliquerTemplate(templateId: string) {
@@ -251,6 +270,33 @@ export default function NouveauSemisPage() {
             {templateChoisi && <div className="text-xs text-gray-500">{templateChoisi}</div>}
           </div>
         </div>
+
+        {/* Demande clients (commandes habituelles) */}
+        {demande.length > 0 && (
+          <div className="bg-indigo-50 border border-indigo-200 rounded-xl overflow-hidden">
+            <button onClick={() => setDemandeOuverte(o => !o)}
+              className="w-full px-3 py-2.5 flex justify-between items-center text-sm font-semibold text-indigo-800">
+              <span>🛒 Demande clients ({demande.length} produits commandés régulièrement)</span>
+              <span className="text-indigo-400">{demandeOuverte ? '▲' : '▼'}</span>
+            </button>
+            {demandeOuverte && (
+              <div className="divide-y divide-indigo-100 border-t border-indigo-100">
+                {demande.map(d => (
+                  <div key={d.designation} className="px-3 py-2 flex justify-between items-center text-sm bg-white">
+                    <span className="text-gray-700">{d.designation}</span>
+                    <span className="flex items-center gap-2">
+                      <span className="text-xs text-gray-400">{d.nbClients} client{d.nbClients > 1 ? 's' : ''}</span>
+                      <span className="font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full text-xs">× {d.total}/sem.</span>
+                    </span>
+                  </div>
+                ))}
+                <div className="px-3 py-2 text-[11px] text-indigo-400 bg-indigo-50">
+                  Totaux hebdomadaires des commandes habituelles enregistrées par vos clients — à couvrir par vos semis.
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Bandeau récap sticky */}
         <div className="sticky top-0 z-10 bg-green-900 text-white rounded-xl p-3 text-sm shadow-lg">
