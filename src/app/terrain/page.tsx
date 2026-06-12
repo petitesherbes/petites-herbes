@@ -14,7 +14,8 @@ type Zone = {
 }
 type Planche = {
   id: string; zone_id: string; nom: string
-  longueur_m: number | null; largeur_m: number | null; notes: string | null; ordre: number
+  longueur_m: number | null; largeur_m: number | null
+  plants_par_m2: number | null; notes: string | null; ordre: number
 }
 type EntreeCahier = {
   id: string; zone_id: string | null; date_operation: string
@@ -46,7 +47,7 @@ type ZoneTacheCat      = { zone_id: string; catalogue_id: string }
 
 const TYPES_OP_CHAMP = [
   { val: 'semis',       label: 'Semer',      icon: '🌱', color: 'bg-green-100 border-green-400 text-green-800' },
-  { val: 'recolte',     label: 'Récolter',   icon: '✂️',  color: 'bg-emerald-100 border-emerald-400 text-emerald-800' },
+  { val: 'recolte',     label: 'Recolter',   icon: '✂️',  color: 'bg-emerald-100 border-emerald-400 text-emerald-800' },
   { val: 'arrosage',    label: 'Arroser',    icon: '💧', color: 'bg-blue-100 border-blue-400 text-blue-800' },
   { val: 'traitement',  label: 'Traitement', icon: '🌿', color: 'bg-amber-100 border-amber-400 text-amber-800' },
   { val: 'observation', label: 'Observer',   icon: '👁', color: 'bg-purple-100 border-purple-400 text-purple-800' },
@@ -55,24 +56,21 @@ const TYPES_OP_CHAMP = [
 ]
 
 const TYPES_OP_SERRE = [
-  { val: 'semis',       label: 'Semer',       icon: '🌱', color: 'bg-green-100 border-green-400 text-green-800' },
-  { val: 'repiquage',   label: 'Repiquer',    icon: '🪴', color: 'bg-lime-100 border-lime-400 text-lime-800' },
-  { val: 'arrosage',    label: 'Arroser',     icon: '💧', color: 'bg-blue-100 border-blue-400 text-blue-800' },
-  { val: 'traitement',  label: 'Traitement',  icon: '🌿', color: 'bg-amber-100 border-amber-400 text-amber-800' },
+  { val: 'semis',       label: 'Semer',        icon: '🌱', color: 'bg-green-100 border-green-400 text-green-800' },
+  { val: 'repiquage',   label: 'Repiquer',     icon: '🪴', color: 'bg-lime-100 border-lime-400 text-lime-800' },
+  { val: 'arrosage',    label: 'Arroser',      icon: '💧', color: 'bg-blue-100 border-blue-400 text-blue-800' },
+  { val: 'traitement',  label: 'Traitement',   icon: '🌿', color: 'bg-amber-100 border-amber-400 text-amber-800' },
   { val: 'recolte',     label: 'Sortir plants',icon: '📦', color: 'bg-emerald-100 border-emerald-400 text-emerald-800' },
-  { val: 'observation', label: 'Observer',    icon: '👁', color: 'bg-purple-100 border-purple-400 text-purple-800' },
-  { val: 'autre',       label: 'Autre',       icon: '📝', color: 'bg-gray-100 border-gray-300 text-gray-700' },
+  { val: 'observation', label: 'Observer',     icon: '👁', color: 'bg-purple-100 border-purple-400 text-purple-800' },
+  { val: 'autre',       label: 'Autre',        icon: '📝', color: 'bg-gray-100 border-gray-300 text-gray-700' },
 ]
 
-const TYPES_PRODUIT = ['purin','engrais','fongicide','insecticide','autre']
-const CATS_SERRE    = ['plante','aromatique','legume','fleur','autre']
-
 const RAISONS_PERTE = [
-  { val: 'germination_ratee', label: 'Germination ratée',  icon: '🫘' },
+  { val: 'germination_ratee', label: 'Germination ratee',  icon: '🫘' },
   { val: 'pourriture',        label: 'Pourriture',         icon: '🍂' },
   { val: 'surproduction',     label: 'Surproduction',      icon: '📦' },
   { val: 'invendu',           label: 'Invendu',            icon: '🏷️' },
-  { val: 'meteo',             label: 'Météo',              icon: '⛈️' },
+  { val: 'meteo',             label: 'Meteo',              icon: '⛈️' },
   { val: 'autre',             label: 'Autre',              icon: '❓' },
 ]
 
@@ -96,7 +94,7 @@ function tacheEstCompleteeAujourdHui(t: Tache): boolean {
 
 function labelDate(dateStr: string): string {
   const d = parseISO(dateStr)
-  if (isToday(d)) return 'Aujourd\'hui'
+  if (isToday(d)) return "Aujourd'hui"
   if (isTomorrow(d)) return 'Demain'
   return format(d, 'EEE d MMM', { locale: fr })
 }
@@ -128,7 +126,6 @@ function Stepper({ value, onChange, step = 1, min = 0 }: {
 }
 
 // ─── ListeAvecAjout ───────────────────────────────────────────────────────────
-// Sélecteur avec recherche + bouton "Ajouter" pour sauvegarder de nouveaux items
 
 function ListeAvecAjout<T extends { id: string; nom: string }>({ items, valeur, onChange, placeholder, onAjouter, grouper }: {
   items: T[]
@@ -144,12 +141,10 @@ function ListeAvecAjout<T extends { id: string; nom: string }>({ items, valeur, 
   const [nouvelleCategorie, setNouvelleCategorie] = useState('')
   const [saving, setSaving]       = useState(false)
 
-  const filtrés = items.filter(i => i.nom.toLowerCase().includes(recherche.toLowerCase()))
-
-  // Grouper par catégorie si besoin
+  const filtres = items.filter(i => i.nom.toLowerCase().includes(recherche.toLowerCase()))
   const groupes: Record<string, T[]> = {}
   if (grouper) {
-    for (const item of filtrés) {
+    for (const item of filtres) {
       const g = grouper(item)
       if (!groupes[g]) groupes[g] = []
       groupes[g].push(item)
@@ -167,18 +162,15 @@ function ListeAvecAjout<T extends { id: string; nom: string }>({ items, valeur, 
   return (
     <div className="space-y-2">
       <input value={recherche} onChange={e => setRecherche(e.target.value)}
-        placeholder={placeholder || 'Rechercher…'}
+        placeholder={placeholder || 'Rechercher...'}
         className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-green-400"
       />
-
       <div className="max-h-52 overflow-y-auto space-y-1">
-        {/* Sans sélection */}
         <button onClick={() => onChange('')}
           className={`w-full text-left px-3 py-2 rounded-lg text-sm border transition-colors
             ${valeur === '' ? 'bg-gray-200 border-gray-300 font-semibold' : 'bg-gray-50 border-gray-100 text-gray-500'}`}>
           Aucun
         </button>
-
         {grouper && Object.keys(groupes).length > 0
           ? Object.entries(groupes).map(([groupe, groupItems]) => (
               <div key={groupe}>
@@ -192,7 +184,7 @@ function ListeAvecAjout<T extends { id: string; nom: string }>({ items, valeur, 
                 ))}
               </div>
             ))
-          : filtrés.map(i => (
+          : filtres.map(i => (
               <button key={i.id} onClick={() => onChange(i.id)}
                 className={`w-full text-left px-3 py-2.5 rounded-lg text-sm border transition-colors font-medium
                   ${valeur === i.id ? 'bg-green-700 text-white border-green-700' : 'bg-white border-gray-100 text-gray-700 active:bg-green-50'}`}>
@@ -200,29 +192,24 @@ function ListeAvecAjout<T extends { id: string; nom: string }>({ items, valeur, 
               </button>
             ))
         }
-
-        {filtrés.length === 0 && !ajout && (
-          <div className="text-center text-xs text-gray-400 py-3">Aucun résultat</div>
+        {filtres.length === 0 && !ajout && (
+          <div className="text-center text-xs text-gray-400 py-3">Aucun resultat</div>
         )}
       </div>
-
-      {/* Ajout inline */}
       {ajout ? (
         <div className="bg-green-50 border border-green-200 rounded-xl p-3 space-y-2">
           <input value={nouveauNom} onChange={e => setNouveauNom(e.target.value)}
-            placeholder="Nom…"
+            placeholder="Nom..."
             className="w-full border border-green-300 rounded-lg px-3 py-2 text-sm focus:outline-none"
           />
-          {nouvelleCategorie !== undefined && (
-            <input value={nouvelleCategorie} onChange={e => setNouvelleCategorie(e.target.value)}
-              placeholder="Catégorie (ex: aromatique, engrais…)"
-              className="w-full border border-green-300 rounded-lg px-3 py-2 text-sm focus:outline-none"
-            />
-          )}
+          <input value={nouvelleCategorie} onChange={e => setNouvelleCategorie(e.target.value)}
+            placeholder="Categorie (ex: aromatique, engrais...)"
+            className="w-full border border-green-300 rounded-lg px-3 py-2 text-sm focus:outline-none"
+          />
           <div className="flex gap-2">
             <button onClick={sauvegarder} disabled={saving || !nouveauNom.trim()}
               className="flex-1 bg-green-700 text-white py-2 rounded-lg text-sm font-bold active:scale-95 disabled:opacity-50">
-              {saving ? '…' : '✓ Sauvegarder'}
+              {saving ? '...' : 'Sauvegarder'}
             </button>
             <button onClick={() => { setAjout(false); setNouveauNom('') }}
               className="px-3 py-2 text-gray-500 text-sm">Annuler</button>
@@ -231,7 +218,7 @@ function ListeAvecAjout<T extends { id: string; nom: string }>({ items, valeur, 
       ) : (
         <button onClick={() => setAjout(true)}
           className="w-full text-center text-sm text-green-700 font-semibold py-2 border border-dashed border-green-300 rounded-xl active:bg-green-50">
-          + Ajouter à cette liste
+          + Ajouter a cette liste
         </button>
       )}
     </div>
@@ -248,7 +235,7 @@ export default function TerrainPage() {
   const [taskTitre, setTaskTitre]       = useState('')
   const [taskDate, setTaskDate]         = useState(format(new Date(), 'yyyy-MM-dd'))
   const [taskPrio, setTaskPrio]         = useState('normale')
-  const [taskZoneId, setTaskZoneId]     = useState('')
+  const [taskZoneIds, setTaskZoneIds]   = useState<string[]>([])
   const [taskSaving, setTaskSaving]     = useState(false)
   const [zones, setZones]               = useState<Zone[]>([])
   const [planches, setPlanches]         = useState<Planche[]>([])
@@ -299,16 +286,20 @@ export default function TerrainPage() {
     if (zt)   setZoneTaches(zt)
   }
 
+  // Cree une tache par zone selectionnee (ou une sans zone si aucune)
   async function sauvegarderTaskRapide() {
     if (!taskTitre.trim()) return
     setTaskSaving(true)
-    await supabase.from('taches').insert({
-      titre: taskTitre.trim(), type: 'ponctuelle',
-      date_echeance: taskDate, priorite: taskPrio,
-      zone_id: taskZoneId || null,
-    })
+    const zids = taskZoneIds.length > 0 ? taskZoneIds : [null]
+    await Promise.all(zids.map(zid =>
+      supabase.from('taches').insert({
+        titre: taskTitre.trim(), type: 'ponctuelle',
+        date_echeance: taskDate, priorite: taskPrio,
+        zone_id: zid,
+      })
+    ))
     setTaskSaving(false); setTaskRapide(false)
-    setTaskTitre(''); setTaskPrio('normale'); setTaskZoneId('')
+    setTaskTitre(''); setTaskPrio('normale'); setTaskZoneIds([])
     setTaskDate(format(new Date(), 'yyyy-MM-dd'))
     charger()
   }
@@ -323,6 +314,10 @@ export default function TerrainPage() {
     await supabase.from('produits_traitement').insert({ nom, type: type || 'autre' })
     const { data } = await supabase.from('produits_traitement').select('*').eq('actif', true).order('type,nom')
     if (data) setProduits(data)
+  }
+
+  function toggleTaskZone(zid: string) {
+    setTaskZoneIds(prev => prev.includes(zid) ? prev.filter(x => x !== zid) : [...prev, zid])
   }
 
   const tabs: { id: Tab; icon: string; label: string }[] = [
@@ -343,55 +338,69 @@ export default function TerrainPage() {
           </div>
           <button onClick={() => setTaskRapide(true)}
             className="bg-green-500 text-white font-bold text-sm px-4 py-2.5 rounded-xl shadow-md mt-1 active:scale-95 transition-transform">
-            + Tâche
+            + Tache
           </button>
         </div>
       </div>
 
-      {/* ── Modal tâche rapide ── */}
+      {/* Modal tache rapide */}
       {taskRapide && (() => {
-        const chips = taskZoneId
-          ? catalogueTaches.filter(c => zoneTaches.some(zt => zt.zone_id === taskZoneId && zt.catalogue_id === c.id))
+        const chips = taskZoneIds.length === 1
+          ? catalogueTaches.filter(c => zoneTaches.some(zt => zt.zone_id === taskZoneIds[0] && zt.catalogue_id === c.id))
           : catalogueTaches.slice(0, 12)
         return (
           <div className="fixed inset-0 bg-black/50 z-50 flex items-end" onClick={() => setTaskRapide(false)}>
             <div className="bg-white w-full max-w-2xl mx-auto rounded-t-2xl p-5 space-y-4 pb-10 max-h-[90vh] overflow-y-auto"
               onClick={e => e.stopPropagation()}>
               <div className="flex items-center justify-between">
-                <h2 className="font-bold text-gray-800 text-lg">✅ Tâche rapide</h2>
-                <button onClick={() => setTaskRapide(false)} className="text-gray-400 text-2xl leading-none">×</button>
+                <h2 className="font-bold text-gray-800 text-lg">✅ Tache rapide</h2>
+                <button onClick={() => setTaskRapide(false)} className="text-gray-400 text-2xl leading-none">x</button>
               </div>
 
-              {/* Zone (optionnel) */}
+              {/* Zone multi-select */}
               <div className="space-y-1.5">
-                <div className="text-xs font-semibold text-gray-500">Zone (optionnel)</div>
+                <div className="text-xs font-semibold text-gray-500">
+                  Zone(s) — {taskZoneIds.length === 0 ? 'aucune' : `${taskZoneIds.length} selectionnee${taskZoneIds.length > 1 ? 's' : ''}`}
+                </div>
                 <div className="flex flex-wrap gap-1.5">
-                  <button onClick={() => setTaskZoneId('')}
-                    className={`px-3 py-1.5 rounded-full text-xs font-semibold border active:scale-95 transition-transform
-                      ${!taskZoneId ? 'bg-green-700 text-white border-green-700' : 'bg-gray-50 text-gray-500 border-gray-200'}`}>
-                    Toutes
-                  </button>
-                  {zones.map(z => (
-                    <button key={z.id} onClick={() => setTaskZoneId(z.id)}
+                  {zones.filter(z => z.type !== 'serre').map(z => (
+                    <button key={z.id} onClick={() => toggleTaskZone(z.id)}
                       className={`px-3 py-1.5 rounded-full text-xs font-semibold border active:scale-95 transition-transform
-                        ${taskZoneId === z.id ? 'bg-green-700 text-white border-green-700' : 'bg-gray-50 text-gray-500 border-gray-200'}`}>
-                      {z.type === 'serre' ? '🪴' : '📍'} {z.nom}
+                        ${taskZoneIds.includes(z.id) ? 'bg-green-700 text-white border-green-700' : 'bg-gray-50 text-gray-500 border-gray-200'}`}>
+                      📍 {z.nom}
                     </button>
                   ))}
+                  {zones.filter(z => z.type === 'serre').map(z => (
+                    <button key={z.id} onClick={() => toggleTaskZone(z.id)}
+                      className={`px-3 py-1.5 rounded-full text-xs font-semibold border active:scale-95 transition-transform
+                        ${taskZoneIds.includes(z.id) ? 'bg-amber-600 text-white border-amber-600' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+                      🪴 {z.nom}
+                    </button>
+                  ))}
+                  {taskZoneIds.length > 0 && (
+                    <button onClick={() => setTaskZoneIds([])}
+                      className="px-3 py-1.5 rounded-full text-xs font-semibold border border-gray-200 text-gray-400 active:scale-95">
+                      x Effacer
+                    </button>
+                  )}
                 </div>
+                {taskZoneIds.length > 1 && (
+                  <div className="text-xs text-green-700 bg-green-50 px-3 py-1.5 rounded-lg">
+                    {taskZoneIds.length} taches seront creees, une par zone
+                  </div>
+                )}
               </div>
 
               {/* Suggestions catalogue */}
               {chips.length > 0 && (
                 <div className="space-y-1.5">
-                  <div className="text-xs font-semibold text-gray-500">
-                    ⚡ Suggestions{taskZoneId ? ` — ${zones.find(z => z.id === taskZoneId)?.nom}` : ''}
+                  <div className="text-xs font-semibold text-gray-400">
+                    Suggestions{taskZoneIds.length === 1 ? ` - ${zones.find(z => z.id === taskZoneIds[0])?.nom}` : ''}
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     {chips.map(c => (
-                      <button key={c.id}
-                        onClick={() => setTaskTitre(c.titre)}
-                        className={`px-3 py-1.5 rounded-full text-xs font-semibold border active:scale-95 transition-transform
+                      <button key={c.id} onClick={() => setTaskTitre(c.titre)}
+                        className={`px-2.5 py-1 rounded-full text-xs font-semibold border active:scale-95 transition-transform
                           ${taskTitre === c.titre
                             ? 'bg-green-700 text-white border-green-700'
                             : 'bg-green-50 text-green-800 border-green-200'}`}>
@@ -428,7 +437,7 @@ export default function TerrainPage() {
               </div>
 
               <div className="space-y-2">
-                <div className="text-xs font-semibold text-gray-500">Priorité</div>
+                <div className="text-xs font-semibold text-gray-500">Priorite</div>
                 <div className="flex gap-2">
                   {(['basse','normale','haute'] as const).map(p => (
                     <button key={p} onClick={() => setTaskPrio(p)}
@@ -442,7 +451,9 @@ export default function TerrainPage() {
 
               <button onClick={sauvegarderTaskRapide} disabled={taskSaving || !taskTitre.trim()}
                 className="w-full bg-green-700 text-white py-4 rounded-xl font-bold text-lg active:scale-95 transition-transform disabled:opacity-50">
-                {taskSaving ? 'Enregistrement…' : '✅ Enregistrer la tâche'}
+                {taskSaving ? 'Enregistrement...' : taskZoneIds.length > 1
+                  ? `Creer ${taskZoneIds.length} taches`
+                  : 'Enregistrer la tache'}
               </button>
             </div>
           </div>
@@ -514,12 +525,11 @@ function CahierTab({ zones, especes, especesSerre, produits, entrees, onSaved, o
 
   const typesOp    = estSerre ? TYPES_OP_SERRE : TYPES_OP_CHAMP
   const unitesDisp = estSerre
-    ? ['plants', 'bottes', 'godets', 'pièces']
+    ? ['plants', 'bottes', 'godets', 'pieces']
     : estTraitement
       ? ['L', 'mL', 'kg', 'g', 'doses']
-      : ['barquettes', 'kg', 'plateaux', 'L', 'pièces']
+      : ['barquettes', 'kg', 'plateaux', 'L', 'pieces']
 
-  // Réinitialiser l'unité quand le contexte change
   useEffect(() => {
     if (estSerre) setUnite('plants')
     else if (estTraitement) setUnite('L')
@@ -549,9 +559,10 @@ function CahierTab({ zones, especes, especesSerre, produits, entrees, onSaved, o
 
   const typeInfo = typesOp.find(t => t.val === typeOp)
   const zoneInfo = zoneSelectionnee
-
-  // Produire une description lisible du produit de traitement sélectionné
   const produitSelectionne = produits.find(p => p.id === produitId)
+
+  const zonesChamp = zones.filter(z => z.type !== 'serre')
+  const zonesSerre = zones.filter(z => z.type === 'serre')
 
   return (
     <div className="space-y-4">
@@ -566,12 +577,11 @@ function CahierTab({ zones, especes, especesSerre, produits, entrees, onSaved, o
         </div>
 
         <div className="p-4 space-y-4">
-          {/* Fil d'Ariane */}
           {etape > 1 && (
             <div className="flex flex-wrap gap-1.5 text-xs">
               {zoneInfo && (
                 <span className={`px-2 py-1 rounded-full font-semibold ${estSerre ? 'bg-amber-100 text-amber-800' : 'bg-green-100 text-green-800'}`}>
-                  📍 {zoneInfo.nom}
+                  {estSerre ? '🪴' : '📍'} {zoneInfo.nom}
                 </span>
               )}
               {!zoneInfo && <span className="bg-gray-100 text-gray-600 px-2 py-1 rounded-full font-semibold">📍 Sans zone</span>}
@@ -588,33 +598,51 @@ function CahierTab({ zones, especes, especesSerre, produits, entrees, onSaved, o
             </div>
           )}
 
-          {/* Étape 1 : Zone */}
+          {/* Etape 1 : Zone */}
           {etape === 1 && (
             <div className="space-y-3">
               <div className="text-sm font-bold text-gray-700">1. Quelle zone ?</div>
-              <div className="grid grid-cols-3 gap-2">
-                <button onClick={() => { setZoneId(''); setEtape(2) }}
-                  className="py-3 rounded-xl border-2 border-dashed border-gray-300 text-gray-500 text-sm font-semibold active:scale-95 transition-transform">
-                  Aucune
-                </button>
-                {zones.map(z => (
-                  <button key={z.id}
-                    onClick={() => { setZoneId(z.id); setEtape(2) }}
-                    className={`py-4 rounded-xl border-2 font-bold text-lg active:scale-95 transition-transform
-                      ${z.type === 'serre'
-                        ? 'border-amber-400 bg-amber-50 text-amber-800'
-                        : 'border-green-400 bg-green-50 text-green-800'}`}>
-                    {z.type === 'serre' ? '🪴' : ''}{z.nom}
+
+              {zonesSerre.length > 0 && (
+                <div className="space-y-1">
+                  <div className="text-[10px] font-bold text-amber-600 uppercase tracking-wider">🪴 Serre</div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {zonesSerre.map(z => (
+                      <button key={z.id}
+                        onClick={() => { setZoneId(z.id); setEtape(2) }}
+                        className="py-4 rounded-xl border-2 border-amber-400 bg-amber-50 text-amber-800 font-bold text-base active:scale-95 transition-transform">
+                        🪴 {z.nom}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-1">
+                {zonesSerre.length > 0 && (
+                  <div className="text-[10px] font-bold text-green-700 uppercase tracking-wider">🌾 Plein champ</div>
+                )}
+                <div className="grid grid-cols-3 gap-2">
+                  <button onClick={() => { setZoneId(''); setEtape(2) }}
+                    className="py-3 rounded-xl border-2 border-dashed border-gray-300 text-gray-500 text-sm font-semibold active:scale-95 transition-transform">
+                    Aucune
                   </button>
-                ))}
+                  {zonesChamp.map(z => (
+                    <button key={z.id}
+                      onClick={() => { setZoneId(z.id); setEtape(2) }}
+                      className="py-4 rounded-xl border-2 border-green-400 bg-green-50 text-green-800 font-bold text-lg active:scale-95 transition-transform">
+                      {z.nom}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           )}
 
-          {/* Étape 2 : Type d'opération */}
+          {/* Etape 2 : Type d'operation */}
           {etape === 2 && (
             <div className="space-y-3">
-              <div className="text-sm font-bold text-gray-700">2. Quelle opération ?</div>
+              <div className="text-sm font-bold text-gray-700">2. Quelle operation ?</div>
               <div className="grid grid-cols-2 gap-2">
                 {typesOp.map(t => (
                   <button key={t.val}
@@ -627,11 +655,9 @@ function CahierTab({ zones, especes, especesSerre, produits, entrees, onSaved, o
             </div>
           )}
 
-          {/* Étape 3 : Espèce / Produit + Quantité */}
+          {/* Etape 3 : Espece / Produit + Quantite */}
           {etape === 3 && (
             <div className="space-y-4">
-
-              {/* Sélection produit traitement */}
               {estTraitement && (
                 <div className="space-y-2">
                   <div className="text-sm font-bold text-gray-700">3a. Quel produit ?</div>
@@ -639,25 +665,23 @@ function CahierTab({ zones, especes, especesSerre, produits, entrees, onSaved, o
                     items={produits}
                     valeur={produitId}
                     onChange={setProduitId}
-                    placeholder="Rechercher un produit…"
+                    placeholder="Rechercher un produit..."
                     onAjouter={onAjouterProduit}
                     grouper={(p: ProduitTraitement) => p.type}
                   />
                 </div>
               )}
-
-              {/* Sélection espèce (serre ou micropousses) */}
               {avecEspece && (
                 <div className="space-y-2">
                   <div className="text-sm font-bold text-gray-700">
-                    3a. {estSerre ? 'Quelle plante ?' : 'Quelle espèce ?'}
+                    3a. {estSerre ? 'Quelle plante ?' : 'Quelle espece ?'}
                   </div>
                   {estSerre ? (
                     <ListeAvecAjout
                       items={especesSerre}
                       valeur={especeId}
                       onChange={setEspeceId}
-                      placeholder="Rechercher une plante…"
+                      placeholder="Rechercher une plante..."
                       onAjouter={onAjouterEspece}
                       grouper={(e: EspeceSerre) => e.categorie}
                     />
@@ -666,18 +690,16 @@ function CahierTab({ zones, especes, especesSerre, produits, entrees, onSaved, o
                       items={especes}
                       valeur={especeId}
                       onChange={setEspeceId}
-                      placeholder="Rechercher une espèce…"
+                      placeholder="Rechercher une espece..."
                       onAjouter={async (nom) => { await supabase.from('especes').insert({ nom, actif: true }); onSaved() }}
                     />
                   )}
                 </div>
               )}
-
-              {/* Quantité */}
               {avecQuantite && (
                 <div className="space-y-2">
                   <div className="text-sm font-bold text-gray-700">
-                    {(avecEspece || estTraitement) ? '3b.' : '3.'} Quantité
+                    {(avecEspece || estTraitement) ? '3b.' : '3.'} Quantite
                   </div>
                   <div className="flex items-center justify-center py-1">
                     <Stepper value={quantite} onChange={setQuantite}
@@ -694,7 +716,6 @@ function CahierTab({ zones, especes, especesSerre, produits, entrees, onSaved, o
                   </div>
                 </div>
               )}
-
               <button onClick={() => setEtape(4)}
                 className="w-full bg-green-700 text-white py-3.5 rounded-xl font-bold text-base active:scale-95 transition-transform">
                 Suivant →
@@ -702,12 +723,12 @@ function CahierTab({ zones, especes, especesSerre, produits, entrees, onSaved, o
             </div>
           )}
 
-          {/* Étape 4 : Note + auteur + save */}
+          {/* Etape 4 : Note + auteur + save */}
           {etape === 4 && (
             <div className="space-y-3">
               <div className="text-sm font-bold text-gray-700">Note (optionnel)</div>
               <textarea value={notes} onChange={e => setNotes(e.target.value)}
-                placeholder="Observation, remarque…"
+                placeholder="Observation, remarque..."
                 rows={2}
                 className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-green-400 resize-none" />
               <div className="text-xs font-semibold text-gray-500">Qui ?</div>
@@ -722,18 +743,18 @@ function CahierTab({ zones, especes, especesSerre, produits, entrees, onSaved, o
               </div>
               <button onClick={sauvegarder} disabled={saving}
                 className="w-full bg-green-700 text-white py-4 rounded-xl font-bold text-lg active:scale-95 transition-transform disabled:opacity-50">
-                {saving ? 'Enregistrement…' : '✅ Enregistrer'}
+                {saving ? 'Enregistrement...' : 'Enregistrer'}
               </button>
             </div>
           )}
         </div>
       </div>
 
-      {/* Historique récent */}
+      {/* Historique recent */}
       {entrees.length > 0 && (
         <div className="rounded-2xl border border-gray-100 overflow-hidden">
           <div className="px-4 py-3 bg-gray-50 font-bold text-sm text-gray-700 border-b border-gray-100">
-            Entrées récentes
+            Entrees recentes
           </div>
           <div className="divide-y divide-gray-100">
             {entrees.slice(0, 20).map(e => {
@@ -774,14 +795,14 @@ function AgendaTab({ taches, zones, catalogueTaches, zoneTaches, onSaved }: {
   catalogueTaches: TacheCatalogue[]; zoneTaches: ZoneTacheCat[]
   onSaved: () => void
 }) {
-  const [ajout, setAjout]    = useState(false)
-  const [titre, setTitre]    = useState('')
-  const [type, setType]      = useState<'ponctuelle' | 'recurrente'>('ponctuelle')
-  const [frequence, setFreq] = useState<string[]>([])
-  const [echeance, setEch]   = useState(format(new Date(), 'yyyy-MM-dd'))
-  const [zoneId, setZoneId]  = useState('')
-  const [priorite, setPrio]  = useState('normale')
-  const [saving, setSaving]  = useState(false)
+  const [ajout, setAjout]       = useState(false)
+  const [titre, setTitre]       = useState('')
+  const [type, setType]         = useState<'ponctuelle' | 'recurrente'>('ponctuelle')
+  const [frequence, setFreq]    = useState<string[]>([])
+  const [echeance, setEch]      = useState(format(new Date(), 'yyyy-MM-dd'))
+  const [zoneIds, setZoneIds]   = useState<string[]>([])
+  const [priorite, setPrio]     = useState('normale')
+  const [saving, setSaving]     = useState(false)
 
   const aujTaches    = taches.filter(t => tacheEstAujourdHui(t))
   const autresTaches = taches.filter(t => !tacheEstAujourdHui(t))
@@ -806,14 +827,17 @@ function AgendaTab({ taches, zones, catalogueTaches, zoneTaches, onSaved }: {
   async function sauvegarder() {
     if (!titre.trim()) return
     setSaving(true)
-    await supabase.from('taches').insert({
-      titre: titre.trim(), type,
-      frequence: type === 'recurrente' ? frequence.join(',') || 'quotidien' : null,
-      date_echeance: type === 'ponctuelle' ? echeance : null,
-      zone_id: zoneId || null, priorite,
-    })
+    const zids = zoneIds.length > 0 ? zoneIds : [null]
+    await Promise.all(zids.map(zid =>
+      supabase.from('taches').insert({
+        titre: titre.trim(), type,
+        frequence: type === 'recurrente' ? frequence.join(',') || 'quotidien' : null,
+        date_echeance: type === 'ponctuelle' ? echeance : null,
+        zone_id: zid, priorite,
+      })
+    ))
     setSaving(false); setAjout(false)
-    setTitre(''); setType('ponctuelle'); setFreq([]); setPrio('normale'); setZoneId('')
+    setTitre(''); setType('ponctuelle'); setFreq([]); setPrio('normale'); setZoneIds([])
     onSaved()
   }
 
@@ -821,18 +845,26 @@ function AgendaTab({ taches, zones, catalogueTaches, zoneTaches, onSaved }: {
     setFreq(prev => prev.includes(j) ? prev.filter(x => x !== j) : [...prev, j])
   }
 
+  function toggleZoneAgenda(zid: string) {
+    setZoneIds(prev => prev.includes(zid) ? prev.filter(x => x !== zid) : [...prev, zid])
+  }
+
+  const chipsAgenda = zoneIds.length === 1
+    ? catalogueTaches.filter(c => zoneTaches.some(zt => zt.zone_id === zoneIds[0] && zt.catalogue_id === c.id))
+    : catalogueTaches.slice(0, 8)
+
   return (
     <div className="space-y-4">
       <div className="rounded-2xl border border-green-200 overflow-hidden">
         <div className="px-4 py-3 bg-green-700 text-white font-bold text-sm flex justify-between items-center">
-          <span>✅ Aujourd&apos;hui</span>
+          <span>Aujourd'hui</span>
           <span className="bg-white/20 text-white text-xs font-bold px-2 py-0.5 rounded-full">
             {aujTaches.filter(t => !tacheEstCompleteeAujourdHui(t)).length} restantes
           </span>
         </div>
         <div className="divide-y divide-green-100">
           {aujTaches.length === 0 && (
-            <div className="px-4 py-6 text-center text-sm text-gray-400">Aucune tâche aujourd&apos;hui 🎉</div>
+            <div className="px-4 py-6 text-center text-sm text-gray-400">Aucune tache aujourd'hui</div>
           )}
           {aujTaches.map(t => {
             const faite = tacheEstCompleteeAujourdHui(t)
@@ -842,21 +874,21 @@ function AgendaTab({ taches, zones, catalogueTaches, zoneTaches, onSaved }: {
                 <button onClick={() => cocher(t)}
                   className={`mt-0.5 w-7 h-7 rounded-full border-2 flex items-center justify-center flex-shrink-0 active:scale-95 transition-all
                     ${faite ? 'bg-green-600 border-green-600 text-white' : 'border-gray-300 bg-white'}`}>
-                  {faite && '✓'}
+                  {faite && 'v'}
                 </button>
                 <div className="flex-1 min-w-0">
                   <div className={`text-sm font-semibold ${faite ? 'line-through text-gray-400' : 'text-gray-800'}`}>
                     {t.titre}
                   </div>
                   <div className="text-xs text-gray-400 mt-0.5 flex flex-wrap gap-2">
-                    {zone && <span>📍 {zone.nom}</span>}
+                    {zone && <span>{zone.type === 'serre' ? '🪴' : '📍'} {zone.nom}</span>}
                     <span className={`px-1.5 py-0.5 rounded-full border text-[10px] ${prioriteColor(t.priorite)}`}>
                       {t.priorite}
                     </span>
                     {t.type === 'recurrente' && <span>🔁 {t.frequence}</span>}
                   </div>
                 </div>
-                <button onClick={() => supprimer(t.id)} className="text-gray-300 active:text-red-400 text-lg leading-none">×</button>
+                <button onClick={() => supprimer(t.id)} className="text-gray-300 active:text-red-400 text-lg leading-none">x</button>
               </div>
             )
           })}
@@ -865,22 +897,18 @@ function AgendaTab({ taches, zones, catalogueTaches, zoneTaches, onSaved }: {
 
       <button onClick={() => setAjout(!ajout)}
         className="w-full bg-green-700 text-white py-3.5 rounded-xl font-bold text-base active:scale-95 transition-transform">
-        {ajout ? '✕ Annuler' : '+ Ajouter une tâche'}
+        {ajout ? 'Annuler' : '+ Ajouter une tache'}
       </button>
 
-      {ajout && (() => {
-        const chips = zoneId
-          ? catalogueTaches.filter(c => zoneTaches.some(zt => zt.zone_id === zoneId && zt.catalogue_id === c.id))
-          : catalogueTaches.slice(0, 10)
-        return (
+      {ajout && (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-4">
-          {chips.length > 0 && (
+          {chipsAgenda.length > 0 && (
             <div className="space-y-1.5">
               <div className="text-xs font-semibold text-gray-400">
-                ⚡ Suggestions{zoneId ? ` — ${zones.find(z => z.id === zoneId)?.nom}` : ''}
+                Suggestions{zoneIds.length === 1 ? ` - ${zones.find(z => z.id === zoneIds[0])?.nom}` : ''}
               </div>
               <div className="flex flex-wrap gap-1.5">
-                {chips.map(c => (
+                {chipsAgenda.map(c => (
                   <button key={c.id} onClick={() => setTitre(c.titre)}
                     className={`px-2.5 py-1 rounded-full text-xs font-semibold border active:scale-95 transition-transform
                       ${titre === c.titre
@@ -892,30 +920,33 @@ function AgendaTab({ taches, zones, catalogueTaches, zoneTaches, onSaved }: {
               </div>
             </div>
           )}
+
           <input value={titre} onChange={e => setTitre(e.target.value)}
-            placeholder="Titre de la tâche…"
+            placeholder="Titre de la tache..."
             className="w-full border border-gray-200 rounded-xl px-3 py-3 text-base font-semibold focus:outline-none focus:border-green-400"
           />
+
           <div className="flex gap-2">
             {(['ponctuelle', 'recurrente'] as const).map(v => (
               <button key={v} onClick={() => setType(v)}
                 className={`flex-1 py-2.5 rounded-xl text-sm font-semibold border active:scale-95 transition-transform
                   ${type === v ? 'bg-green-700 text-white border-green-700' : 'bg-gray-50 text-gray-600 border-gray-200'}`}>
-                {v === 'ponctuelle' ? '📅 Ponctuelle' : '🔁 Récurrente'}
+                {v === 'ponctuelle' ? '📅 Ponctuelle' : '🔁 Recurrente'}
               </button>
             ))}
           </div>
+
           {type === 'ponctuelle' ? (
             <input type="date" value={echeance} onChange={e => setEch(e.target.value)}
               className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-green-400" />
           ) : (
             <div className="space-y-2">
-              <div className="text-xs font-semibold text-gray-500">Fréquence</div>
+              <div className="text-xs font-semibold text-gray-500">Frequence</div>
               <div className="grid grid-cols-4 gap-1.5">
                 <button onClick={() => setFreq(f => f.includes('quotidien') ? [] : ['quotidien'])}
                   className={`py-2 rounded-lg text-xs font-semibold border col-span-2 active:scale-95 transition-transform
                     ${frequence.includes('quotidien') ? 'bg-green-700 text-white border-green-700' : 'bg-gray-50 text-gray-600 border-gray-200'}`}>
-                  🔄 Tous les jours
+                  Tous les jours
                 </button>
                 {['lundi','mardi','mercredi','jeudi','vendredi','samedi'].map(j => (
                   <button key={j} onClick={() => toggleJour(j)}
@@ -927,20 +958,35 @@ function AgendaTab({ taches, zones, catalogueTaches, zoneTaches, onSaved }: {
               </div>
             </div>
           )}
-          <div className="flex flex-wrap gap-1.5">
-            <button onClick={() => setZoneId('')}
-              className={`px-3 py-1.5 rounded-full text-xs font-semibold border active:scale-95 transition-transform
-                ${!zoneId ? 'bg-green-700 text-white border-green-700' : 'bg-gray-50 text-gray-500 border-gray-200'}`}>
-              Sans zone
-            </button>
-            {zones.map(z => (
-              <button key={z.id} onClick={() => setZoneId(z.id)}
-                className={`px-3 py-1.5 rounded-full text-xs font-semibold border active:scale-95 transition-transform
-                  ${zoneId === z.id ? 'bg-green-700 text-white border-green-700' : 'bg-gray-50 text-gray-500 border-gray-200'}`}>
-                📍 {z.nom}
-              </button>
-            ))}
+
+          {/* Zone multi-select */}
+          <div className="space-y-1.5">
+            <div className="text-xs font-semibold text-gray-500">
+              Zone(s) — {zoneIds.length === 0 ? 'aucune' : `${zoneIds.length} selectionnee${zoneIds.length > 1 ? 's' : ''}`}
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {zones.filter(z => z.type !== 'serre').map(z => (
+                <button key={z.id} onClick={() => toggleZoneAgenda(z.id)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold border active:scale-95 transition-transform
+                    ${zoneIds.includes(z.id) ? 'bg-green-700 text-white border-green-700' : 'bg-gray-50 text-gray-500 border-gray-200'}`}>
+                  📍 {z.nom}
+                </button>
+              ))}
+              {zones.filter(z => z.type === 'serre').map(z => (
+                <button key={z.id} onClick={() => toggleZoneAgenda(z.id)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold border active:scale-95 transition-transform
+                    ${zoneIds.includes(z.id) ? 'bg-amber-600 text-white border-amber-600' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+                  🪴 {z.nom}
+                </button>
+              ))}
+            </div>
+            {zoneIds.length > 1 && (
+              <div className="text-xs text-green-700 bg-green-50 px-3 py-1.5 rounded-lg">
+                {zoneIds.length} taches seront creees, une par zone
+              </div>
+            )}
           </div>
+
           <div className="flex gap-2">
             {(['basse', 'normale', 'haute'] as const).map(p => (
               <button key={p} onClick={() => setPrio(p)}
@@ -950,18 +996,20 @@ function AgendaTab({ taches, zones, catalogueTaches, zoneTaches, onSaved }: {
               </button>
             ))}
           </div>
+
           <button onClick={sauvegarder} disabled={saving || !titre.trim()}
             className="w-full bg-green-700 text-white py-4 rounded-xl font-bold text-base active:scale-95 transition-transform disabled:opacity-50">
-            {saving ? 'Enregistrement…' : '✅ Enregistrer la tâche'}
+            {saving ? 'Enregistrement...' : zoneIds.length > 1
+              ? `Creer ${zoneIds.length} taches`
+              : 'Enregistrer la tache'}
           </button>
         </div>
-        )
-      })()}
+      )}
 
       {autresTaches.length > 0 && (
         <div className="rounded-2xl border border-gray-100 overflow-hidden">
           <div className="px-4 py-3 bg-gray-50 font-bold text-sm text-gray-700 border-b border-gray-100">
-            Toutes les tâches
+            Toutes les taches
           </div>
           <div className="divide-y divide-gray-100">
             {autresTaches.map(t => {
@@ -973,13 +1021,13 @@ function AgendaTab({ taches, zones, catalogueTaches, zoneTaches, onSaved }: {
                     <div className="text-xs text-gray-400 mt-0.5 flex flex-wrap gap-2">
                       {t.date_echeance && <span>📅 {labelDate(t.date_echeance)}</span>}
                       {t.frequence && <span>🔁 {t.frequence}</span>}
-                      {zone && <span>📍 {zone.nom}</span>}
+                      {zone && <span>{zone.type === 'serre' ? '🪴' : '📍'} {zone.nom}</span>}
                       <span className={`px-1.5 py-0.5 rounded-full border text-[10px] ${prioriteColor(t.priorite)}`}>
                         {t.priorite}
                       </span>
                     </div>
                   </div>
-                  <button onClick={() => supprimer(t.id)} className="text-gray-300 active:text-red-400 text-lg leading-none mt-0.5">×</button>
+                  <button onClick={() => supprimer(t.id)} className="text-gray-300 active:text-red-400 text-lg leading-none mt-0.5">x</button>
                 </div>
               )
             })}
@@ -995,13 +1043,16 @@ function AgendaTab({ taches, zones, catalogueTaches, zoneTaches, onSaved }: {
 function ZonesTab({ zones, planches, onSaved }: {
   zones: Zone[]; planches: Planche[]; onSaved: () => void
 }) {
-  const [ajoutZone, setAjoutZone]     = useState(false)
-  const [nomZone, setNomZone]         = useState('')
-  const [typeZone, setTypeZone]       = useState('plein_champ')
-  const [supZone, setSupZone]         = useState('')
+  const [ajoutZone, setAjoutZone]       = useState(false)
+  const [nomZone, setNomZone]           = useState('')
+  const [typeZone, setTypeZone]         = useState('plein_champ')
+  const [supZone, setSupZone]           = useState('')
   const [ajoutPlanche, setAjoutPlanche] = useState<string | null>(null)
-  const [nomPlanche, setNomPlanche]   = useState('')
-  const [saving, setSaving]           = useState(false)
+  const [nomPlanche, setNomPlanche]     = useState('')
+  const [longueurP, setLongueurP]       = useState('')
+  const [largeurP, setLargeurP]         = useState('')
+  const [plantsPm2P, setPlantsPm2P]     = useState('')
+  const [saving, setSaving]             = useState(false)
 
   async function ajouterZone() {
     if (!nomZone.trim()) return
@@ -1023,67 +1074,129 @@ function ZonesTab({ zones, planches, onSaved }: {
     setSaving(true)
     await supabase.from('zone_planches').insert({
       zone_id: zoneId, nom: nomPlanche.trim(),
+      longueur_m:    longueurP  ? parseFloat(longueurP)  : null,
+      largeur_m:     largeurP   ? parseFloat(largeurP)   : null,
+      plants_par_m2: plantsPm2P ? parseInt(plantsPm2P)   : null,
       ordre: planches.filter(p => p.zone_id === zoneId).length + 1,
     })
-    setSaving(false); setAjoutPlanche(null); setNomPlanche(''); onSaved()
+    setSaving(false); setAjoutPlanche(null)
+    setNomPlanche(''); setLongueurP(''); setLargeurP(''); setPlantsPm2P('')
+    onSaved()
   }
 
   async function supprimerPlanche(id: string) {
     await supabase.from('zone_planches').delete().eq('id', id); onSaved()
   }
 
+  const zonesChamp = zones.filter(z => z.type !== 'serre')
+  const zonesSerre = zones.filter(z => z.type === 'serre')
+
+  function renderZone(z: Zone) {
+    const pls = planches.filter(p => p.zone_id === z.id)
+    const isSerre = z.type === 'serre'
+    return (
+      <div key={z.id} className="rounded-2xl border border-gray-100 overflow-hidden">
+        <div className={`px-4 py-3 flex items-center justify-between ${isSerre ? 'bg-amber-50' : 'bg-green-50'}`}>
+          <div>
+            <span className={`font-bold text-base ${isSerre ? 'text-amber-900' : 'text-green-900'}`}>
+              {isSerre ? '🪴 ' : ''}{z.nom}
+            </span>
+            <span className="ml-2 text-xs text-gray-500 capitalize">{z.type.replace('_', ' ')}</span>
+            {z.superficie_m2 && <span className="ml-2 text-xs text-gray-400">{z.superficie_m2} m2</span>}
+          </div>
+          <button onClick={() => supprimerZone(z.id)} className="text-gray-300 active:text-red-400 text-lg leading-none">x</button>
+        </div>
+
+        {pls.length > 0 && (
+          <div className="divide-y divide-gray-100">
+            {pls.map(p => {
+              const surface  = p.longueur_m && p.largeur_m ? (p.longueur_m * p.largeur_m).toFixed(1) : null
+              const capacite = surface && p.plants_par_m2 ? Math.round(parseFloat(surface) * p.plants_par_m2) : null
+              return (
+                <div key={p.id} className="px-4 py-3 flex items-start justify-between text-sm">
+                  <div>
+                    <span className="text-gray-700 font-semibold">{p.nom}</span>
+                    <div className="text-xs text-gray-400 mt-0.5 flex flex-wrap gap-2">
+                      {p.longueur_m && p.largeur_m && (
+                        <span>{p.longueur_m}m x {p.largeur_m}m = {surface} m2</span>
+                      )}
+                      {p.plants_par_m2 && <span>{p.plants_par_m2} plants/m2</span>}
+                      {capacite && <span className="text-green-700 font-semibold">= {capacite} plants</span>}
+                    </div>
+                  </div>
+                  <button onClick={() => supprimerPlanche(p.id)} className="text-gray-300 active:text-red-400 text-base mt-0.5">x</button>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {ajoutPlanche === z.id ? (
+          <div className="px-4 py-3 border-t border-gray-100 space-y-2">
+            <input value={nomPlanche} onChange={e => setNomPlanche(e.target.value)}
+              placeholder="Nom (ex: Planche A)"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-400"
+            />
+            <div className="grid grid-cols-3 gap-2">
+              <input value={longueurP} onChange={e => setLongueurP(e.target.value)}
+                placeholder="Long. m" type="number" inputMode="decimal"
+                className="border border-gray-200 rounded-lg px-2 py-2 text-sm focus:outline-none focus:border-green-400"
+              />
+              <input value={largeurP} onChange={e => setLargeurP(e.target.value)}
+                placeholder="Larg. m" type="number" inputMode="decimal"
+                className="border border-gray-200 rounded-lg px-2 py-2 text-sm focus:outline-none focus:border-green-400"
+              />
+              <input value={plantsPm2P} onChange={e => setPlantsPm2P(e.target.value)}
+                placeholder="Plants/m2" type="number" inputMode="numeric"
+                className="border border-gray-200 rounded-lg px-2 py-2 text-sm focus:outline-none focus:border-green-400"
+              />
+            </div>
+            {longueurP && largeurP && plantsPm2P && (
+              <div className="text-xs text-green-700 bg-green-50 px-3 py-1.5 rounded-lg">
+                {(parseFloat(longueurP) * parseFloat(largeurP)).toFixed(1)} m2 x {plantsPm2P} = {Math.round(parseFloat(longueurP) * parseFloat(largeurP) * parseInt(plantsPm2P))} plants
+              </div>
+            )}
+            <div className="flex gap-2">
+              <button onClick={() => ajouterPlanche(z.id)} disabled={saving || !nomPlanche.trim()}
+                className="flex-1 bg-green-700 text-white py-2 rounded-lg text-sm font-semibold active:scale-95 disabled:opacity-50">
+                Ajouter
+              </button>
+              <button onClick={() => { setAjoutPlanche(null); setNomPlanche(''); setLongueurP(''); setLargeurP(''); setPlantsPm2P('') }}
+                className="text-gray-400 px-3 py-2 text-sm">Annuler</button>
+            </div>
+          </div>
+        ) : (
+          <button onClick={() => { setAjoutPlanche(z.id); setNomPlanche('') }}
+            className="w-full px-4 py-2.5 text-sm text-green-700 font-semibold border-t border-gray-100 text-left active:bg-green-50 transition-colors">
+            + Ajouter une planche
+          </button>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-3">
-      {zones.map(z => {
-        const pls = planches.filter(p => p.zone_id === z.id)
-        return (
-          <div key={z.id} className="rounded-2xl border border-gray-100 overflow-hidden">
-            <div className={`px-4 py-3 flex items-center justify-between ${z.type === 'serre' ? 'bg-amber-50' : 'bg-green-50'}`}>
-              <div>
-                <span className="font-bold text-green-900 text-base">{z.nom}</span>
-                <span className="ml-2 text-xs text-green-600 capitalize">{z.type.replace('_', ' ')}</span>
-                {z.superficie_m2 && <span className="ml-2 text-xs text-gray-400">{z.superficie_m2} m²</span>}
-              </div>
-              <button onClick={() => supprimerZone(z.id)} className="text-gray-300 active:text-red-400 text-lg leading-none">×</button>
-            </div>
-            {pls.length > 0 && (
-              <div className="divide-y divide-gray-100">
-                {pls.map(p => (
-                  <div key={p.id} className="px-4 py-2.5 flex items-center justify-between text-sm">
-                    <span className="text-gray-700 font-medium">{p.nom}
-                      {p.longueur_m && p.largeur_m && (
-                        <span className="text-gray-400 font-normal ml-2">{p.longueur_m}×{p.largeur_m}m</span>
-                      )}
-                    </span>
-                    <button onClick={() => supprimerPlanche(p.id)} className="text-gray-300 active:text-red-400 text-base">×</button>
-                  </div>
-                ))}
-              </div>
-            )}
-            {ajoutPlanche === z.id ? (
-              <div className="px-4 py-3 border-t border-gray-100 flex gap-2">
-                <input value={nomPlanche} onChange={e => setNomPlanche(e.target.value)}
-                  placeholder="Nom de la planche (ex: Planche A)"
-                  className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-400"
-                />
-                <button onClick={() => ajouterPlanche(z.id)} disabled={saving}
-                  className="bg-green-700 text-white px-3 py-2 rounded-lg text-sm font-semibold active:scale-95 disabled:opacity-50">✓</button>
-                <button onClick={() => setAjoutPlanche(null)} className="text-gray-400 px-2">✕</button>
-              </div>
-            ) : (
-              <button onClick={() => { setAjoutPlanche(z.id); setNomPlanche('') }}
-                className="w-full px-4 py-2.5 text-sm text-green-700 font-semibold border-t border-gray-100 text-left active:bg-green-50 transition-colors">
-                + Ajouter une planche
-              </button>
-            )}
-          </div>
-        )
-      })}
+      {/* Section Serre — separee et mise en avant */}
+      {zonesSerre.length > 0 && (
+        <div className="space-y-2">
+          <div className="text-xs font-bold text-amber-700 uppercase tracking-wider px-1">🪴 Serre</div>
+          {zonesSerre.map(renderZone)}
+        </div>
+      )}
+
+      {/* Section Plein champ */}
+      <div className="space-y-2">
+        {zonesSerre.length > 0 && (
+          <div className="text-xs font-bold text-green-700 uppercase tracking-wider px-1 mt-2">🌾 Plein champ</div>
+        )}
+        {zonesChamp.map(renderZone)}
+      </div>
 
       {ajoutZone ? (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3">
           <input value={nomZone} onChange={e => setNomZone(e.target.value)}
-            placeholder="Nom de la zone (ex: J6, Serre 2…)"
+            placeholder="Nom de la zone (ex: J6, Serre 2...)"
             className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm font-semibold focus:outline-none focus:border-green-400"
           />
           <div className="flex gap-2">
@@ -1096,13 +1209,13 @@ function ZonesTab({ zones, planches, onSaved }: {
             ))}
           </div>
           <input value={supZone} onChange={e => setSupZone(e.target.value)}
-            placeholder="Superficie m² (optionnel)" type="number" inputMode="decimal"
+            placeholder="Superficie m2 (optionnel)" type="number" inputMode="decimal"
             className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-green-400"
           />
           <div className="flex gap-2">
             <button onClick={ajouterZone} disabled={saving || !nomZone.trim()}
               className="flex-1 bg-green-700 text-white py-3 rounded-xl font-bold active:scale-95 disabled:opacity-50">
-              ✓ Ajouter
+              Ajouter
             </button>
             <button onClick={() => { setAjoutZone(false); setNomZone('') }}
               className="px-4 py-3 text-gray-500 font-semibold">Annuler</button>
@@ -1160,7 +1273,7 @@ function PertesTab({ pertes, especes, onSaved }: {
       {ce_mois.length > 0 && (
         <div className="bg-red-50 border border-red-200 rounded-2xl p-4">
           <div className="text-sm font-bold text-red-800 mb-2">
-            📉 Ce mois : {ce_mois.reduce((s, p) => s + p.quantite, 0)} unités perdues
+            Ce mois : {ce_mois.reduce((s, p) => s + p.quantite, 0)} unites perdues
           </div>
           {parRaison.map(r => (
             <div key={r.val} className="flex items-center gap-2 text-xs text-red-700 mt-1">
@@ -1172,22 +1285,22 @@ function PertesTab({ pertes, especes, onSaved }: {
       )}
 
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        <div className="px-4 py-3 bg-red-600 text-white font-bold text-sm">📉 Enregistrer une perte</div>
+        <div className="px-4 py-3 bg-red-600 text-white font-bold text-sm">Enregistrer une perte</div>
         <div className="p-4 space-y-4">
           <input value={designation} onChange={e => setDesignation(e.target.value)}
             placeholder="Produit perdu (ex: Radis barquettes)"
             className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-red-400"
           />
           <div className="space-y-2">
-            <div className="text-xs font-semibold text-gray-500">Espèce liée (optionnel)</div>
+            <div className="text-xs font-semibold text-gray-500">Espece liee (optionnel)</div>
             <input value={recherche} onChange={e => setRecherche(e.target.value)}
-              placeholder="Filtrer…"
+              placeholder="Filtrer..."
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none" />
             <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
               <button onClick={() => setEspeceId('')}
                 className={`px-3 py-1.5 rounded-full text-xs font-semibold border active:scale-95 transition-transform
                   ${!especeId ? 'bg-red-600 text-white border-red-600' : 'bg-gray-50 text-gray-500 border-gray-200'}`}>
-                Sans espèce
+                Sans espece
               </button>
               {especesFiltrees.map(e => (
                 <button key={e.id} onClick={() => setEspeceId(e.id)}
@@ -1202,7 +1315,7 @@ function PertesTab({ pertes, especes, onSaved }: {
             <Stepper value={quantite} onChange={setQuantite} />
           </div>
           <div className="flex gap-2 flex-wrap">
-            {['barquettes','kg','plateaux','L','pièces'].map(u => (
+            {['barquettes','kg','plateaux','L','pieces'].map(u => (
               <button key={u} onClick={() => setUnite(u)}
                 className={`px-3 py-1.5 rounded-full text-sm font-semibold border active:scale-95 transition-transform
                   ${unite === u ? 'bg-red-600 text-white border-red-600' : 'bg-gray-50 text-gray-600 border-gray-200'}`}>
@@ -1220,11 +1333,11 @@ function PertesTab({ pertes, especes, onSaved }: {
             ))}
           </div>
           <textarea value={notes} onChange={e => setNotes(e.target.value)}
-            placeholder="Note optionnelle…" rows={2}
+            placeholder="Note optionnelle..." rows={2}
             className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none resize-none" />
           <button onClick={sauvegarder} disabled={saving || !designation.trim() || !raison}
             className="w-full bg-red-600 text-white py-4 rounded-xl font-bold text-base active:scale-95 transition-transform disabled:opacity-50">
-            {saving ? 'Enregistrement…' : '📉 Enregistrer la perte'}
+            {saving ? 'Enregistrement...' : 'Enregistrer la perte'}
           </button>
         </div>
       </div>
