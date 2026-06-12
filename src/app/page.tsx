@@ -31,6 +31,7 @@ export default function AccueilPage() {
   const [nbClients, setNbClients]         = useState(0)
   const [tachesAujourdHui, setTachesAujourdHui] = useState<{id:string;titre:string;priorite:string;completions:{date_completion:string}[]}[]>([])
   const [blsSemaine, setBlsSemaine]       = useState<{client:{nom:string}|null;created_at:string;montant:number}[]>([])
+  const [pointagesAuj, setPointagesAuj]   = useState<{auteur:string;heure_arrivee:string|null;heure_depart:string|null;pause_minutes:number}[]>([])
   const [statOuverte, setStatOuverte]     = useState<'ca'|'commandes'|'dispos'|'alertes'|null>(null)
 
   useEffect(() => { charger() }, [])
@@ -109,6 +110,13 @@ export default function AccueilPage() {
         montant: (bl.bl_lignes || []).reduce((s, l) => s + l.quantite * l.prix_ht * (1 + l.tva_pct / 100), 0),
       })))
     }
+
+    const { data: ptg } = await supabase
+      .from('pointages')
+      .select('auteur, heure_arrivee, heure_depart, pause_minutes')
+      .eq('date', format(new Date(), 'yyyy-MM-dd'))
+    if (ptg) setPointagesAuj(ptg as {auteur:string;heure_arrivee:string|null;heure_depart:string|null;pause_minutes:number}[])
+
     setLoading(false)
   }
 
@@ -202,6 +210,16 @@ export default function AccueilPage() {
       {/* ── Météo ── */}
       <div className="px-4 mt-4">
         <MeteoWidget />
+      </div>
+
+      {/* ── Pointages du jour ── */}
+      <div className="px-4 mt-4">
+        <PointageBlock pointages={pointagesAuj} />
+      </div>
+
+      {/* ── Agenda de la semaine ── */}
+      <div className="px-4 mt-4">
+        <AgendaSemaine />
       </div>
 
       {/* ── Écran du matin ── */}
@@ -637,6 +655,107 @@ function Raccourci({ href, icon, label }: { href: string; icon: string; label: s
       <span className="text-xl leading-none">{icon}</span>
       <span className="text-xs font-semibold text-gray-600 text-center leading-tight px-1">{label}</span>
     </Link>
+  )
+}
+
+function PointageBlock({ pointages }: { pointages: {auteur:string;heure_arrivee:string|null;heure_depart:string|null;pause_minutes:number}[] }) {
+  const personnes = ['Antoine', 'Lucas']
+
+  function duree(p: {heure_arrivee:string|null;heure_depart:string|null;pause_minutes:number}): string | null {
+    if (!p.heure_arrivee || !p.heure_depart) return null
+    const [ah, am] = p.heure_arrivee.split(':').map(Number)
+    const [dh, dm] = p.heure_depart.split(':').map(Number)
+    const total = (dh * 60 + dm) - (ah * 60 + am) - p.pause_minutes
+    if (total <= 0) return null
+    const h = Math.floor(total / 60), m = total % 60
+    return m === 0 ? `${h}h` : `${h}h${String(m).padStart(2, '0')}`
+  }
+
+  function ouvrirHeures() {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('terrain_init_tab', 'heures')
+    }
+  }
+
+  return (
+    <div>
+      <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2.5">Heures de travail</div>
+      <div className="grid grid-cols-2 gap-3">
+        {personnes.map(nom => {
+          const p = pointages.find(x => x.auteur === nom)
+          return (
+            <Link key={nom} href="/terrain" onClick={ouvrirHeures}
+              className="bg-white border border-gray-200 rounded-2xl px-4 py-3 shadow-sm active:scale-95 transition-transform">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-sm font-bold text-gray-800">{nom}</span>
+                <span className="text-lg">{nom === 'Antoine' ? '👨‍🌾' : '🧑‍🌾'}</span>
+              </div>
+              {p?.heure_arrivee ? (
+                <>
+                  <div className="text-xs text-gray-500">
+                    {p.heure_arrivee.slice(0,5)} → {p.heure_depart ? p.heure_depart.slice(0,5) : '…'}
+                  </div>
+                  {duree(p) && (
+                    <div className="text-base font-bold text-green-700 mt-0.5">{duree(p)}</div>
+                  )}
+                  {!p.heure_depart && (
+                    <div className="text-xs text-amber-600 font-semibold mt-0.5">En cours ●</div>
+                  )}
+                </>
+              ) : (
+                <div className="text-xs text-gray-400 mt-0.5">Pas encore pointé</div>
+              )}
+            </Link>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+const ROUTINE: { jour: string; court: string; activites: { emoji: string; label: string }[] }[] = [
+  { jour: 'Lundi',    court: 'Lun', activites: [{ emoji: '🌱', label: 'Semis' }, { emoji: '🌾', label: 'Récolte' }, { emoji: '💧', label: '×3' }] },
+  { jour: 'Mardi',   court: 'Mar', activites: [{ emoji: '📦', label: 'Livraison' }, { emoji: '💧', label: '×3' }] },
+  { jour: 'Mercredi',court: 'Mer', activites: [{ emoji: '🌾', label: 'Récolte' }, { emoji: '💧', label: '×3' }] },
+  { jour: 'Jeudi',   court: 'Jeu', activites: [{ emoji: '🌾', label: 'Récolte' }, { emoji: '📦', label: 'Livraison' }, { emoji: '💧', label: '×3' }] },
+  { jour: 'Vendredi',court: 'Ven', activites: [{ emoji: '🌱', label: 'Semis' }, { emoji: '📦', label: 'Livraison' }, { emoji: '💧', label: '×3' }] },
+  { jour: 'Samedi',  court: 'Sam', activites: [{ emoji: '💧', label: '×3' }] },
+]
+
+function AgendaSemaine() {
+  const jourIdx = new Date().getDay() // 0=dim
+  // Convert JS day (0=Sun) to ROUTINE index (0=Mon)
+  const routineIdx = jourIdx === 0 ? -1 : jourIdx - 1
+
+  return (
+    <div>
+      <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2.5">Rythme de la semaine</div>
+      <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
+        {ROUTINE.map((r, i) => {
+          const estAujourdHui = i === routineIdx
+          return (
+            <div key={r.jour}
+              className={`flex items-start gap-3 px-4 py-2.5 border-b border-gray-100 last:border-0
+                ${estAujourdHui ? 'bg-green-50' : ''}`}>
+              <div className={`w-9 text-xs font-bold pt-0.5 shrink-0
+                ${estAujourdHui ? 'text-green-700' : 'text-gray-400'}`}>
+                {r.court}
+                {estAujourdHui && <div className="text-[9px] text-green-500">auj.</div>}
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {r.activites.map((a, j) => (
+                  <span key={j}
+                    className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium
+                      ${estAujourdHui ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
+                    {a.emoji} {a.label}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
   )
 }
 

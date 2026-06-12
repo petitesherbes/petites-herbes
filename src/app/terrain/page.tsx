@@ -247,7 +247,13 @@ function ListeAvecAjout<T extends { id: string; nom: string }>({ items, valeur, 
 type Tab = 'cahier' | 'agenda' | 'zones' | 'pertes' | 'heures'
 
 export default function TerrainPage() {
-  const [onglet, setOnglet]             = useState<Tab>('agenda')
+  const [onglet, setOnglet]             = useState<Tab>(() => {
+    if (typeof window !== 'undefined') {
+      const init = localStorage.getItem('terrain_init_tab')
+      if (init) { localStorage.removeItem('terrain_init_tab'); return init as Tab }
+    }
+    return 'agenda'
+  })
   const [taskRapide, setTaskRapide]     = useState(false)
   const [taskTitre, setTaskTitre]       = useState('')
   const [taskDate, setTaskDate]         = useState(format(new Date(), 'yyyy-MM-dd'))
