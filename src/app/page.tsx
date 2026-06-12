@@ -7,6 +7,7 @@ import { Espece, BonLivraison, StockMouvement } from '@/types'
 import { format, parseISO, differenceInDays, subDays, startOfWeek } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import Link from 'next/link'
+import MeteoWidget from '@/components/MeteoWidget'
 
 interface LigneAvecEspece {
   id: string
@@ -28,6 +29,7 @@ export default function AccueilPage() {
   const [caSemaine, setCaSemaine]         = useState<number | null>(null)
   const [mouvements, setMouvements]       = useState<StockMouvement[]>([])
   const [nbClients, setNbClients]         = useState(0)
+  const [tachesAujourdHui, setTachesAujourdHui] = useState<{id:string;titre:string;priorite:string;completions:{date_completion:string}[]}[]>([])
 
   useEffect(() => { charger() }, [])
 
@@ -43,6 +45,7 @@ export default function AccueilPage() {
       { data: cmdData },
       { data: mvtsData },
       { count: clientCount },
+      { data: tachesData },
     ] = await Promise.all([
       supabase
         .from('semis_lignes')
@@ -59,6 +62,9 @@ export default function AccueilPage() {
         .eq('type', 'semis')
         .gte('created_at', il_y_a_28j),
       supabase.from('clients').select('*', { count: 'exact', head: true }).eq('actif', true),
+      supabase.from('taches')
+        .select('id, titre, priorite, type, frequence, date_echeance, completions:taches_completions(date_completion)')
+        .eq('actif', true),
     ])
 
     if (lignesData)   setLignes(lignesData as unknown as LigneAvecEspece[])
@@ -67,6 +73,22 @@ export default function AccueilPage() {
     if (mvtsData)     setMouvements(mvtsData as StockMouvement[])
     if (cmdData)      setNouvellesCmds(cmdData as unknown as BonLivraison[])
     if (clientCount)  setNbClients(clientCount)
+
+    // Filtrer les tâches du jour
+    if (tachesData) {
+      const today = new Date()
+      const todayStr = format(today, 'yyyy-MM-dd')
+      const jourFr = ['dimanche','lundi','mardi','mercredi','jeudi','vendredi','samedi'][today.getDay()]
+      const duJour = (tachesData as unknown as {id:string;titre:string;priorite:string;type:string;frequence:string|null;date_echeance:string|null;completions:{date_completion:string}[]}[])
+        .filter(t => {
+          if (t.type === 'ponctuelle') return t.date_echeance === todayStr
+          if (!t.frequence) return false
+          const freq = t.frequence.toLowerCase()
+          if (freq === 'quotidien') return true
+          return freq.split(',').map((s: string) => s.trim()).includes(jourFr)
+        })
+      setTachesAujourdHui(duJour)
+    }
 
     const { data: blSemaine } = await supabase
       .from('bons_livraison')
@@ -83,6 +105,8 @@ export default function AccueilPage() {
 
   const aujourd = new Date(); aujourd.setHours(0, 0, 0, 0)
   const todayStr = format(aujourd, 'yyyy-MM-dd')
+
+  const recoltesAujourdHui = lignes.filter(l => l.date_dispo === todayStr)
 
   const urgent = lignes.filter(l => {
     if (!l.date_dispo || !l.date_peremption) return false
@@ -166,8 +190,73 @@ export default function AccueilPage() {
         )}
       </div>
 
+      {/* ── Météo ── */}
+      <div className="px-4 mt-4">
+        <MeteoWidget />
+      </div>
+
+      {/* ── Écran du matin ── */}
+      {(recoltesAujourdHui.length > 0 || tachesAujourdHui.length > 0) && (
+        <div className="px-4 mt-4">
+          <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2.5">Aujourd&apos;hui</div>
+          <div className="rounded-2xl border border-green-200 overflow-hidden">
+            {/* Récoltes du jour */}
+            {recoltesAujourdHui.length > 0 && (
+              <>
+                <div className="px-4 py-2.5 bg-emerald-600 text-white font-bold text-sm flex items-center justify-between">
+                  <span>✂️ À récolter aujourd&apos;hui</span>
+                  <span className="bg-white/25 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+                    {recoltesAujourdHui.length}
+                  </span>
+                </div>
+                <div className="divide-y divide-green-100 bg-emerald-50">
+                  {recoltesAujourdHui.map(l => (
+                    <Link key={l.id} href="/historique" className="flex items-center justify-between px-4 py-2.5">
+                      <div>
+                        <span className="text-sm font-semibold text-emerald-900">{l.espece?.nom}</span>
+                        <div className="text-xs text-emerald-600 mt-0.5">
+                          ×{l.quantite} · {l.format === 'TAPIS' ? '🟩 Tapis' : l.format === 'TERREAU' ? '🟫 Terreau' : '🟧 Hydro'}
+                        </div>
+                      </div>
+                      <span className="text-xs font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">Prêt ✓</span>
+                    </Link>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {/* Tâches du jour */}
+            {tachesAujourdHui.length > 0 && (
+              <>
+                <div className={`px-4 py-2.5 bg-amber-500 text-white font-bold text-sm flex items-center justify-between ${recoltesAujourdHui.length > 0 ? 'border-t border-amber-400' : ''}`}>
+                  <span>✅ Tâches du jour</span>
+                  <span className="bg-white/25 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+                    {tachesAujourdHui.filter(t => !t.completions.some(c => c.date_completion === todayStr)).length} restantes
+                  </span>
+                </div>
+                <div className="divide-y divide-amber-100 bg-amber-50">
+                  {tachesAujourdHui.map(t => {
+                    const faite = t.completions.some(c => c.date_completion === todayStr)
+                    return (
+                      <Link key={t.id} href="/terrain" className="flex items-center gap-3 px-4 py-2.5">
+                        <span className={`text-base ${faite ? 'opacity-40' : ''}`}>
+                          {faite ? '✅' : '⬜'}
+                        </span>
+                        <span className={`text-sm font-semibold ${faite ? 'line-through text-gray-400' : 'text-amber-900'}`}>
+                          {t.titre}
+                        </span>
+                      </Link>
+                    )
+                  })}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ── Stats flottantes ── */}
-      <div className="px-4 -mt-5">
+      <div className="px-4 mt-4">
         <div className="grid grid-cols-2 gap-3">
           <StatCard
             icon="💶"

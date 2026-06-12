@@ -77,7 +77,6 @@ export default function CommandesPage() {
           { val: 'bls',       label: '📦 BL' },
           { val: 'catalogue', label: '🛍 Catalogue' },
           { val: 'clients',   label: '👥 Clients' },
-          { val: 'messages',  label: '✉️ Messages' },
         ].map(o => (
           <button key={o.val} onClick={() => setOnglet(o.val as typeof onglet)}
             className={`flex-1 py-2 text-xs font-medium transition-colors
@@ -949,12 +948,18 @@ function ClientsList({ clients, onRefresh }: { clients: Client[]; onRefresh: () 
                     👁 Voir
                   </a>
                 </div>
-                {c.email && (
-                  <InviterButton clientId={c.id} clientNom={c.nom} email={c.email} />
-                )}
-                {!c.email && (
+                {c.telephone && formatWaPhone(c.telephone) ? (
+                  <a
+                    href={`https://wa.me/${formatWaPhone(c.telephone)}?text=${encodeURIComponent(
+                      `Bonjour ${c.nom} 👋\n\nVoici votre lien personnel pour commander vos micro-pousses Les Petites Herbes :\n${lien}\n\nMettez-le en favori : vous y retrouvez nos disponibilités et passez commande en quelques clics. 🌿`
+                    )}`}
+                    target="_blank" rel="noopener noreferrer"
+                    className="block text-center bg-[#25D366] text-white text-xs px-3 py-2.5 rounded-lg font-semibold">
+                    💬 Inviter par WhatsApp
+                  </a>
+                ) : (
                   <div className="text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2">
-                    ⚠️ Pas d&apos;email — ajoutez-en un pour pouvoir inviter ce chef
+                    ⚠️ Pas de numéro — ajoutez-en un pour inviter ce chef par WhatsApp
                   </div>
                 )}
                 <div className="grid grid-cols-2 gap-2">
@@ -1106,64 +1111,6 @@ function ClientModal({ client, onClose, onSave }: {
         </div>
       </div>
     </div>
-  )
-}
-
-// ─── Bouton Inviter ───────────────────────────────────────────
-
-function InviterButton({ clientId, clientNom, email }: {
-  clientId: string; clientNom: string; email: string
-}) {
-  const [statut, setStatut] = useState<'idle' | 'envoi' | 'ok' | 'erreur'>('idle')
-
-  async function inviter() {
-    if (!confirm(`Envoyer l'invitation à ${clientNom} (${email}) ?`)) return
-    setStatut('envoi')
-    try {
-      const res = await fetch(`/api/clients/${clientId}/inviter`, { method: 'POST' })
-      if (res.ok) {
-        setStatut('ok')
-        setTimeout(() => setStatut('idle'), 4000)
-      } else {
-        setStatut('erreur')
-        setTimeout(() => setStatut('idle'), 3000)
-      }
-    } catch {
-      setStatut('erreur')
-      setTimeout(() => setStatut('idle'), 3000)
-    }
-  }
-
-  if (statut === 'ok') {
-    return (
-      <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg px-3 py-2 text-xs text-green-700 font-medium">
-        ✅ Invitation envoyée à {email}
-      </div>
-    )
-  }
-
-  if (statut === 'erreur') {
-    return (
-      <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-600">
-        ❌ Échec — vérifiez la clé Resend dans Vercel
-      </div>
-    )
-  }
-
-  return (
-    <button
-      onClick={inviter}
-      disabled={statut === 'envoi'}
-      className="w-full flex items-center justify-center gap-2 bg-green-700 text-white text-xs px-3 py-2.5 rounded-lg font-semibold disabled:opacity-60 active:bg-green-800">
-      {statut === 'envoi' ? (
-        <>
-          <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-          Envoi en cours…
-        </>
-      ) : (
-        <>✉️ Inviter par email — envoyer le lien boutique</>
-      )}
-    </button>
   )
 }
 
