@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 export const dynamic = 'force-dynamic'
 
 import { useEffect, useState } from 'react'
@@ -8,7 +8,7 @@ import { Espece, Template } from '@/types'
 
 export default function ParametresPage() {
   const router = useRouter()
-  const [onglet, setOnglet] = useState<'especes' | 'templates' | 'email'>('especes')
+  const [onglet, setOnglet] = useState<'especes' | 'templates' | 'email' | 'export'>('especes')
   const [especes, setEspeces] = useState<Espece[]>([])
   const [templates, setTemplates] = useState<Template[]>([])
   const [loading, setLoading] = useState(true)
@@ -30,13 +30,14 @@ export default function ParametresPage() {
 
   return (
     <div className="p-4 space-y-4">
-      <h1 className="text-xl font-bold text-green-900">⚙️ Paramètres</h1>
+      <h1 className="text-xl font-bold text-green-900">âš™ï¸ ParamÃ¨tres</h1>
 
       <div className="flex rounded-lg overflow-hidden border border-gray-200">
         {[
-          { val: 'especes', label: '🌿 Espèces' },
-          { val: 'templates', label: '📋 Templates' },
-          { val: 'email', label: '📧 Email' },
+          { val: 'especes',   label: 'ðŸŒ¿ EspÃ¨ces' },
+          { val: 'templates', label: 'ðŸ“‹ Templates' },
+          { val: 'email',     label: 'ðŸ“§ Email' },
+          { val: 'export',    label: 'ðŸ’¾ Export' },
         ].map(o => (
           <button key={o.val} onClick={() => setOnglet(o.val as typeof onglet)}
             className={`flex-1 py-2 text-xs font-medium transition-colors
@@ -50,12 +51,13 @@ export default function ParametresPage() {
       <button onClick={() => router.push('/couts')}
         className="w-full flex items-center justify-between p-3 bg-amber-50 border border-amber-200 rounded-xl text-sm">
         <span className="font-medium text-amber-800">Dashboard couts de production</span>
-        <span className="text-amber-600">›</span>
+        <span className="text-amber-600">â€º</span>
       </button>
 
-      {onglet === 'especes' && <EspecesPanel especes={especes} onEdit={setEditEspece} onRefresh={charger} />}
+      {onglet === 'especes'   && <EspecesPanel especes={especes} onEdit={setEditEspece} onRefresh={charger} />}
       {onglet === 'templates' && <TemplatesPanel templates={templates} onRefresh={charger} />}
-      {onglet === 'email' && <EmailPanel />}
+      {onglet === 'email'     && <EmailPanel />}
+      {onglet === 'export'    && <ExportPanel />}
 
       {editEspece && (
         <EspeceModal espece={editEspece} onClose={() => setEditEspece(null)} onSave={charger} />
@@ -68,7 +70,7 @@ function EspecesPanel({ especes, onEdit, onRefresh }: {
   especes: Espece[]; onEdit: (e: Espece) => void; onRefresh: () => void
 }) {
   const sections = ['TAPIS', 'TERREAU', 'GODETS'] as const
-  const secIco = { TAPIS: '🟩', TERREAU: '🟫', GODETS: '🟧' }
+  const secIco = { TAPIS: 'ðŸŸ©', TERREAU: 'ðŸŸ«', GODETS: 'ðŸŸ§' }
 
   async function toggleActif(e: Espece) {
     await supabase.from('especes').update({ actif: !e.actif }).eq('id', e.id)
@@ -76,7 +78,7 @@ function EspecesPanel({ especes, onEdit, onRefresh }: {
   }
 
   async function ajouterEspece(section: 'TAPIS' | 'TERREAU' | 'GODETS') {
-    const nom = prompt(`Nom de la nouvelle espèce (${section}) :`)
+    const nom = prompt(`Nom de la nouvelle espÃ¨ce (${section}) :`)
     if (!nom) return
     await supabase.from('especes').insert({ nom: nom.toUpperCase(), section, actif: true })
     onRefresh()
@@ -99,18 +101,18 @@ function EspecesPanel({ especes, onEdit, onRefresh }: {
                 <div className="flex-1">
                   <div className="text-sm font-medium">{e.nom}</div>
                   <div className="text-xs text-gray-400">
-                    {e.prix_graine_kg ? `${e.prix_graine_kg}€/kg` : 'Prix non renseigné'}
-                    {' · '}
+                    {e.prix_graine_kg ? `${e.prix_graine_kg}â‚¬/kg` : 'Prix non renseignÃ©'}
+                    {' Â· '}
                     {e.stock_actuel_g}g en stock
                   </div>
                 </div>
                 <button onClick={() => onEdit(e)}
                   className="text-xs text-blue-600 px-2 py-1 rounded border border-blue-200">
-                  Éditer
+                  Ã‰diter
                 </button>
                 <button onClick={() => toggleActif(e)}
                   className={`text-xs px-2 py-1 rounded border ${e.actif ? 'text-gray-500 border-gray-200' : 'text-green-600 border-green-200'}`}>
-                  {e.actif ? 'Désactiver' : 'Activer'}
+                  {e.actif ? 'DÃ©sactiver' : 'Activer'}
                 </button>
               </div>
             ))}
@@ -160,7 +162,7 @@ function EspeceModal({ espece, onClose, onSave }: { espece: Espece, onClose: () 
   const champs = [
     { key: 'nom', label: 'Nom', type: 'text' },
     { key: 'stock_actuel_g', label: 'Stock actuel (g)', type: 'number' },
-    { key: 'prix_graine_kg', label: 'Prix graine (€/kg)', type: 'number' },
+    { key: 'prix_graine_kg', label: 'Prix graine (â‚¬/kg)', type: 'number' },
     { key: 'g_tapis', label: 'G/tapis', type: 'number' },
     { key: 'g_caisse', label: 'G/caisse terreau', type: 'number' },
     { key: 'g_godet', label: 'G/godet', type: 'number' },
@@ -174,7 +176,7 @@ function EspeceModal({ espece, onClose, onSave }: { espece: Espece, onClose: () 
     <div className="fixed inset-0 bg-black/50 z-50 flex items-end" onClick={onClose}>
       <div className="bg-white w-full max-w-2xl mx-auto rounded-t-2xl p-4 pb-24 space-y-3 max-h-[85vh] overflow-y-auto"
         onClick={e => e.stopPropagation()}>
-        <h2 className="text-lg font-bold">Éditer — {espece.nom}</h2>
+        <h2 className="text-lg font-bold">Ã‰diter â€” {espece.nom}</h2>
         <div className="grid grid-cols-2 gap-3">
           {champs.map(c => (
             <div key={c.key} className={c.key === 'nom' ? 'col-span-2' : ''}>
@@ -189,7 +191,7 @@ function EspeceModal({ espece, onClose, onSave }: { espece: Espece, onClose: () 
           <button onClick={onClose} className="flex-1 py-3 rounded-lg border border-gray-200 text-gray-600">Annuler</button>
           <button onClick={sauvegarder} disabled={saving}
             className="flex-1 py-3 rounded-lg bg-green-700 text-white font-semibold disabled:opacity-50">
-            {saving ? 'Sauvegarde...' : '💾 Sauvegarder'}
+            {saving ? 'Sauvegarde...' : 'ðŸ’¾ Sauvegarder'}
           </button>
         </div>
       </div>
@@ -220,7 +222,7 @@ function TemplatesPanel({ templates, onRefresh }: { templates: Template[], onRef
       ))}
       {templates.length === 0 && (
         <div className="text-center py-8 text-gray-400 text-sm">
-          Aucun template. Créez-en depuis la page Semis.
+          Aucun template. CrÃ©ez-en depuis la page Semis.
         </div>
       )}
     </div>
@@ -234,14 +236,14 @@ function EmailPanel() {
     setTesting(true)
     const res = await fetch('/api/email/test', { method: 'POST' })
     setTesting(false)
-    if (res.ok) alert('Email de test envoyé !')
-    else alert("Erreur lors de l'envoi — vérifiez la clé Resend")
+    if (res.ok) alert('Email de test envoyÃ© !')
+    else alert("Erreur lors de l'envoi â€” vÃ©rifiez la clÃ© Resend")
   }
 
   return (
     <div className="space-y-4">
       <div className="bg-white rounded-lg border border-gray-200 p-4 space-y-3">
-        <h3 className="font-semibold text-sm">Adresse de réception</h3>
+        <h3 className="font-semibold text-sm">Adresse de rÃ©ception</h3>
         <div className="bg-gray-50 rounded p-2 text-sm font-mono text-gray-700">
           petitesherbes@gmail.com
         </div>
@@ -251,8 +253,143 @@ function EmailPanel() {
       </div>
       <button onClick={testerEmail} disabled={testing}
         className="w-full py-3 rounded-lg bg-blue-600 text-white font-semibold disabled:opacity-50">
-        {testing ? 'Envoi...' : '📧 Envoyer un email de test'}
+        {testing ? 'Envoi...' : 'ðŸ“§ Envoyer un email de test'}
       </button>
+    </div>
+  )
+}
+
+// â”€â”€â”€ Export Panel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+function ExportPanel() {
+  const [exporting, setExporting] = useState<string | null>(null)
+  const [done, setDone] = useState<string | null>(null)
+
+  function toCSV(rows: Record<string, unknown>[]): string {
+    if (!rows.length) return ''
+    const BOM = 'ï»¿'
+    const headers = Object.keys(rows[0])
+    const lines = rows.map(row =>
+      headers.map(h => {
+        const v = row[h]
+        if (v == null) return ''
+        const s = String(v).replace(/"/g, '""')
+        return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s}"` : s
+      }).join(',')
+    )
+    return BOM + [headers.join(','), ...lines].join('\r\n')
+  }
+
+  function telecharger(csv: string, nom: string) {
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url  = URL.createObjectURL(blob)
+    const a    = document.createElement('a')
+    a.href     = url
+    a.download = nom
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
+  async function exporter(table: string, nom: string, select = '*') {
+    setExporting(table)
+    const { data } = await supabase.from(table).select(select).order('created_at', { ascending: false })
+    if (data && data.length > 0) {
+      const date = new Date().toISOString().slice(0, 10)
+      telecharger(toCSV(data as unknown as Record<string, unknown>[]), `${nom}_${date}.csv`)
+      setDone(table)
+      setTimeout(() => setDone(null), 3000)
+    }
+    setExporting(null)
+  }
+
+  async function exporterTout() {
+    setExporting('all')
+    const tables = [
+      { key: 'clients',           sel: '*' },
+      { key: 'especes',           sel: '*' },
+      { key: 'semis',             sel: '*' },
+      { key: 'semis_lignes',      sel: '*' },
+      { key: 'bons_livraison',    sel: '*' },
+      { key: 'bl_lignes',         sel: '*' },
+      { key: 'cahier_culture',    sel: '*' },
+      { key: 'taches',            sel: '*' },
+      { key: 'pertes',            sel: '*' },
+      { key: 'especes_serre',     sel: '*' },
+      { key: 'produits_traitement', sel: '*' },
+    ]
+    const allData: Record<string, unknown>[] = []
+    for (const t of tables) {
+      const { data } = await supabase.from(t.key).select(t.sel).order('created_at', { ascending: false })
+      if (data) {
+        for (const row of data) {
+          allData.push({ _table: t.key, ...(row as unknown as Record<string, unknown>) })
+        }
+      }
+    }
+    const date = new Date().toISOString().slice(0, 10)
+    telecharger(toCSV(allData), `petites_herbes_backup_${date}.csv`)
+    setExporting(null)
+    setDone('all')
+    setTimeout(() => setDone(null), 3000)
+  }
+
+  const exports = [
+    { key: 'clients',        label: 'Clients',          icon: 'ðŸ‘¤', desc: 'Noms, tÃ©lÃ©phones, liens boutique' },
+    { key: 'bons_livraison', label: 'Commandes (BLs)',  icon: 'ðŸ“¦', desc: 'Tous les bons de livraison' },
+    { key: 'semis',          label: 'Semis',            icon: 'ðŸŒ±', desc: 'Historique des semis' },
+    { key: 'cahier_culture', label: 'Cahier terrain',   icon: 'ðŸ“–', desc: 'Toutes les entrÃ©es terrain' },
+    { key: 'taches',         label: 'TÃ¢ches',           icon: 'âœ…', desc: 'Agenda et tÃ¢ches' },
+    { key: 'pertes',         label: 'Pertes',           icon: 'ðŸ“‰', desc: 'Invendus et pertes' },
+    { key: 'especes',        label: 'EspÃ¨ces',          icon: 'ðŸŒ¿', desc: 'Catalogue des espÃ¨ces micropousses' },
+  ]
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 text-sm text-blue-800">
+        <div className="font-bold mb-1">ðŸ’¾ Export de vos donnÃ©es</div>
+        Les fichiers CSV s&apos;ouvrent directement dans Excel ou Google Sheets.
+        Faites un export complet 1Ã—/semaine pour sauvegarder toutes vos donnÃ©es.
+      </div>
+
+      {/* Export tout */}
+      <button
+        onClick={exporterTout}
+        disabled={!!exporting}
+        className="w-full py-4 rounded-2xl font-bold text-base flex items-center justify-center gap-3 active:scale-95 transition-transform disabled:opacity-60 bg-green-700 text-white shadow-sm">
+        {exporting === 'all' ? (
+          <><span className="animate-spin">â³</span> Export en coursâ€¦</>
+        ) : done === 'all' ? (
+          'âœ… TÃ©lÃ©chargÃ© !'
+        ) : (
+          <><span>ðŸ“¦</span> Export complet (toutes les tables)</>
+        )}
+      </button>
+
+      {/* Exports individuels */}
+      <div className="text-xs font-bold text-gray-400 uppercase tracking-wider">Par table</div>
+      <div className="space-y-2">
+        {exports.map(e => (
+          <button key={e.key}
+            onClick={() => exporter(e.key, e.label.toLowerCase().replace(/\s/g, '_'))}
+            disabled={!!exporting}
+            className="w-full flex items-center gap-3 bg-white border border-gray-100 rounded-2xl px-4 py-3 active:scale-95 transition-transform disabled:opacity-60 shadow-sm text-left">
+            <span className="text-2xl">{e.icon}</span>
+            <div className="flex-1">
+              <div className="font-semibold text-sm text-gray-800">{e.label}</div>
+              <div className="text-xs text-gray-400">{e.desc}</div>
+            </div>
+            <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
+              exporting === e.key ? 'bg-amber-100 text-amber-700' :
+              done === e.key     ? 'bg-green-100 text-green-700' :
+                                   'bg-gray-100 text-gray-500'
+            }`}>
+              {exporting === e.key ? 'â³ â€¦' : done === e.key ? 'âœ… OK' : 'â†“ CSV'}
+            </span>
+          </button>
+        ))}
+      </div>
     </div>
   )
 }

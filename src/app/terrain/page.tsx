@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic'
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { format, parseISO, isToday, isTomorrow } from 'date-fns'
+import { format, parseISO, isToday, isTomorrow, addDays } from 'date-fns'
 import { fr } from 'date-fns/locale'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -242,6 +242,11 @@ type Tab = 'cahier' | 'agenda' | 'zones' | 'pertes'
 
 export default function TerrainPage() {
   const [onglet, setOnglet]           = useState<Tab>('cahier')
+  const [taskRapide, setTaskRapide]   = useState(false)
+  const [taskTitre, setTaskTitre]     = useState('')
+  const [taskDate, setTaskDate]       = useState(format(new Date(), 'yyyy-MM-dd'))
+  const [taskPrio, setTaskPrio]       = useState('normale')
+  const [taskSaving, setTaskSaving]   = useState(false)
   const [zones, setZones]             = useState<Zone[]>([])
   const [planches, setPlanches]       = useState<Planche[]>([])
   const [entrees, setEntrees]         = useState<EntreeCahier[]>([])
@@ -285,6 +290,19 @@ export default function TerrainPage() {
     if (prod)    setProduits(prod)
   }
 
+  async function sauvegarderTaskRapide() {
+    if (!taskTitre.trim()) return
+    setTaskSaving(true)
+    await supabase.from('taches').insert({
+      titre: taskTitre.trim(), type: 'ponctuelle',
+      date_echeance: taskDate, priorite: taskPrio,
+    })
+    setTaskSaving(false); setTaskRapide(false)
+    setTaskTitre(''); setTaskPrio('normale')
+    setTaskDate(format(new Date(), 'yyyy-MM-dd'))
+    charger()
+  }
+
   async function ajouterEspeceSerre(nom: string, categorie?: string) {
     await supabase.from('especes_serre').insert({ nom, categorie: categorie || 'plante' })
     const { data } = await supabase.from('especes_serre').select('*').eq('actif', true).order('categorie,nom')
@@ -307,10 +325,74 @@ export default function TerrainPage() {
   return (
     <div className="pb-24">
       <div className="bg-green-900 px-5 pt-6 pb-4">
-        <div className="text-green-400 text-xs font-semibold uppercase tracking-widest">Terrain & Culture</div>
-        <h1 className="text-white text-2xl font-bold mt-1">🌿 Suivi du terrain</h1>
-        <p className="text-green-300 text-sm mt-0.5">{format(new Date(), "EEEE d MMMM yyyy", { locale: fr })}</p>
+        <div className="flex items-start justify-between">
+          <div>
+            <div className="text-green-400 text-xs font-semibold uppercase tracking-widest">Terrain & Culture</div>
+            <h1 className="text-white text-2xl font-bold mt-1">🌿 Suivi du terrain</h1>
+            <p className="text-green-300 text-sm mt-0.5">{format(new Date(), "EEEE d MMMM yyyy", { locale: fr })}</p>
+          </div>
+          <button onClick={() => setTaskRapide(true)}
+            className="bg-green-500 text-white font-bold text-sm px-4 py-2.5 rounded-xl shadow-md mt-1 active:scale-95 transition-transform">
+            + Tâche
+          </button>
+        </div>
       </div>
+
+      {/* ── Modal tâche rapide ── */}
+      {taskRapide && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end" onClick={() => setTaskRapide(false)}>
+          <div className="bg-white w-full max-w-2xl mx-auto rounded-t-2xl p-5 space-y-4 pb-10"
+            onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h2 className="font-bold text-gray-800 text-lg">✅ Tâche rapide</h2>
+              <button onClick={() => setTaskRapide(false)} className="text-gray-400 text-2xl leading-none">×</button>
+            </div>
+
+            <input value={taskTitre} onChange={e => setTaskTitre(e.target.value)}
+              placeholder="Que faut-il faire ?"
+              autoFocus
+              className="w-full border border-gray-200 rounded-xl px-3 py-3 text-base font-semibold focus:outline-none focus:border-green-400"
+            />
+
+            <div className="space-y-2">
+              <div className="text-xs font-semibold text-gray-500">Pour quand ?</div>
+              <div className="flex gap-2">
+                {[
+                  { label: "Aujourd'hui", val: format(new Date(), 'yyyy-MM-dd') },
+                  { label: 'Demain',      val: format(addDays(new Date(), 1), 'yyyy-MM-dd') },
+                ].map(d => (
+                  <button key={d.val} onClick={() => setTaskDate(d.val)}
+                    className={`flex-1 py-2.5 rounded-xl text-sm font-semibold border active:scale-95 transition-transform
+                      ${taskDate === d.val ? 'bg-green-700 text-white border-green-700' : 'bg-gray-50 text-gray-600 border-gray-200'}`}>
+                    📅 {d.label}
+                  </button>
+                ))}
+                <input type="date" value={taskDate} onChange={e => setTaskDate(e.target.value)}
+                  className="flex-1 border border-gray-200 rounded-xl px-2 py-2 text-sm focus:outline-none focus:border-green-400"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <div className="text-xs font-semibold text-gray-500">Priorité</div>
+              <div className="flex gap-2">
+                {(['basse','normale','haute'] as const).map(p => (
+                  <button key={p} onClick={() => setTaskPrio(p)}
+                    className={`flex-1 py-2.5 rounded-xl text-sm font-semibold border active:scale-95 transition-transform capitalize
+                      ${taskPrio === p ? 'bg-green-700 text-white border-green-700' : 'bg-gray-50 text-gray-600 border-gray-200'}`}>
+                    {p === 'haute' ? '🔴' : p === 'normale' ? '🟡' : '⚪'} {p}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <button onClick={sauvegarderTaskRapide} disabled={taskSaving || !taskTitre.trim()}
+              className="w-full bg-green-700 text-white py-4 rounded-xl font-bold text-lg active:scale-95 transition-transform disabled:opacity-50">
+              {taskSaving ? 'Enregistrement…' : '✅ Enregistrer la tâche'}
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="flex border-b border-gray-200 bg-white sticky top-0 z-10">
         {tabs.map(t => (
