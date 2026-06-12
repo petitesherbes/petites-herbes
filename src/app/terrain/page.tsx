@@ -36,9 +36,11 @@ type Perte = {
   quantite: number; unite: string; raison: string; notes: string | null
   espece?: { nom: string } | null
 }
-type Espece          = { id: string; nom: string }
-type EspeceSerre     = { id: string; nom: string; categorie: string }
+type Espece            = { id: string; nom: string }
+type EspeceSerre       = { id: string; nom: string; categorie: string }
 type ProduitTraitement = { id: string; nom: string; type: string }
+type TacheCatalogue    = { id: string; titre: string; categorie: string; icone: string; active: boolean; ordre: number }
+type ZoneTacheCat      = { zone_id: string; catalogue_id: string }
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
@@ -241,27 +243,30 @@ function ListeAvecAjout<T extends { id: string; nom: string }>({ items, valeur, 
 type Tab = 'cahier' | 'agenda' | 'zones' | 'pertes'
 
 export default function TerrainPage() {
-  const [onglet, setOnglet]           = useState<Tab>('cahier')
-  const [taskRapide, setTaskRapide]   = useState(false)
-  const [taskTitre, setTaskTitre]     = useState('')
-  const [taskDate, setTaskDate]       = useState(format(new Date(), 'yyyy-MM-dd'))
-  const [taskPrio, setTaskPrio]       = useState('normale')
-  const [taskSaving, setTaskSaving]   = useState(false)
-  const [zones, setZones]             = useState<Zone[]>([])
-  const [planches, setPlanches]       = useState<Planche[]>([])
-  const [entrees, setEntrees]         = useState<EntreeCahier[]>([])
-  const [taches, setTaches]           = useState<Tache[]>([])
-  const [pertes, setPertes]           = useState<Perte[]>([])
-  const [especes, setEspeces]         = useState<Espece[]>([])
-  const [especesSerre, setEspecesSerre]   = useState<EspeceSerre[]>([])
-  const [produits, setProduits]       = useState<ProduitTraitement[]>([])
+  const [onglet, setOnglet]             = useState<Tab>('agenda')
+  const [taskRapide, setTaskRapide]     = useState(false)
+  const [taskTitre, setTaskTitre]       = useState('')
+  const [taskDate, setTaskDate]         = useState(format(new Date(), 'yyyy-MM-dd'))
+  const [taskPrio, setTaskPrio]         = useState('normale')
+  const [taskZoneId, setTaskZoneId]     = useState('')
+  const [taskSaving, setTaskSaving]     = useState(false)
+  const [zones, setZones]               = useState<Zone[]>([])
+  const [planches, setPlanches]         = useState<Planche[]>([])
+  const [entrees, setEntrees]           = useState<EntreeCahier[]>([])
+  const [taches, setTaches]             = useState<Tache[]>([])
+  const [pertes, setPertes]             = useState<Perte[]>([])
+  const [especes, setEspeces]           = useState<Espece[]>([])
+  const [especesSerre, setEspecesSerre] = useState<EspeceSerre[]>([])
+  const [produits, setProduits]         = useState<ProduitTraitement[]>([])
+  const [catalogueTaches, setCatalogueTaches] = useState<TacheCatalogue[]>([])
+  const [zoneTaches, setZoneTaches]     = useState<ZoneTacheCat[]>([])
 
   useEffect(() => { charger() }, [])
 
   async function charger() {
     const [
       { data: z }, { data: pl }, { data: ent }, { data: ta }, { data: pe },
-      { data: esp }, { data: esSerre }, { data: prod }
+      { data: esp }, { data: esSerre }, { data: prod }, { data: cat }, { data: zt }
     ] = await Promise.all([
       supabase.from('zones').select('*').eq('actif', true).order('ordre'),
       supabase.from('zone_planches').select('*').order('ordre'),
@@ -279,15 +284,19 @@ export default function TerrainPage() {
       supabase.from('especes').select('id, nom').eq('actif', true).order('nom'),
       supabase.from('especes_serre').select('*').eq('actif', true).order('categorie,nom'),
       supabase.from('produits_traitement').select('*').eq('actif', true).order('type,nom'),
+      supabase.from('taches_catalogue').select('*').eq('active', true).order('ordre'),
+      supabase.from('zone_taches_catalogue').select('*'),
     ])
-    if (z)       setZones(z)
-    if (pl)      setPlanches(pl)
-    if (ent)     setEntrees(ent as unknown as EntreeCahier[])
-    if (ta)      setTaches(ta as unknown as Tache[])
-    if (pe)      setPertes(pe as unknown as Perte[])
-    if (esp)     setEspeces(esp)
+    if (z)    setZones(z)
+    if (pl)   setPlanches(pl)
+    if (ent)  setEntrees(ent as unknown as EntreeCahier[])
+    if (ta)   setTaches(ta as unknown as Tache[])
+    if (pe)   setPertes(pe as unknown as Perte[])
+    if (esp)  setEspeces(esp)
     if (esSerre) setEspecesSerre(esSerre)
-    if (prod)    setProduits(prod)
+    if (prod) setProduits(prod)
+    if (cat)  setCatalogueTaches(cat as unknown as TacheCatalogue[])
+    if (zt)   setZoneTaches(zt)
   }
 
   async function sauvegarderTaskRapide() {
@@ -296,9 +305,10 @@ export default function TerrainPage() {
     await supabase.from('taches').insert({
       titre: taskTitre.trim(), type: 'ponctuelle',
       date_echeance: taskDate, priorite: taskPrio,
+      zone_id: taskZoneId || null,
     })
     setTaskSaving(false); setTaskRapide(false)
-    setTaskTitre(''); setTaskPrio('normale')
+    setTaskTitre(''); setTaskPrio('normale'); setTaskZoneId('')
     setTaskDate(format(new Date(), 'yyyy-MM-dd'))
     charger()
   }
@@ -316,8 +326,8 @@ export default function TerrainPage() {
   }
 
   const tabs: { id: Tab; icon: string; label: string }[] = [
-    { id: 'cahier', icon: '📖', label: 'Cahier' },
     { id: 'agenda', icon: '✅', label: 'Agenda' },
+    { id: 'cahier', icon: '📖', label: 'Cahier' },
     { id: 'zones',  icon: '🗺️', label: 'Zones' },
     { id: 'pertes', icon: '📉', label: 'Pertes' },
   ]
@@ -339,60 +349,105 @@ export default function TerrainPage() {
       </div>
 
       {/* ── Modal tâche rapide ── */}
-      {taskRapide && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-end" onClick={() => setTaskRapide(false)}>
-          <div className="bg-white w-full max-w-2xl mx-auto rounded-t-2xl p-5 space-y-4 pb-10"
-            onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between">
-              <h2 className="font-bold text-gray-800 text-lg">✅ Tâche rapide</h2>
-              <button onClick={() => setTaskRapide(false)} className="text-gray-400 text-2xl leading-none">×</button>
-            </div>
-
-            <input value={taskTitre} onChange={e => setTaskTitre(e.target.value)}
-              placeholder="Que faut-il faire ?"
-              autoFocus
-              className="w-full border border-gray-200 rounded-xl px-3 py-3 text-base font-semibold focus:outline-none focus:border-green-400"
-            />
-
-            <div className="space-y-2">
-              <div className="text-xs font-semibold text-gray-500">Pour quand ?</div>
-              <div className="flex gap-2">
-                {[
-                  { label: "Aujourd'hui", val: format(new Date(), 'yyyy-MM-dd') },
-                  { label: 'Demain',      val: format(addDays(new Date(), 1), 'yyyy-MM-dd') },
-                ].map(d => (
-                  <button key={d.val} onClick={() => setTaskDate(d.val)}
-                    className={`flex-1 py-2.5 rounded-xl text-sm font-semibold border active:scale-95 transition-transform
-                      ${taskDate === d.val ? 'bg-green-700 text-white border-green-700' : 'bg-gray-50 text-gray-600 border-gray-200'}`}>
-                    📅 {d.label}
-                  </button>
-                ))}
-                <input type="date" value={taskDate} onChange={e => setTaskDate(e.target.value)}
-                  className="flex-1 border border-gray-200 rounded-xl px-2 py-2 text-sm focus:outline-none focus:border-green-400"
-                />
+      {taskRapide && (() => {
+        const chips = taskZoneId
+          ? catalogueTaches.filter(c => zoneTaches.some(zt => zt.zone_id === taskZoneId && zt.catalogue_id === c.id))
+          : catalogueTaches.slice(0, 12)
+        return (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-end" onClick={() => setTaskRapide(false)}>
+            <div className="bg-white w-full max-w-2xl mx-auto rounded-t-2xl p-5 space-y-4 pb-10 max-h-[90vh] overflow-y-auto"
+              onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between">
+                <h2 className="font-bold text-gray-800 text-lg">✅ Tâche rapide</h2>
+                <button onClick={() => setTaskRapide(false)} className="text-gray-400 text-2xl leading-none">×</button>
               </div>
-            </div>
 
-            <div className="space-y-2">
-              <div className="text-xs font-semibold text-gray-500">Priorité</div>
-              <div className="flex gap-2">
-                {(['basse','normale','haute'] as const).map(p => (
-                  <button key={p} onClick={() => setTaskPrio(p)}
-                    className={`flex-1 py-2.5 rounded-xl text-sm font-semibold border active:scale-95 transition-transform capitalize
-                      ${taskPrio === p ? 'bg-green-700 text-white border-green-700' : 'bg-gray-50 text-gray-600 border-gray-200'}`}>
-                    {p === 'haute' ? '🔴' : p === 'normale' ? '🟡' : '⚪'} {p}
+              {/* Zone (optionnel) */}
+              <div className="space-y-1.5">
+                <div className="text-xs font-semibold text-gray-500">Zone (optionnel)</div>
+                <div className="flex flex-wrap gap-1.5">
+                  <button onClick={() => setTaskZoneId('')}
+                    className={`px-3 py-1.5 rounded-full text-xs font-semibold border active:scale-95 transition-transform
+                      ${!taskZoneId ? 'bg-green-700 text-white border-green-700' : 'bg-gray-50 text-gray-500 border-gray-200'}`}>
+                    Toutes
                   </button>
-                ))}
+                  {zones.map(z => (
+                    <button key={z.id} onClick={() => setTaskZoneId(z.id)}
+                      className={`px-3 py-1.5 rounded-full text-xs font-semibold border active:scale-95 transition-transform
+                        ${taskZoneId === z.id ? 'bg-green-700 text-white border-green-700' : 'bg-gray-50 text-gray-500 border-gray-200'}`}>
+                      {z.type === 'serre' ? '🪴' : '📍'} {z.nom}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
 
-            <button onClick={sauvegarderTaskRapide} disabled={taskSaving || !taskTitre.trim()}
-              className="w-full bg-green-700 text-white py-4 rounded-xl font-bold text-lg active:scale-95 transition-transform disabled:opacity-50">
-              {taskSaving ? 'Enregistrement…' : '✅ Enregistrer la tâche'}
-            </button>
+              {/* Suggestions catalogue */}
+              {chips.length > 0 && (
+                <div className="space-y-1.5">
+                  <div className="text-xs font-semibold text-gray-500">
+                    ⚡ Suggestions{taskZoneId ? ` — ${zones.find(z => z.id === taskZoneId)?.nom}` : ''}
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {chips.map(c => (
+                      <button key={c.id}
+                        onClick={() => setTaskTitre(c.titre)}
+                        className={`px-3 py-1.5 rounded-full text-xs font-semibold border active:scale-95 transition-transform
+                          ${taskTitre === c.titre
+                            ? 'bg-green-700 text-white border-green-700'
+                            : 'bg-green-50 text-green-800 border-green-200'}`}>
+                        {c.icone} {c.titre}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <input value={taskTitre} onChange={e => setTaskTitre(e.target.value)}
+                placeholder="Que faut-il faire ?"
+                autoFocus
+                className="w-full border border-gray-200 rounded-xl px-3 py-3 text-base font-semibold focus:outline-none focus:border-green-400"
+              />
+
+              <div className="space-y-2">
+                <div className="text-xs font-semibold text-gray-500">Pour quand ?</div>
+                <div className="flex gap-2">
+                  {[
+                    { label: "Aujourd'hui", val: format(new Date(), 'yyyy-MM-dd') },
+                    { label: 'Demain',      val: format(addDays(new Date(), 1), 'yyyy-MM-dd') },
+                  ].map(d => (
+                    <button key={d.val} onClick={() => setTaskDate(d.val)}
+                      className={`flex-1 py-2.5 rounded-xl text-sm font-semibold border active:scale-95 transition-transform
+                        ${taskDate === d.val ? 'bg-green-700 text-white border-green-700' : 'bg-gray-50 text-gray-600 border-gray-200'}`}>
+                      📅 {d.label}
+                    </button>
+                  ))}
+                  <input type="date" value={taskDate} onChange={e => setTaskDate(e.target.value)}
+                    className="flex-1 border border-gray-200 rounded-xl px-2 py-2 text-sm focus:outline-none focus:border-green-400"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="text-xs font-semibold text-gray-500">Priorité</div>
+                <div className="flex gap-2">
+                  {(['basse','normale','haute'] as const).map(p => (
+                    <button key={p} onClick={() => setTaskPrio(p)}
+                      className={`flex-1 py-2.5 rounded-xl text-sm font-semibold border active:scale-95 transition-transform capitalize
+                        ${taskPrio === p ? 'bg-green-700 text-white border-green-700' : 'bg-gray-50 text-gray-600 border-gray-200'}`}>
+                      {p === 'haute' ? '🔴' : p === 'normale' ? '🟡' : '⚪'} {p}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <button onClick={sauvegarderTaskRapide} disabled={taskSaving || !taskTitre.trim()}
+                className="w-full bg-green-700 text-white py-4 rounded-xl font-bold text-lg active:scale-95 transition-transform disabled:opacity-50">
+                {taskSaving ? 'Enregistrement…' : '✅ Enregistrer la tâche'}
+              </button>
+            </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       <div className="flex border-b border-gray-200 bg-white sticky top-0 z-10">
         {tabs.map(t => (
@@ -414,7 +469,11 @@ export default function TerrainPage() {
             onAjouterProduit={ajouterProduit}
           />
         )}
-        {onglet === 'agenda' && <AgendaTab taches={taches} zones={zones} onSaved={charger} />}
+        {onglet === 'agenda' && (
+          <AgendaTab taches={taches} zones={zones}
+            catalogueTaches={catalogueTaches} zoneTaches={zoneTaches}
+            onSaved={charger} />
+        )}
         {onglet === 'zones'  && <ZonesTab zones={zones} planches={planches} onSaved={charger} />}
         {onglet === 'pertes' && <PertesTab pertes={pertes} especes={especes} onSaved={charger} />}
       </div>
@@ -710,8 +769,10 @@ function CahierTab({ zones, especes, especesSerre, produits, entrees, onSaved, o
 
 // ─── Tab : Agenda ──────────────────────────────────────────────────────────────
 
-function AgendaTab({ taches, zones, onSaved }: {
-  taches: Tache[]; zones: Zone[]; onSaved: () => void
+function AgendaTab({ taches, zones, catalogueTaches, zoneTaches, onSaved }: {
+  taches: Tache[]; zones: Zone[]
+  catalogueTaches: TacheCatalogue[]; zoneTaches: ZoneTacheCat[]
+  onSaved: () => void
 }) {
   const [ajout, setAjout]    = useState(false)
   const [titre, setTitre]    = useState('')
@@ -807,8 +868,30 @@ function AgendaTab({ taches, zones, onSaved }: {
         {ajout ? '✕ Annuler' : '+ Ajouter une tâche'}
       </button>
 
-      {ajout && (
+      {ajout && (() => {
+        const chips = zoneId
+          ? catalogueTaches.filter(c => zoneTaches.some(zt => zt.zone_id === zoneId && zt.catalogue_id === c.id))
+          : catalogueTaches.slice(0, 10)
+        return (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-4">
+          {chips.length > 0 && (
+            <div className="space-y-1.5">
+              <div className="text-xs font-semibold text-gray-400">
+                ⚡ Suggestions{zoneId ? ` — ${zones.find(z => z.id === zoneId)?.nom}` : ''}
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {chips.map(c => (
+                  <button key={c.id} onClick={() => setTitre(c.titre)}
+                    className={`px-2.5 py-1 rounded-full text-xs font-semibold border active:scale-95 transition-transform
+                      ${titre === c.titre
+                        ? 'bg-green-700 text-white border-green-700'
+                        : 'bg-green-50 text-green-800 border-green-200'}`}>
+                    {c.icone} {c.titre}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <input value={titre} onChange={e => setTitre(e.target.value)}
             placeholder="Titre de la tâche…"
             className="w-full border border-gray-200 rounded-xl px-3 py-3 text-base font-semibold focus:outline-none focus:border-green-400"
@@ -872,7 +955,8 @@ function AgendaTab({ taches, zones, onSaved }: {
             {saving ? 'Enregistrement…' : '✅ Enregistrer la tâche'}
           </button>
         </div>
-      )}
+        )
+      })()}
 
       {autresTaches.length > 0 && (
         <div className="rounded-2xl border border-gray-100 overflow-hidden">

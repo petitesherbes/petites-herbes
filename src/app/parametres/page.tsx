@@ -8,7 +8,7 @@ import { Espece, Template } from '@/types'
 
 export default function ParametresPage() {
   const router = useRouter()
-  const [onglet, setOnglet] = useState<'especes' | 'templates' | 'email' | 'export'>('especes')
+  const [onglet, setOnglet] = useState<'especes' | 'templates' | 'email' | 'export' | 'taches'>('especes')
   const [especes, setEspeces] = useState<Espece[]>([])
   const [templates, setTemplates] = useState<Template[]>([])
   const [loading, setLoading] = useState(true)
@@ -36,6 +36,7 @@ export default function ParametresPage() {
         {[
           { val: 'especes',   label: 'ðŸŒ¿ EspÃ¨ces' },
           { val: 'templates', label: 'ðŸ“‹ Templates' },
+          { val: 'taches',    label: 'Taches' },
           { val: 'email',     label: 'ðŸ“§ Email' },
           { val: 'export',    label: 'ðŸ’¾ Export' },
         ].map(o => (
@@ -56,6 +57,7 @@ export default function ParametresPage() {
 
       {onglet === 'especes'   && <EspecesPanel especes={especes} onEdit={setEditEspece} onRefresh={charger} />}
       {onglet === 'templates' && <TemplatesPanel templates={templates} onRefresh={charger} />}
+      {onglet === 'taches'    && <TachesPanel />}
       {onglet === 'email'     && <EmailPanel />}
       {onglet === 'export'    && <ExportPanel />}
 
@@ -390,6 +392,152 @@ function ExportPanel() {
           </button>
         ))}
       </div>
+    </div>
+  )
+}
+
+
+// Taches Panel
+
+type CatItem = { id: string; titre: string; categorie: string; icone: string; active: boolean; ordre: number }
+type ZoneLite = { id: string; nom: string; type: string }
+type ZoneTacheLite = { zone_id: string; catalogue_id: string }
+
+function TachesPanel() {
+  const [zones, setZones]           = useState<ZoneLite[]>([])
+  const [catalogue, setCatalogue]   = useState<CatItem[]>([])
+  const [zoneTaches, setZoneTaches] = useState<ZoneTacheLite[]>([])
+  const [vue, setVue]               = useState<string>('global')
+  const [saving, setSaving]         = useState<string | null>(null)
+
+  useEffect(() => { chargerTaches() }, [])
+
+  async function chargerTaches() {
+    const [{ data: z }, { data: c }, { data: zt }] = await Promise.all([
+      supabase.from('zones').select('id,nom,type').eq('actif', true).order('ordre'),
+      supabase.from('taches_catalogue').select('*').order('ordre'),
+      supabase.from('zone_taches_catalogue').select('*'),
+    ])
+    if (z)  setZones(z)
+    if (c)  setCatalogue(c as CatItem[])
+    if (zt) setZoneTaches(zt)
+  }
+
+  async function toggleGlobal(cat: CatItem) {
+    setSaving(cat.id)
+    await supabase.from('taches_catalogue').update({ active: !cat.active }).eq('id', cat.id)
+    await chargerTaches()
+    setSaving(null)
+  }
+
+  async function toggleZone(zoneId: string, catalogId: string) {
+    setSaving(catalogId)
+    const existe = zoneTaches.some(zt => zt.zone_id === zoneId && zt.catalogue_id === catalogId)
+    if (existe) {
+      await supabase.from('zone_taches_catalogue').delete()
+        .eq('zone_id', zoneId).eq('catalogue_id', catalogId)
+    } else {
+      await supabase.from('zone_taches_catalogue').insert({ zone_id: zoneId, catalogue_id: catalogId })
+    }
+    await chargerTaches()
+    setSaving(null)
+  }
+
+  const categories  = [...new Set(catalogue.map(c => c.categorie))]
+  const activeCount = catalogue.filter(c => c.active).length
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-green-50 border border-green-200 rounded-2xl p-4 text-sm text-green-900">
+        <div className="font-bold mb-1">Catalogue de taches maraicher</div>
+        <div className="text-xs text-green-700">
+          {catalogue.length} taches actives: {activeCount}.
+          Associez les taches typiques a chaque zone pour des suggestions personnalisees.
+        </div>
+      </div>
+
+      <div className="flex gap-1.5 overflow-x-auto pb-1">
+        <button onClick={() => setVue('global')}
+          className={`px-3 py-2 rounded-xl text-xs font-bold whitespace-nowrap border active:scale-95 flex-shrink-0
+            ${vue === 'global' ? 'bg-green-700 text-white border-green-700' : 'bg-gray-50 text-gray-600 border-gray-200'}`}>
+          Global
+        </button>
+        {zones.map(z => (
+          <button key={z.id} onClick={() => setVue(z.id)}
+            className={`px-3 py-2 rounded-xl text-xs font-bold whitespace-nowrap border active:scale-95 flex-shrink-0
+              ${vue === z.id ? 'bg-green-700 text-white border-green-700' : 'bg-gray-50 text-gray-600 border-gray-200'}`}>
+            {z.nom}
+          </button>
+        ))}
+      </div>
+
+      {vue === 'global' ? (
+        <div className="space-y-2">
+          <div className="text-xs text-gray-400">Activez / desactivez les taches du catalogue.</div>
+          {categories.map(cat => {
+            const items = catalogue.filter(c => c.categorie === cat)
+            return (
+              <div key={cat} className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+                <div className="px-4 py-2.5 bg-gray-50 font-bold text-xs text-gray-600 border-b border-gray-100 flex justify-between">
+                  <span>{items[0]?.icone} {cat}</span>
+                  <span className="font-normal text-gray-400">{items.filter(i => i.active).length}/{items.length}</span>
+                </div>
+                {items.map(c => (
+                  <button key={c.id} onClick={() => toggleGlobal(c)}
+                    className={`w-full flex items-center gap-3 px-4 py-3 border-b border-gray-50 last:border-0 text-left active:bg-gray-50
+                      ${!c.active ? 'opacity-40' : ''}`}>
+                    <div className={`w-6 h-6 rounded-full border-2 flex-shrink-0 flex items-center justify-center text-xs
+                      ${c.active ? 'bg-green-600 border-green-600 text-white' : 'border-gray-300 bg-white'}`}>
+                      {c.active && '✓'}
+                    </div>
+                    <span className="text-sm text-gray-800 flex-1">{c.titre}</span>
+                    {saving === c.id && <span className="text-xs text-gray-400 animate-pulse">...</span>}
+                  </button>
+                ))}
+              </div>
+            )
+          })}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <div className="text-xs text-gray-400">
+            Taches typiques de {zones.find(z => z.id === vue)?.nom} --
+            apparaissent en suggestions lors de l&apos;ajout rapide.
+          </div>
+          {categories.map(cat => {
+            const items = catalogue.filter(c => c.active && c.categorie === cat)
+            if (!items.length) return null
+            const nbCochees = items.filter(c =>
+              zoneTaches.some(zt => zt.zone_id === vue && zt.catalogue_id === c.id)
+            ).length
+            return (
+              <div key={cat} className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+                <div className="px-4 py-2.5 bg-gray-50 font-bold text-xs text-gray-600 border-b border-gray-100 flex justify-between">
+                  <span>{items[0]?.icone} {cat}</span>
+                  <span className="font-normal text-gray-400">{nbCochees}/{items.length}</span>
+                </div>
+                {items.map(c => {
+                  const checked = zoneTaches.some(zt => zt.zone_id === vue && zt.catalogue_id === c.id)
+                  return (
+                    <button key={c.id} onClick={() => toggleZone(vue, c.id)}
+                      className="w-full flex items-center gap-3 px-4 py-3 border-b border-gray-50 last:border-0 text-left active:bg-gray-50">
+                      <div className={`w-6 h-6 rounded-full border-2 flex-shrink-0 flex items-center justify-center text-xs
+                        ${checked ? 'bg-green-600 border-green-600 text-white' : 'border-gray-300 bg-white'}`}>
+                        {checked && '✓'}
+                      </div>
+                      <span className="text-sm text-gray-800 flex-1">{c.titre}</span>
+                      {saving === c.id && <span className="text-xs text-gray-400 animate-pulse">...</span>}
+                    </button>
+                  )
+                })}
+              </div>
+            )
+          })}
+          <div className="text-center text-xs text-gray-400 pt-1">
+            Pour voir toutes les taches, activez-les dans Global.
+          </div>
+        </div>
+      )}
     </div>
   )
 }
