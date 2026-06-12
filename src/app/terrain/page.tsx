@@ -42,6 +42,11 @@ type EspeceSerre       = { id: string; nom: string; categorie: string }
 type ProduitTraitement = { id: string; nom: string; type: string }
 type TacheCatalogue    = { id: string; titre: string; categorie: string; icone: string; active: boolean; ordre: number }
 type ZoneTacheCat      = { zone_id: string; catalogue_id: string }
+type Pointage = {
+  id: string; date: string; auteur: string
+  heure_arrivee: string | null; heure_depart: string | null
+  pause_minutes: number; notes: string | null
+}
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
@@ -97,6 +102,18 @@ function labelDate(dateStr: string): string {
   if (isToday(d)) return "Aujourd'hui"
   if (isTomorrow(d)) return 'Demain'
   return format(d, 'EEE d MMM', { locale: fr })
+}
+
+function calcMinutes(debut: string, fin: string): number {
+  const [dh, dm] = debut.split(':').map(Number)
+  const [fh, fm] = fin.split(':').map(Number)
+  return (fh * 60 + fm) - (dh * 60 + dm)
+}
+
+function formatDuree(minutes: number): string {
+  const h = Math.floor(Math.abs(minutes) / 60)
+  const m = Math.abs(minutes) % 60
+  return m === 0 ? `${h}h` : `${h}h${String(m).padStart(2, '0')}`
 }
 
 function prioriteColor(p: string): string {
@@ -227,7 +244,7 @@ function ListeAvecAjout<T extends { id: string; nom: string }>({ items, valeur, 
 
 // ─── Page principale ───────────────────────────────────────────────────────────
 
-type Tab = 'cahier' | 'agenda' | 'zones' | 'pertes'
+type Tab = 'cahier' | 'agenda' | 'zones' | 'pertes' | 'heures'
 
 export default function TerrainPage() {
   const [onglet, setOnglet]             = useState<Tab>('agenda')
@@ -247,13 +264,14 @@ export default function TerrainPage() {
   const [produits, setProduits]         = useState<ProduitTraitement[]>([])
   const [catalogueTaches, setCatalogueTaches] = useState<TacheCatalogue[]>([])
   const [zoneTaches, setZoneTaches]     = useState<ZoneTacheCat[]>([])
+  const [pointages, setPointages]       = useState<Pointage[]>([])
 
   useEffect(() => { charger() }, [])
 
   async function charger() {
     const [
       { data: z }, { data: pl }, { data: ent }, { data: ta }, { data: pe },
-      { data: esp }, { data: esSerre }, { data: prod }, { data: cat }, { data: zt }
+      { data: esp }, { data: esSerre }, { data: prod }, { data: cat }, { data: zt }, { data: pts }
     ] = await Promise.all([
       supabase.from('zones').select('*').eq('actif', true).order('ordre'),
       supabase.from('zone_planches').select('*').order('ordre'),
@@ -273,6 +291,7 @@ export default function TerrainPage() {
       supabase.from('produits_traitement').select('*').eq('actif', true).order('type,nom'),
       supabase.from('taches_catalogue').select('*').eq('active', true).order('ordre'),
       supabase.from('zone_taches_catalogue').select('*'),
+      supabase.from('pointages').select('*').order('date', { ascending: false }).limit(60),
     ])
     if (z)    setZones(z)
     if (pl)   setPlanches(pl)
@@ -284,6 +303,7 @@ export default function TerrainPage() {
     if (prod) setProduits(prod)
     if (cat)  setCatalogueTaches(cat as unknown as TacheCatalogue[])
     if (zt)   setZoneTaches(zt)
+    if (pts)  setPointages(pts as unknown as Pointage[])
   }
 
   // Cree une tache par zone selectionnee (ou une sans zone si aucune)
@@ -325,6 +345,7 @@ export default function TerrainPage() {
     { id: 'cahier', icon: '📖', label: 'Cahier' },
     { id: 'zones',  icon: '🗺️', label: 'Zones' },
     { id: 'pertes', icon: '📉', label: 'Pertes' },
+    { id: 'heures', icon: '⏱️', label: 'Heures' },
   ]
 
   return (
@@ -487,6 +508,9 @@ export default function TerrainPage() {
         )}
         {onglet === 'zones'  && <ZonesTab zones={zones} planches={planches} onSaved={charger} />}
         {onglet === 'pertes' && <PertesTab pertes={pertes} especes={especes} onSaved={charger} />}
+        {onglet === 'heures' && (
+          <HeuresTab taches={taches} entrees={entrees} zones={zones} pointages={pointages} onSaved={charger} />
+        )}
       </div>
     </div>
   )
@@ -1366,6 +1390,266 @@ function PertesTab({ pertes, especes, onSaved }: {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// ─── Tab : Heures ──────────────────────────────────────────────────────────────
+
+function HeuresTab({ taches, entrees, zones, pointages, onSaved }: {
+  taches: Tache[]; entrees: EntreeCahier[]; zones: Zone[]
+  pointages: Pointage[]; onSaved: () => void
+}) {
+  const [auteur, setAuteur]   = useState(() =>
+    typeof window !== 'undefined' ? localStorage.getItem('terrain_auteur') || 'Antoine' : 'Antoine'
+  )
+  const [dateVue, setDateVue] = useState(format(new Date(), 'yyyy-MM-dd'))
+  const [arrivee, setArrivee] = useState('')
+  const [depart, setDepart]   = useState('')
+  const [pause, setPause]     = useState(0)
+  const [notes, setNotes]     = useState('')
+  const [saving, setSaving]   = useState(false)
+
+  const pointage = pointages.find(p => p.auteur === auteur && p.date === dateVue)
+
+  useEffect(() => {
+    setArrivee(pointage?.heure_arrivee?.slice(0, 5) || '')
+    setDepart(pointage?.heure_depart?.slice(0, 5) || '')
+    setPause(pointage?.pause_minutes || 0)
+    setNotes(pointage?.notes || '')
+  }, [auteur, dateVue, pointage?.id])
+
+  const isAujourdHui = dateVue === format(new Date(), 'yyyy-MM-dd')
+  const totalMin = arrivee && depart ? calcMinutes(arrivee, depart) - pause : null
+
+  const tachesJour = taches.filter(t =>
+    (t.completions || []).some(c => c.date_completion === dateVue)
+  )
+  const entreesJour = entrees.filter(e => e.date_operation === dateVue)
+
+  function aller(delta: number) {
+    setDateVue(format(addDays(parseISO(dateVue), delta), 'yyyy-MM-dd'))
+  }
+
+  async function sauvegarder() {
+    setSaving(true)
+    await supabase.from('pointages').upsert({
+      date: dateVue, auteur,
+      heure_arrivee: arrivee || null,
+      heure_depart: depart || null,
+      pause_minutes: pause,
+      notes: notes || null,
+    }, { onConflict: 'date,auteur' })
+    setSaving(false)
+    onSaved()
+  }
+
+  const semaine = Array.from({ length: 7 }, (_, i) => {
+    const d = format(addDays(new Date(), i - 6), 'yyyy-MM-dd')
+    const p = pointages.find(pt => pt.auteur === auteur && pt.date === d)
+    let mins: number | null = null
+    if (p?.heure_arrivee && p?.heure_depart) {
+      mins = calcMinutes(p.heure_arrivee.slice(0, 5), p.heure_depart.slice(0, 5)) - (p.pause_minutes || 0)
+    }
+    return { date: d, mins }
+  })
+  const totalSemaine = semaine.reduce((s, d) => s + (d.mins && d.mins > 0 ? d.mins : 0), 0)
+
+  const TYPES_OP_ALL = [...TYPES_OP_CHAMP, ...TYPES_OP_SERRE]
+
+  return (
+    <div className="space-y-4">
+
+      {/* Qui */}
+      <div className="flex gap-2">
+        {['Antoine', 'Lucas'].map(a => (
+          <button key={a}
+            onClick={() => { setAuteur(a); if (typeof window !== 'undefined') localStorage.setItem('terrain_auteur', a) }}
+            className={`flex-1 py-3.5 rounded-2xl font-bold text-base border-2 active:scale-95 transition-transform
+              ${auteur === a ? 'bg-green-700 text-white border-green-700' : 'bg-white text-gray-600 border-gray-200'}`}>
+            👤 {a}
+          </button>
+        ))}
+      </div>
+
+      {/* Navigation date */}
+      <div className="flex items-center gap-2">
+        <button onClick={() => aller(-1)}
+          className="w-11 h-11 rounded-xl border border-gray-200 flex items-center justify-center text-gray-500 font-bold active:bg-gray-100 text-lg">
+          ←
+        </button>
+        <div className="flex-1 text-center">
+          <div className="font-bold text-gray-800 capitalize text-base">
+            {isAujourdHui ? "Aujourd'hui" : format(parseISO(dateVue), 'EEEE d MMMM', { locale: fr })}
+          </div>
+          {!isAujourdHui && (
+            <button onClick={() => setDateVue(format(new Date(), 'yyyy-MM-dd'))}
+              className="text-xs text-green-700 font-semibold">
+              Revenir a aujourd'hui
+            </button>
+          )}
+        </div>
+        <button onClick={() => aller(1)} disabled={isAujourdHui}
+          className="w-11 h-11 rounded-xl border border-gray-200 flex items-center justify-center text-gray-500 font-bold active:bg-gray-100 text-lg disabled:opacity-30">
+          →
+        </button>
+      </div>
+
+      {/* Pointage */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="px-4 py-3 bg-green-900 text-white font-bold text-sm">
+          Pointage du jour
+        </div>
+        <div className="p-4 space-y-3">
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <div className="text-xs font-semibold text-gray-500">Arrivee</div>
+              <div className="flex gap-1.5">
+                <input type="time" value={arrivee} onChange={e => setArrivee(e.target.value)}
+                  className="flex-1 border border-gray-200 rounded-xl px-2 py-2.5 text-base font-bold text-center focus:outline-none focus:border-green-400"
+                />
+                {isAujourdHui && (
+                  <button onClick={() => setArrivee(format(new Date(), 'HH:mm'))}
+                    className="px-2 bg-green-50 text-green-700 rounded-xl text-[11px] font-bold active:scale-95 border border-green-200">
+                    Maint.
+                  </button>
+                )}
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <div className="text-xs font-semibold text-gray-500">Depart</div>
+              <div className="flex gap-1.5">
+                <input type="time" value={depart} onChange={e => setDepart(e.target.value)}
+                  className="flex-1 border border-gray-200 rounded-xl px-2 py-2.5 text-base font-bold text-center focus:outline-none focus:border-green-400"
+                />
+                {isAujourdHui && (
+                  <button onClick={() => setDepart(format(new Date(), 'HH:mm'))}
+                    className="px-2 bg-green-50 text-green-700 rounded-xl text-[11px] font-bold active:scale-95 border border-green-200">
+                    Maint.
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <div className="text-xs font-semibold text-gray-500 shrink-0">Pause (min)</div>
+            <div className="flex gap-1.5 flex-wrap">
+              {[0, 15, 30, 45, 60].map(m => (
+                <button key={m} onClick={() => setPause(m)}
+                  className={`w-9 h-9 rounded-lg text-xs font-bold border active:scale-95 transition-transform
+                    ${pause === m ? 'bg-green-700 text-white border-green-700' : 'bg-gray-50 text-gray-600 border-gray-200'}`}>
+                  {m}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {totalMin !== null && totalMin > 0 && (
+            <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3 text-center">
+              <div className="text-xs text-green-600 font-semibold">Total travaille</div>
+              <div className="text-3xl font-bold text-green-800">{formatDuree(totalMin)}</div>
+            </div>
+          )}
+
+          <textarea value={notes} onChange={e => setNotes(e.target.value)}
+            placeholder="Notes du jour (optionnel)..."
+            rows={2}
+            className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-green-400 resize-none"
+          />
+
+          <button onClick={sauvegarder} disabled={saving}
+            className="w-full bg-green-700 text-white py-3.5 rounded-xl font-bold text-base active:scale-95 transition-transform disabled:opacity-50">
+            {saving ? 'Enregistrement...' : 'Enregistrer le pointage'}
+          </button>
+        </div>
+      </div>
+
+      {/* Travaux du jour — automatique */}
+      {(tachesJour.length > 0 || entreesJour.length > 0) && (
+        <div className="rounded-2xl border border-gray-100 overflow-hidden">
+          <div className="px-4 py-3 bg-gray-50 border-b border-gray-100">
+            <div className="font-bold text-sm text-gray-700">Travaux du jour</div>
+            <div className="text-xs text-gray-400">Remonte automatiquement depuis Agenda et Cahier</div>
+          </div>
+          <div className="divide-y divide-gray-100">
+            {tachesJour.map(t => {
+              const zone = zones.find(z => z.id === t.zone_id)
+              return (
+                <div key={t.id} className="px-4 py-3 flex items-start gap-2.5">
+                  <span className="text-green-600 text-base mt-0.5 shrink-0">✓</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-semibold text-gray-800">{t.titre}</div>
+                    {zone && <div className="text-xs text-gray-400">{zone.type === 'serre' ? '🪴' : '📍'} {zone.nom}</div>}
+                  </div>
+                  <span className="text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-semibold shrink-0">
+                    tache
+                  </span>
+                </div>
+              )
+            })}
+            {entreesJour.map(e => {
+              const op   = TYPES_OP_ALL.find(t => t.val === e.type_operation)
+              const zone = e.zone as { nom: string } | null
+              const esp  = e.espece as { nom: string } | null
+              return (
+                <div key={e.id} className="px-4 py-3 flex items-start gap-2.5">
+                  <span className="text-base mt-0.5 shrink-0">{op?.icon || '📝'}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-semibold text-gray-800">
+                      {op?.label || e.type_operation}
+                      {esp && <span className="text-gray-500 font-normal"> · {esp.nom}</span>}
+                    </div>
+                    <div className="text-xs text-gray-400 flex flex-wrap gap-2">
+                      {zone && <span>📍 {zone.nom}</span>}
+                      {e.quantite && <span>{e.quantite} {e.unite}</span>}
+                    </div>
+                  </div>
+                  <span className="text-[10px] bg-sky-100 text-sky-700 px-2 py-0.5 rounded-full font-semibold shrink-0">
+                    cahier
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Mini semaine */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="px-4 py-3 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
+          <div className="font-bold text-sm text-gray-700">7 derniers jours — {auteur}</div>
+          {totalSemaine > 0 && (
+            <div className="text-green-700 font-bold text-sm">{formatDuree(totalSemaine)} cette semaine</div>
+          )}
+        </div>
+        <div className="px-3 py-3 grid grid-cols-7 gap-1">
+          {semaine.map(({ date: d, mins }) => {
+            const jour     = parseISO(d)
+            const estAuj   = d === format(new Date(), 'yyyy-MM-dd')
+            const estSel   = d === dateVue
+            return (
+              <button key={d} onClick={() => setDateVue(d)}
+                className={`flex flex-col items-center py-2.5 rounded-xl transition-colors
+                  ${estSel ? 'bg-green-100 border border-green-300' : 'hover:bg-gray-50'}`}>
+                <span className={`text-[10px] font-semibold capitalize ${estAuj ? 'text-green-700' : 'text-gray-400'}`}>
+                  {format(jour, 'EEE', { locale: fr }).slice(0, 2)}
+                </span>
+                <span className={`text-xs font-bold mt-0.5 ${estAuj ? 'text-green-800' : 'text-gray-700'}`}>
+                  {format(jour, 'd')}
+                </span>
+                {mins !== null && mins > 0 ? (
+                  <span className="text-[9px] text-green-700 font-bold mt-0.5">{formatDuree(mins)}</span>
+                ) : (
+                  <span className="text-[9px] text-gray-300 mt-1">—</span>
+                )}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
     </div>
   )
 }
