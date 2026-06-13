@@ -541,6 +541,7 @@ function CahierTab({ zones, especes, especesSerre, produits, entrees, onSaved, o
   const [notes, setNotes]       = useState('')
   const [auteur, setAuteur]     = useState('Moi')
   const [saving, setSaving]     = useState(false)
+  const [filtre, setFiltre]     = useState<'tout' | 'traitements'>('tout')
 
   useEffect(() => {
     const saved = typeof window !== 'undefined' ? localStorage.getItem('terrain_auteur') : null
@@ -780,38 +781,99 @@ function CahierTab({ zones, especes, especesSerre, produits, entrees, onSaved, o
         </div>
       </div>
 
-      {/* Historique recent */}
+      {/* Historique + suivi traitements */}
       {entrees.length > 0 && (
         <div className="rounded-2xl border border-gray-100 overflow-hidden">
-          <div className="px-4 py-3 bg-gray-50 font-bold text-sm text-gray-700 border-b border-gray-100">
-            Entrees recentes
+
+          {/* Toggle filtre */}
+          <div className="px-4 py-3 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
+            <span className="font-bold text-sm text-gray-700">
+              {filtre === 'traitements' ? '🌿 Suivi traitements' : 'Entrees recentes'}
+            </span>
+            <div className="flex rounded-xl overflow-hidden border border-gray-200 text-xs font-semibold">
+              <button onClick={() => setFiltre('tout')}
+                className={`px-3 py-1.5 transition-colors ${filtre === 'tout' ? 'bg-green-700 text-white' : 'bg-white text-gray-500'}`}>
+                Tout
+              </button>
+              <button onClick={() => setFiltre('traitements')}
+                className={`px-3 py-1.5 transition-colors ${filtre === 'traitements' ? 'bg-amber-600 text-white' : 'bg-white text-gray-500'}`}>
+                🌿 Traitements
+              </button>
+            </div>
           </div>
-          <div className="divide-y divide-gray-100">
-            {entrees.slice(0, 20).map(e => {
-              const op = [...TYPES_OP_CHAMP, ...TYPES_OP_SERRE].find(t => t.val === e.type_operation)
-              return (
-                <div key={e.id} className="px-4 py-3 flex items-start justify-between gap-2">
-                  <div className="flex items-start gap-2.5">
-                    <span className="text-lg mt-0.5">{op?.icon || '📝'}</span>
-                    <div>
-                      <div className="text-sm font-semibold text-gray-800">
-                        {op?.label || e.type_operation}
-                        {e.espece && <span className="text-gray-500 font-normal"> · {(e.espece as { nom: string }).nom}</span>}
-                        {e.produit && <span className="text-amber-700 font-normal"> · {(e.produit as { nom: string }).nom}</span>}
-                      </div>
-                      <div className="text-xs text-gray-400 mt-0.5 flex flex-wrap gap-2">
-                        {e.zone && <span>📍 {(e.zone as { nom: string }).nom}</span>}
-                        {e.quantite && <span>{e.quantite} {e.unite}</span>}
-                        {e.auteur && e.auteur !== 'Moi' && <span>👤 {e.auteur}</span>}
-                        {e.notes && <span className="italic">"{e.notes}"</span>}
+
+          {/* Vue : tout */}
+          {filtre === 'tout' && (
+            <div className="divide-y divide-gray-100">
+              {entrees.slice(0, 20).map(e => {
+                const op = [...TYPES_OP_CHAMP, ...TYPES_OP_SERRE].find(t => t.val === e.type_operation)
+                return (
+                  <div key={e.id} className="px-4 py-3 flex items-start justify-between gap-2">
+                    <div className="flex items-start gap-2.5">
+                      <span className="text-lg mt-0.5">{op?.icon || '📝'}</span>
+                      <div>
+                        <div className="text-sm font-semibold text-gray-800">
+                          {op?.label || e.type_operation}
+                          {e.espece && <span className="text-gray-500 font-normal"> · {(e.espece as { nom: string }).nom}</span>}
+                          {e.produit && <span className="text-amber-700 font-normal"> · {(e.produit as { nom: string }).nom}</span>}
+                        </div>
+                        <div className="text-xs text-gray-400 mt-0.5 flex flex-wrap gap-2">
+                          {e.zone && <span>📍 {(e.zone as { nom: string }).nom}</span>}
+                          {e.quantite && <span>{e.quantite} {e.unite}</span>}
+                          {e.auteur && e.auteur !== 'Moi' && <span>👤 {e.auteur}</span>}
+                          {e.notes && <span className="italic">&ldquo;{e.notes}&rdquo;</span>}
+                        </div>
                       </div>
                     </div>
+                    <div className="text-xs text-gray-400 whitespace-nowrap">{labelDate(e.date_operation)}</div>
                   </div>
-                  <div className="text-xs text-gray-400 whitespace-nowrap">{labelDate(e.date_operation)}</div>
-                </div>
-              )
-            })}
-          </div>
+                )
+              })}
+            </div>
+          )}
+
+          {/* Vue : traitements groupés par zone */}
+          {filtre === 'traitements' && (() => {
+            const trts = entrees.filter(e => e.type_operation === 'traitement')
+            if (trts.length === 0) return (
+              <div className="px-4 py-8 text-center text-sm text-gray-400">
+                Aucun traitement enregistré
+              </div>
+            )
+            // Grouper par zone
+            const parZone = new Map<string, EntreeCahier[]>()
+            for (const e of trts) {
+              const key = (e.zone as { nom: string } | null)?.nom || 'Sans zone'
+              if (!parZone.has(key)) parZone.set(key, [])
+              parZone.get(key)!.push(e)
+            }
+            return (
+              <div className="divide-y divide-gray-100">
+                {Array.from(parZone.entries()).map(([zone, items]) => (
+                  <div key={zone}>
+                    <div className="px-4 py-1.5 bg-amber-50 text-[10px] font-bold text-amber-700 uppercase tracking-wider">
+                      📍 {zone}
+                    </div>
+                    {items.map(e => (
+                      <div key={e.id} className="px-4 py-3 flex items-start justify-between gap-2 border-t border-amber-50">
+                        <div>
+                          <div className="text-sm font-semibold text-gray-800">
+                            🌿 {e.produit ? (e.produit as { nom: string }).nom : 'Traitement'}
+                          </div>
+                          <div className="text-xs text-gray-400 mt-0.5 flex flex-wrap gap-2">
+                            {e.quantite && <span>{e.quantite} {e.unite}</span>}
+                            {e.auteur && e.auteur !== 'Moi' && <span>👤 {e.auteur}</span>}
+                            {e.notes && <span className="italic">&ldquo;{e.notes}&rdquo;</span>}
+                          </div>
+                        </div>
+                        <div className="text-xs text-gray-400 whitespace-nowrap">{labelDate(e.date_operation)}</div>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            )
+          })()}
         </div>
       )}
     </div>
