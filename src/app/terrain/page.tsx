@@ -17,6 +17,8 @@ type Planche = {
   longueur_m: number | null; largeur_m: number | null
   plants_par_m2: number | null; notes: string | null; ordre: number
 }
+type CahierPhoto = { id: string; entree_id: string; url: string; created_at: string }
+
 type EntreeCahier = {
   id: string; zone_id: string | null; date_operation: string
   type_operation: string; espece_id: string | null; quantite: number | null
@@ -25,6 +27,7 @@ type EntreeCahier = {
   zone?: { nom: string } | null
   espece?: { nom: string } | null
   produit?: { nom: string } | null
+  photos?: CahierPhoto[]
 }
 type Tache = {
   id: string; titre: string; description: string | null; type: string
@@ -282,7 +285,7 @@ export default function TerrainPage() {
       supabase.from('zones').select('*').eq('actif', true).order('ordre'),
       supabase.from('zone_planches').select('*').order('ordre'),
       supabase.from('cahier_culture')
-        .select('*, zone:zones(nom), espece:especes(nom), produit:produits_traitement(nom)')
+        .select('*, zone:zones(nom), espece:especes(nom), produit:produits_traitement(nom), photos:cahier_photos(*)')
         .order('date_operation', { ascending: false })
         .order('created_at', { ascending: false })
         .limit(50),
@@ -540,8 +543,86 @@ function CahierTab({ zones, especes, especesSerre, produits, entrees, onSaved, o
   const [unite, setUnite]       = useState('barquettes')
   const [notes, setNotes]       = useState('')
   const [auteur, setAuteur]     = useState('Moi')
-  const [saving, setSaving]     = useState(false)
-  const [filtre, setFiltre]     = useState<'tout' | 'traitements'>('tout')
+  const [saving, setSaving]         = useState(false)
+  const [filtre, setFiltre]         = useState<'tout' | 'traitements'>('tout')
+  const [uploadingPhoto, setUploadingPhoto] = useState<string | null>(null)
+
+  async function uploadPhoto(entreeId: string, file: File) {
+    setUploadingPhoto(entreeId)
+    const ext  = file.name.split('.').pop() || 'jpg'
+    const path = `${entreeId}/${Date.now()}.${ext}`
+    const { data: up } = await supabase.storage.from('cahier-photos').upload(path, file, { upsert: false })
+    if (up) {
+      const { data: urlData } = supabase.storage.from('cahier-photos').getPublicUrl(up.path)
+      await supabase.from('cahier_photos').insert({ entree_id: entreeId, url: urlData.publicUrl })
+      onSaved()
+    }
+    setUploadingPhoto(null)
+  }
+
+  function exportCSV() {
+    const rows = [
+      ['Date', 'Zone', 'Operation', 'Espece / Produit', 'Quantite', 'Unite', 'Auteur', 'Notes'],
+      ...entrees.map(e => [
+        e.date_operation,
+        (e.zone  as { nom: string } | null)?.nom    || '',
+        e.type_operation,
+        (e.espece   as { nom: string } | null)?.nom || (e.produit as { nom: string } | null)?.nom || '',
+        e.quantite ?? '',
+        e.unite    ?? '',
+        e.auteur   ?? '',
+        e.notes    ?? '',
+      ]),
+    ]
+    const csv  = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(';')).join('\n')
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
+    const url  = URL.createObjectURL(blob)
+    const a    = document.createElement('a')
+    a.href = url
+    a.download = `cahier-culture-${format(new Date(), 'yyyy-MM')}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  function exportPDF() {
+    const w = window.open('', '_blank')
+    if (!w) return
+    const lignes = entrees.map(e => `<tr>
+      <td>${format(parseISO(e.date_operation), 'd MMM yyyy', { locale: fr })}</td>
+      <td>${(e.zone as { nom: string } | null)?.nom || '—'}</td>
+      <td>${e.type_operation}</td>
+      <td>${(e.espece as { nom: string } | null)?.nom || (e.produit as { nom: string } | null)?.nom || '—'}</td>
+      <td>${e.quantite ? `${e.quantite} ${e.unite ?? ''}` : '—'}</td>
+      <td>${e.auteur || '—'}</td>
+      <td>${e.notes || ''}</td>
+    </tr>`).join('')
+    w.document.write(`<!DOCTYPE html><html><head>
+      <meta charset="utf-8">
+      <title>Cahier de culture</title>
+      <style>
+        body{font-family:sans-serif;font-size:11px;padding:20px}
+        h1{font-size:16px;margin-bottom:2px}
+        p{color:#888;margin:0 0 14px;font-size:10px}
+        table{width:100%;border-collapse:collapse}
+        th{background:#2D3E1B;color:#fff;padding:5px 7px;text-align:left;font-size:10px}
+        td{padding:5px 7px;border-bottom:1px solid #eee;font-size:10px;vertical-align:top}
+        tr:nth-child(even) td{background:#f8f8f8}
+        @media print{body{padding:0}}
+      </style>
+    </head><body>
+      <h1>Les Petites Herbes — Cahier de culture</h1>
+      <p>Export du ${format(new Date(), 'd MMMM yyyy', { locale: fr })}</p>
+      <table>
+        <thead><tr>
+          <th>Date</th><th>Zone</th><th>Operation</th><th>Espece / Produit</th>
+          <th>Quantite</th><th>Auteur</th><th>Notes</th>
+        </tr></thead>
+        <tbody>${lignes}</tbody>
+      </table>
+      <script>window.onload=()=>window.print()<\/script>
+    </body></html>`)
+    w.document.close()
+  }
 
   useEffect(() => {
     const saved = typeof window !== 'undefined' ? localStorage.getItem('terrain_auteur') : null
@@ -785,19 +866,31 @@ function CahierTab({ zones, especes, especesSerre, produits, entrees, onSaved, o
       {entrees.length > 0 && (
         <div className="rounded-2xl border border-gray-100 overflow-hidden">
 
-          {/* Toggle filtre */}
-          <div className="px-4 py-3 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
-            <span className="font-bold text-sm text-gray-700">
-              {filtre === 'traitements' ? '🌿 Suivi traitements' : 'Entrees recentes'}
-            </span>
-            <div className="flex rounded-xl overflow-hidden border border-gray-200 text-xs font-semibold">
-              <button onClick={() => setFiltre('tout')}
-                className={`px-3 py-1.5 transition-colors ${filtre === 'tout' ? 'bg-green-700 text-white' : 'bg-white text-gray-500'}`}>
-                Tout
+          {/* Toggle filtre + exports */}
+          <div className="px-4 py-3 bg-gray-50 border-b border-gray-100 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-sm text-gray-700">
+                {filtre === 'traitements' ? '🌿 Suivi traitements' : 'Entrees recentes'}
+              </span>
+              <div className="flex rounded-xl overflow-hidden border border-gray-200 text-xs font-semibold">
+                <button onClick={() => setFiltre('tout')}
+                  className={`px-3 py-1.5 transition-colors ${filtre === 'tout' ? 'bg-green-700 text-white' : 'bg-white text-gray-500'}`}>
+                  Tout
+                </button>
+                <button onClick={() => setFiltre('traitements')}
+                  className={`px-3 py-1.5 transition-colors ${filtre === 'traitements' ? 'bg-amber-600 text-white' : 'bg-white text-gray-500'}`}>
+                  🌿 Traitements
+                </button>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={exportCSV}
+                className="flex-1 text-xs font-semibold text-gray-600 bg-white border border-gray-200 px-3 py-2 rounded-xl active:scale-95 transition-transform text-center">
+                📊 Export Excel
               </button>
-              <button onClick={() => setFiltre('traitements')}
-                className={`px-3 py-1.5 transition-colors ${filtre === 'traitements' ? 'bg-amber-600 text-white' : 'bg-white text-gray-500'}`}>
-                🌿 Traitements
+              <button onClick={exportPDF}
+                className="flex-1 text-xs font-semibold text-gray-600 bg-white border border-gray-200 px-3 py-2 rounded-xl active:scale-95 transition-transform text-center">
+                📄 Export PDF
               </button>
             </div>
           </div>
@@ -808,24 +901,43 @@ function CahierTab({ zones, especes, especesSerre, produits, entrees, onSaved, o
               {entrees.slice(0, 20).map(e => {
                 const op = [...TYPES_OP_CHAMP, ...TYPES_OP_SERRE].find(t => t.val === e.type_operation)
                 return (
-                  <div key={e.id} className="px-4 py-3 flex items-start justify-between gap-2">
-                    <div className="flex items-start gap-2.5">
-                      <span className="text-lg mt-0.5">{op?.icon || '📝'}</span>
-                      <div>
-                        <div className="text-sm font-semibold text-gray-800">
-                          {op?.label || e.type_operation}
-                          {e.espece && <span className="text-gray-500 font-normal"> · {(e.espece as { nom: string }).nom}</span>}
-                          {e.produit && <span className="text-amber-700 font-normal"> · {(e.produit as { nom: string }).nom}</span>}
-                        </div>
-                        <div className="text-xs text-gray-400 mt-0.5 flex flex-wrap gap-2">
-                          {e.zone && <span>📍 {(e.zone as { nom: string }).nom}</span>}
-                          {e.quantite && <span>{e.quantite} {e.unite}</span>}
-                          {e.auteur && e.auteur !== 'Moi' && <span>👤 {e.auteur}</span>}
-                          {e.notes && <span className="italic">&ldquo;{e.notes}&rdquo;</span>}
+                  <div key={e.id} className="px-4 py-3 space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-start gap-2.5">
+                        <span className="text-lg mt-0.5">{op?.icon || '📝'}</span>
+                        <div>
+                          <div className="text-sm font-semibold text-gray-800">
+                            {op?.label || e.type_operation}
+                            {e.espece && <span className="text-gray-500 font-normal"> · {(e.espece as { nom: string }).nom}</span>}
+                            {e.produit && <span className="text-amber-700 font-normal"> · {(e.produit as { nom: string }).nom}</span>}
+                          </div>
+                          <div className="text-xs text-gray-400 mt-0.5 flex flex-wrap gap-2">
+                            {e.zone && <span>📍 {(e.zone as { nom: string }).nom}</span>}
+                            {e.quantite && <span>{e.quantite} {e.unite}</span>}
+                            {e.auteur && e.auteur !== 'Moi' && <span>👤 {e.auteur}</span>}
+                            {e.notes && <span className="italic">&ldquo;{e.notes}&rdquo;</span>}
+                          </div>
                         </div>
                       </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <div className="text-xs text-gray-400 whitespace-nowrap">{labelDate(e.date_operation)}</div>
+                        <label className={`cursor-pointer text-base leading-none ${uploadingPhoto === e.id ? 'opacity-40' : ''}`}>
+                          <input type="file" accept="image/*" capture="environment" className="hidden"
+                            disabled={uploadingPhoto === e.id}
+                            onChange={ev => { const f = ev.target.files?.[0]; if (f) uploadPhoto(e.id, f); ev.target.value = '' }} />
+                          📷
+                        </label>
+                      </div>
                     </div>
-                    <div className="text-xs text-gray-400 whitespace-nowrap">{labelDate(e.date_operation)}</div>
+                    {e.photos && e.photos.length > 0 && (
+                      <div className="flex gap-2 flex-wrap pl-8">
+                        {e.photos.map((p: CahierPhoto) => (
+                          <a key={p.id} href={p.url} target="_blank" rel="noreferrer">
+                            <img src={p.url} alt="" className="w-16 h-16 object-cover rounded-lg border border-gray-200" />
+                          </a>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )
               })}
