@@ -186,10 +186,17 @@ export default function AccueilPage() {
               {format(aujourd, 'EEEE d MMMM yyyy', { locale: fr })}
             </p>
           </div>
-          <Link href="/semis"
-            className="bg-green-500 text-white font-bold text-sm px-4 py-2.5 rounded-xl shadow-md mt-1">
-            + Semis
-          </Link>
+          <div className="flex flex-col gap-2 mt-1">
+            <Link href="/semis"
+              className="bg-green-500 text-white font-bold text-sm px-4 py-2 rounded-xl shadow-md text-center">
+              + Semis
+            </Link>
+            <Link href="/terrain"
+              onClick={() => { if (typeof window !== 'undefined') localStorage.setItem('terrain_init_tab', 'agenda') }}
+              className="bg-green-700 text-white font-bold text-sm px-4 py-2 rounded-xl shadow-md text-center">
+              + Tâche
+            </Link>
+          </div>
         </div>
 
         {estJourSemis && (
@@ -724,8 +731,11 @@ const ROUTINE: { jour: string; court: string; activites: { emoji: string; label:
 
 function AgendaSemaine() {
   const jourIdx = new Date().getDay() // 0=dim
-  // Convert JS day (0=Sun) to ROUTINE index (0=Mon)
   const routineIdx = jourIdx === 0 ? -1 : jourIdx - 1
+
+  function ouvrirAgenda() {
+    if (typeof window !== 'undefined') localStorage.setItem('terrain_init_tab', 'agenda')
+  }
 
   return (
     <div>
@@ -734,15 +744,16 @@ function AgendaSemaine() {
         {ROUTINE.map((r, i) => {
           const estAujourdHui = i === routineIdx
           return (
-            <div key={r.jour}
+            <Link key={r.jour} href="/terrain" onClick={ouvrirAgenda}
               className={`flex items-start gap-3 px-4 py-2.5 border-b border-gray-100 last:border-0
-                ${estAujourdHui ? 'bg-green-50' : ''}`}>
+                active:bg-gray-50 transition-colors
+                ${estAujourdHui ? 'bg-green-50 active:bg-green-100' : ''}`}>
               <div className={`w-9 text-xs font-bold pt-0.5 shrink-0
                 ${estAujourdHui ? 'text-green-700' : 'text-gray-400'}`}>
                 {r.court}
                 {estAujourdHui && <div className="text-[9px] text-green-500">auj.</div>}
               </div>
-              <div className="flex flex-wrap gap-1.5">
+              <div className="flex flex-wrap gap-1.5 flex-1">
                 {r.activites.map((a, j) => (
                   <span key={j}
                     className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium
@@ -751,7 +762,8 @@ function AgendaSemaine() {
                   </span>
                 ))}
               </div>
-            </div>
+              <span className="text-gray-300 text-xs pt-0.5">›</span>
+            </Link>
           )
         })}
       </div>
