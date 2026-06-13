@@ -32,9 +32,26 @@ export default function AccueilPage() {
   const [tachesAujourdHui, setTachesAujourdHui] = useState<{id:string;titre:string;priorite:string;completions:{date_completion:string}[]}[]>([])
   const [blsSemaine, setBlsSemaine]       = useState<{client:{nom:string}|null;created_at:string;montant:number}[]>([])
   const [pointagesAuj, setPointagesAuj]   = useState<{auteur:string;heure_arrivee:string|null;heure_depart:string|null;pause_minutes:number}[]>([])
+  const [alerteGel, setAlerteGel]         = useState<{date:string;tmin:number}[]>([])
   const [statOuverte, setStatOuverte]     = useState<'ca'|'commandes'|'dispos'|'alertes'|null>(null)
 
   useEffect(() => { charger() }, [])
+
+  useEffect(() => {
+    const lat = typeof window !== 'undefined' ? (localStorage.getItem('meteo_lat') || '43.95') : '43.95'
+    const lon = typeof window !== 'undefined' ? (localStorage.getItem('meteo_lon') || '4.81')  : '4.81'
+    fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=temperature_2m_min&timezone=Europe%2FParis&forecast_days=3`)
+      .then(r => r.json())
+      .then(d => {
+        if (!d?.daily) return
+        const gels = (d.daily.time as string[])
+          .slice(0, 3)
+          .map((date: string, i: number) => ({ date, tmin: Math.round(d.daily.temperature_2m_min[i]) }))
+          .filter((g: {date:string;tmin:number}) => g.tmin <= 2)
+        setAlerteGel(gels)
+      })
+      .catch(() => {})
+  }, [])
 
   async function charger() {
     const il_y_a_48h   = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString()
@@ -164,6 +181,19 @@ export default function AccueilPage() {
     return g >= 1000 ? `${(g / 1000).toFixed(1)} kg` : `${g} g`
   }
 
+  async function handlePointer(auteur: string, type: 'arrivee' | 'depart') {
+    const now   = new Date()
+    const heure = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+    const today = format(now, 'yyyy-MM-dd')
+    const champ = type === 'arrivee' ? 'heure_arrivee' : 'heure_depart'
+    await supabase.from('pointages')
+      .upsert({ auteur, date: today, [champ]: heure }, { onConflict: 'date,auteur' })
+    const { data: ptg } = await supabase.from('pointages')
+      .select('auteur, heure_arrivee, heure_depart, pause_minutes')
+      .eq('date', today)
+    if (ptg) setPointagesAuj(ptg as {auteur:string;heure_arrivee:string|null;heure_depart:string|null;pause_minutes:number}[])
+  }
+
   if (loading) return (
     <div className="flex flex-col items-center justify-center h-64 gap-3">
       <div className="w-8 h-8 border-4 border-green-600 border-t-transparent rounded-full animate-spin" />
@@ -214,6 +244,18 @@ export default function AccueilPage() {
         )}
       </div>
 
+      {/* ── Alerte gel ── */}
+      {alerteGel.length > 0 && (
+        <div className="mx-4 mt-3 bg-blue-950 border border-blue-700 rounded-2xl px-4 py-3">
+          <div className="text-white font-bold text-sm mb-1">❄️ Risque de gel dans les 48h !</div>
+          {alerteGel.map(g => (
+            <div key={g.date} className="text-blue-200 text-xs">
+              {format(parseISO(g.date), 'EEEE d MMM', { locale: fr })} : {g.tmin}°C minimum — couvrir les plants !
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* ── Météo ── */}
       <div className="px-4 mt-4">
         <MeteoWidget />
@@ -221,7 +263,7 @@ export default function AccueilPage() {
 
       {/* ── Pointages du jour ── */}
       <div className="px-4 mt-4">
-        <PointageBlock pointages={pointagesAuj} />
+        <PointageBlock pointages={pointagesAuj} onPointer={handlePointer} />
       </div>
 
       {/* ── Agenda de la semaine ── */}
@@ -665,8 +707,12 @@ function Raccourci({ href, icon, label }: { href: string; icon: string; label: s
   )
 }
 
-function PointageBlock({ pointages }: { pointages: {auteur:string;heure_arrivee:string|null;heure_depart:string|null;pause_minutes:number}[] }) {
+function PointageBlock({ pointages, onPointer }: {
+  pointages: {auteur:string;heure_arrivee:string|null;heure_depart:string|null;pause_minutes:number}[]
+  onPointer: (auteur: string, type: 'arrivee' | 'depart') => Promise<void>
+}) {
   const personnes = ['Antoine', 'Lucas']
+  const [loading, setLoading] = useState<string|null>(null)
 
   function duree(p: {heure_arrivee:string|null;heure_depart:string|null;pause_minutes:number}): string | null {
     if (!p.heure_arrivee || !p.heure_depart) return null
@@ -678,10 +724,14 @@ function PointageBlock({ pointages }: { pointages: {auteur:string;heure_arrivee:
     return m === 0 ? `${h}h` : `${h}h${String(m).padStart(2, '0')}`
   }
 
+  async function taper(auteur: string, type: 'arrivee' | 'depart') {
+    setLoading(`${auteur}-${type}`)
+    await onPointer(auteur, type)
+    setLoading(null)
+  }
+
   function ouvrirHeures() {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('terrain_init_tab', 'heures')
-    }
+    if (typeof window !== 'undefined') localStorage.setItem('terrain_init_tab', 'heures')
   }
 
   return (
@@ -690,29 +740,60 @@ function PointageBlock({ pointages }: { pointages: {auteur:string;heure_arrivee:
       <div className="grid grid-cols-2 gap-3">
         {personnes.map(nom => {
           const p = pointages.find(x => x.auteur === nom)
+          const enCours = p?.heure_arrivee && !p.heure_depart
+          const termine = p?.heure_arrivee && p.heure_depart
+          const dureeVal = p ? duree(p) : null
+          const keyArriv = `${nom}-arrivee`
+          const keyDepart = `${nom}-depart`
+
           return (
-            <Link key={nom} href="/terrain" onClick={ouvrirHeures}
-              className="bg-white border border-gray-200 rounded-2xl px-4 py-3 shadow-sm active:scale-95 transition-transform">
-              <div className="flex items-center justify-between mb-1.5">
+            <div key={nom} className="bg-white border border-gray-200 rounded-2xl px-4 py-3 shadow-sm">
+              {/* En-tête nom */}
+              <div className="flex items-center justify-between mb-2">
                 <span className="text-sm font-bold text-gray-800">{nom}</span>
-                <span className="text-lg">{nom === 'Antoine' ? '👨‍🌾' : '🧑‍🌾'}</span>
+                <Link href="/terrain" onClick={ouvrirHeures} className="text-xs text-gray-300 hover:text-gray-400">
+                  {nom === 'Antoine' ? '👨‍🌾' : '🧑‍🌾'} ›
+                </Link>
               </div>
-              {p?.heure_arrivee ? (
-                <>
-                  <div className="text-xs text-gray-500">
-                    {p.heure_arrivee.slice(0,5)} → {p.heure_depart ? p.heure_depart.slice(0,5) : '…'}
-                  </div>
-                  {duree(p) && (
-                    <div className="text-base font-bold text-green-700 mt-0.5">{duree(p)}</div>
-                  )}
-                  {!p.heure_depart && (
-                    <div className="text-xs text-amber-600 font-semibold mt-0.5">En cours ●</div>
-                  )}
-                </>
-              ) : (
-                <div className="text-xs text-gray-400 mt-0.5">Pas encore pointé</div>
+
+              {/* Pas encore arrivé */}
+              {!p?.heure_arrivee && (
+                <button
+                  onClick={() => taper(nom, 'arrivee')}
+                  disabled={loading === keyArriv}
+                  className="w-full bg-green-600 hover:bg-green-700 active:scale-95 text-white font-bold text-sm py-2.5 rounded-xl transition-all disabled:opacity-50">
+                  {loading === keyArriv ? '…' : '🟢 Arrivée'}
+                </button>
               )}
-            </Link>
+
+              {/* En cours — affiche heure arrivée + bouton départ */}
+              {enCours && (
+                <>
+                  <div className="text-xs text-gray-500 mb-1.5">
+                    Arrivé à <span className="font-semibold text-gray-700">{p!.heure_arrivee!.slice(0,5)}</span>
+                    <span className="ml-2 text-amber-500 font-semibold">● en cours</span>
+                  </div>
+                  <button
+                    onClick={() => taper(nom, 'depart')}
+                    disabled={loading === keyDepart}
+                    className="w-full bg-orange-500 hover:bg-orange-600 active:scale-95 text-white font-bold text-sm py-2.5 rounded-xl transition-all disabled:opacity-50">
+                    {loading === keyDepart ? '…' : '🔴 Départ'}
+                  </button>
+                </>
+              )}
+
+              {/* Terminé */}
+              {termine && (
+                <div>
+                  <div className="text-xs text-gray-500">
+                    {p!.heure_arrivee!.slice(0,5)} → {p!.heure_depart!.slice(0,5)}
+                  </div>
+                  {dureeVal && (
+                    <div className="text-lg font-bold text-green-700 mt-0.5">{dureeVal} ✓</div>
+                  )}
+                </div>
+              )}
+            </div>
           )
         })}
       </div>
