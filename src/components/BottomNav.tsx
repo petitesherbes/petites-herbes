@@ -9,8 +9,8 @@ const tabs = [
   { href: '/semis',       icon: '🌱', label: 'Semis' },
   { href: '/commandes',   icon: '🛒', label: 'Commandes' },
   { href: '/terrain',     icon: '🌿', label: 'Terrain' },
-  { href: '/historique',  icon: '📋', label: 'Historique' },
   { href: '/stock',       icon: '🌾', label: 'Stock' },
+  { href: '/parametres',  icon: '⚙️',  label: 'Réglages' },
 ]
 
 export default function BottomNav() {
