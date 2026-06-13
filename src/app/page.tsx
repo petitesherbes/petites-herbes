@@ -727,11 +727,12 @@ const ROUTINE: { jour: string; court: string; activites: { emoji: string; label:
   { jour: 'Jeudi',   court: 'Jeu', activites: [{ emoji: '🌾', label: 'Récolte' }, { emoji: '📦', label: 'Livraison' }, { emoji: '💧', label: '×3' }] },
   { jour: 'Vendredi',court: 'Ven', activites: [{ emoji: '🌱', label: 'Semis' }, { emoji: '📦', label: 'Livraison' }, { emoji: '💧', label: '×3' }] },
   { jour: 'Samedi',  court: 'Sam', activites: [{ emoji: '💧', label: '×3' }] },
+  { jour: 'Dimanche',court: 'Dim', activites: [{ emoji: '💧', label: '×3' }] },
 ]
 
 function AgendaSemaine() {
   const jourIdx = new Date().getDay() // 0=dim
-  const routineIdx = jourIdx === 0 ? -1 : jourIdx - 1
+  const routineIdx = jourIdx === 0 ? 6 : jourIdx - 1
 
   function ouvrirAgenda() {
     if (typeof window !== 'undefined') localStorage.setItem('terrain_init_tab', 'agenda')
