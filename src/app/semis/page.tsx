@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 
 import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+import { fetchWithCache } from '@/lib/offline'
 import { Espece, Template, SemisLigneForm, Format, ParametresProduction, Contenant } from '@/types'
 import {
   calculerPoidsGraines, calculerProdEstimee, calculerDates,
@@ -37,18 +38,29 @@ export default function NouveauSemisPage() {
   useEffect(() => { chargerDonnees() }, [])
 
   async function chargerDonnees() {
-    const [{ data: t }, { data: e }, { data: p }, { data: c }, { data: rec }] = await Promise.all([
-      supabase.from('templates').select('*, templates_lignes(*, espece:especes(*))').order('nom'),
-      supabase.from('especes').select('*').eq('actif', true).order('section,nom'),
-      supabase.from('parametres_production').select('*').single(),
-      supabase.from('contenants').select('*').eq('actif', true),
-      supabase.from('commandes_recurrentes').select('designation, quantite, client_id').eq('actif', true),
+    const [t, e, pArr, c, rec] = await Promise.all([
+      fetchWithCache('templates', async () => {
+        const { data } = await supabase.from('templates').select('*, templates_lignes(*, espece:especes(*))').order('nom')
+        return data
+      }).then(r => r.data),
+      fetchWithCache('especes', async () => {
+        const { data } = await supabase.from('especes').select('*').eq('actif', true).order('section,nom')
+        return data
+      }).then(r => r.data),
+      fetchWithCache<ParametresProduction>('params_production', async () => {
+        const { data } = await supabase.from('parametres_production').select('*').single()
+        return data ? [data as ParametresProduction] : []
+      }).then(r => r.data),
+      fetchWithCache('contenants', async () => {
+        const { data } = await supabase.from('contenants').select('*').eq('actif', true)
+        return data
+      }).then(r => r.data),
+      supabase.from('commandes_recurrentes').select('designation, quantite, client_id').eq('actif', true).then(r => r.data),
     ])
-    if (t) setTemplates(t)
-    if (e) setEspeces(e)
-    if (p) setParams(p)
-    if (c) setContenants(c)
-
+    if (t?.length) setTemplates(t)
+    if (e?.length) setEspeces(e)
+    if (pArr?.[0]) setParams(pArr[0])
+    if (c?.length) setContenants(c)
     // Agréger la demande des commandes habituelles par produit
     if (rec && rec.length > 0) {
       const parProduit = new Map<string, { total: number; clients: Set<string> }>()

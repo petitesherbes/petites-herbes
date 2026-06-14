@@ -2,6 +2,7 @@
 export const dynamic = 'force-dynamic'
 
 import { useEffect, useState, useRef } from 'react'
+import { fetchWithCache } from '@/lib/offline'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { supabase } from '@/lib/supabase'
@@ -44,17 +45,25 @@ export default function CommandesPage() {
   useEffect(() => { charger() }, [])
 
   async function charger() {
-    const [{ data: b }, { data: p }, { data: c }] = await Promise.all([
-      supabase.from('bons_livraison')
-        .select('*, client:clients(nom, email)')
-        .order('created_at', { ascending: false })
-        .limit(50),
-      supabase.from('produits').select('*').eq('actif', true).order('categorie,designation'),
-      supabase.from('clients').select('*').eq('actif', true).order('nom'),
+    const [b, p, c] = await Promise.all([
+      fetchWithCache('commandes', async () => {
+        const { data } = await supabase.from('bons_livraison')
+          .select('*, client:clients(nom, email)')
+          .order('created_at', { ascending: false }).limit(50)
+        return data
+      }).then(r => r.data),
+      fetchWithCache('produits', async () => {
+        const { data } = await supabase.from('produits').select('*').eq('actif', true).order('categorie,designation')
+        return data
+      }).then(r => r.data),
+      fetchWithCache('clients', async () => {
+        const { data } = await supabase.from('clients').select('*').eq('actif', true).order('nom')
+        return data
+      }).then(r => r.data),
     ])
-    if (b) setBls(b as BonLivraison[])
-    if (p) setProduits(p)
-    if (c) setClients(c)
+    if (b?.length) setBls(b as BonLivraison[])
+    if (p?.length) setProduits(p)
+    if (c?.length) setClients(c)
     setLoading(false)
   }
 

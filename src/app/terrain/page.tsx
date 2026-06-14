@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { fetchWithCache, queueMutation, saveCache } from '@/lib/offline'
 import { format, parseISO, isToday, isTomorrow, addDays } from 'date-fns'
 import { fr } from 'date-fns/locale'
 
@@ -278,41 +279,71 @@ export default function TerrainPage() {
   useEffect(() => { charger() }, [])
 
   async function charger() {
-    const [
-      { data: z }, { data: pl }, { data: ent }, { data: ta }, { data: pe },
-      { data: esp }, { data: esSerre }, { data: prod }, { data: cat }, { data: zt }, { data: pts }
-    ] = await Promise.all([
-      supabase.from('zones').select('*').eq('actif', true).order('ordre'),
-      supabase.from('zone_planches').select('*').order('ordre'),
-      supabase.from('cahier_culture')
-        .select('*, zone:zones(nom), espece:especes(nom), produit:produits_traitement(nom), photos:cahier_photos(*)')
-        .order('date_operation', { ascending: false })
-        .order('created_at', { ascending: false })
-        .limit(50),
-      supabase.from('taches')
-        .select('*, completions:taches_completions(date_completion)')
-        .eq('actif', true).order('priorite', { ascending: false }),
-      supabase.from('pertes')
-        .select('*, espece:especes(nom)')
-        .order('date_perte', { ascending: false }).limit(30),
-      supabase.from('especes').select('id, nom').eq('actif', true).order('nom'),
-      supabase.from('especes_serre').select('*').eq('actif', true).order('categorie,nom'),
-      supabase.from('produits_traitement').select('*').eq('actif', true).order('type,nom'),
-      supabase.from('taches_catalogue').select('*').eq('active', true).order('ordre'),
-      supabase.from('zone_taches_catalogue').select('*'),
-      supabase.from('pointages').select('*').order('date', { ascending: false }).limit(60),
+    const [z, pl, ent, ta, pe, esp, esSerre, prod, cat, zt, pts] = await Promise.all([
+      fetchWithCache('zones', async () => {
+        const { data } = await supabase.from('zones').select('*').eq('actif', true).order('ordre')
+        return data
+      }).then(r => r.data),
+      fetchWithCache('zone_planches', async () => {
+        const { data } = await supabase.from('zone_planches').select('*').order('ordre')
+        return data
+      }).then(r => r.data),
+      fetchWithCache('cahier_culture', async () => {
+        const { data } = await supabase.from('cahier_culture')
+          .select('*, zone:zones(nom), espece:especes(nom), produit:produits_traitement(nom), photos:cahier_photos(*)')
+          .order('date_operation', { ascending: false })
+          .order('created_at', { ascending: false })
+          .limit(50)
+        return data
+      }).then(r => r.data),
+      fetchWithCache('taches', async () => {
+        const { data } = await supabase.from('taches')
+          .select('*, completions:taches_completions(date_completion)')
+          .eq('actif', true).order('priorite', { ascending: false })
+        return data
+      }).then(r => r.data),
+      fetchWithCache('pertes', async () => {
+        const { data } = await supabase.from('pertes')
+          .select('*, espece:especes(nom)')
+          .order('date_perte', { ascending: false }).limit(30)
+        return data
+      }).then(r => r.data),
+      fetchWithCache('especes_noms', async () => {
+        const { data } = await supabase.from('especes').select('id, nom').eq('actif', true).order('nom')
+        return data
+      }).then(r => r.data),
+      fetchWithCache('especes_serre', async () => {
+        const { data } = await supabase.from('especes_serre').select('*').eq('actif', true).order('categorie,nom')
+        return data
+      }).then(r => r.data),
+      fetchWithCache('produits_traitement', async () => {
+        const { data } = await supabase.from('produits_traitement').select('*').eq('actif', true).order('type,nom')
+        return data
+      }).then(r => r.data),
+      fetchWithCache('taches_catalogue', async () => {
+        const { data } = await supabase.from('taches_catalogue').select('*').eq('active', true).order('ordre')
+        return data
+      }).then(r => r.data),
+      fetchWithCache('zone_taches_catalogue', async () => {
+        const { data } = await supabase.from('zone_taches_catalogue').select('*')
+        return data
+      }).then(r => r.data),
+      fetchWithCache('pointages', async () => {
+        const { data } = await supabase.from('pointages').select('*').order('date', { ascending: false }).limit(60)
+        return data
+      }).then(r => r.data),
     ])
-    if (z)    setZones(z)
-    if (pl)   setPlanches(pl)
-    if (ent)  setEntrees(ent as unknown as EntreeCahier[])
-    if (ta)   setTaches(ta as unknown as Tache[])
-    if (pe)   setPertes(pe as unknown as Perte[])
-    if (esp)  setEspeces(esp)
-    if (esSerre) setEspecesSerre(esSerre)
-    if (prod) setProduits(prod)
-    if (cat)  setCatalogueTaches(cat as unknown as TacheCatalogue[])
-    if (zt)   setZoneTaches(zt)
-    if (pts)  setPointages(pts as unknown as Pointage[])
+    if (z?.length)      setZones(z)
+    if (pl?.length)     setPlanches(pl)
+    if (ent?.length)    setEntrees(ent as unknown as EntreeCahier[])
+    if (ta?.length)     setTaches(ta as unknown as Tache[])
+    if (pe?.length)     setPertes(pe as unknown as Perte[])
+    if (esp?.length)    setEspeces(esp)
+    if (esSerre?.length) setEspecesSerre(esSerre)
+    if (prod?.length)   setProduits(prod)
+    if (cat?.length)    setCatalogueTaches(cat as unknown as TacheCatalogue[])
+    if (zt?.length)     setZoneTaches(zt)
+    if (pts?.length)    setPointages(pts as unknown as Pointage[])
   }
 
   // Cree une tache par zone selectionnee (ou une sans zone si aucune)
@@ -655,7 +686,7 @@ function CahierTab({ zones, especes, especesSerre, produits, entrees, onSaved, o
 
   async function sauvegarder() {
     setSaving(true)
-    await supabase.from('cahier_culture').insert({
+    const payload = {
       zone_id:               zoneId || null,
       type_operation:        typeOp,
       espece_id:             avecEspece && especeId ? especeId : null,
@@ -664,7 +695,17 @@ function CahierTab({ zones, especes, especesSerre, produits, entrees, onSaved, o
       unite:                 avecQuantite ? unite : null,
       notes:                 notes || null,
       auteur,
-    })
+    }
+
+    if (!navigator.onLine) {
+      await queueMutation({ table: 'cahier_culture', method: 'insert', payload })
+      // Mise à jour optimiste du cache local
+      const entreeLocale = { id: `local_${Date.now()}`, ...payload, created_at: new Date().toISOString() }
+      const cached = await import('@/lib/offline').then(m => m.loadCache<EntreeCahier[]>('cahier_culture'))
+      await saveCache('cahier_culture', [entreeLocale, ...(cached ?? [])])
+    } else {
+      await supabase.from('cahier_culture').insert(payload)
+    }
     localStorage.setItem('terrain_auteur', auteur)
     setSaving(false); reset(); onSaved()
   }

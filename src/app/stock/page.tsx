@@ -2,6 +2,7 @@
 export const dynamic = 'force-dynamic'
 
 import { useEffect, useState } from 'react'
+import { fetchWithCache } from '@/lib/offline'
 import { supabase } from '@/lib/supabase'
 import { Espece, SemisLigne, StockMouvement } from '@/types'
 import { format, parseISO, differenceInDays, subDays } from 'date-fns'
@@ -50,21 +51,28 @@ export default function StockPage() {
   async function charger() {
     const today = format(new Date(), 'yyyy-MM-dd')
     const il_y_a_28j = format(subDays(new Date(), 28), 'yyyy-MM-dd')
-    const [{ data: lignes }, { data: esp }, { data: mvts }] = await Promise.all([
-      supabase
-        .from('semis_lignes')
-        .select('*, espece:especes(*)')
-        .lte('date_dispo', today)
-        .gte('date_peremption', today),
-      supabase.from('especes').select('*').eq('actif', true).order('section,nom'),
-      supabase.from('stock_mouvements')
-        .select('*')
-        .eq('type', 'semis')
-        .gte('created_at', il_y_a_28j),
+    const [lignes, esp, mvts] = await Promise.all([
+      // Lignes dispo : date-dépendant, cache en secours seulement
+      fetchWithCache(`stock_dispo_${today}`, async () => {
+        const { data } = await supabase.from('semis_lignes')
+          .select('*, espece:especes(*)')
+          .lte('date_dispo', today)
+          .gte('date_peremption', today)
+        return data
+      }).then(r => r.data),
+      fetchWithCache('especes', async () => {
+        const { data } = await supabase.from('especes').select('*').eq('actif', true).order('section,nom')
+        return data
+      }).then(r => r.data),
+      fetchWithCache(`stock_mvts_${il_y_a_28j}`, async () => {
+        const { data } = await supabase.from('stock_mouvements')
+          .select('*').eq('type', 'semis').gte('created_at', il_y_a_28j)
+        return data
+      }).then(r => r.data),
     ])
-    if (lignes) setLignesDispo(lignes as unknown as LigneStock[])
-    if (esp) setEspeces(esp)
-    if (mvts) setMouvements(mvts as StockMouvement[])
+    if (lignes?.length) setLignesDispo(lignes as unknown as LigneStock[])
+    if (esp?.length) setEspeces(esp)
+    if (mvts?.length) setMouvements(mvts as StockMouvement[])
     setLoading(false)
   }
 

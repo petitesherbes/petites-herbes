@@ -2,6 +2,7 @@
 export const dynamic = 'force-dynamic'
 
 import { useEffect, useState, ReactNode } from 'react'
+import { fetchWithCache } from '@/lib/offline'
 import { supabase } from '@/lib/supabase'
 import { Espece, BonLivraison, StockMouvement } from '@/types'
 import { format, parseISO, differenceInDays, subDays, startOfWeek } from 'date-fns'
@@ -125,35 +126,41 @@ export default function AccueilPage() {
     const debutSemaine = startOfWeek(new Date(), { weekStartsOn: 1 }).toISOString()
     const il_y_a_28j   = format(subDays(new Date(), 28), 'yyyy-MM-dd')
 
-    const [
-      { data: lignesData },
-      { data: especesData },
-      { data: semisData },
-      { data: cmdData },
-      { data: mvtsData },
-      { count: clientCount },
-      { data: tachesData },
-    ] = await Promise.all([
-      supabase.from('semis_lignes')
-        .select('id, espece_id, format, quantite, date_dispo, date_peremption, prod_estimee, espece:especes(*)')
-        .not('date_peremption', 'is', null),
-      supabase.from('especes').select('*').eq('actif', true).order('nom'),
-      supabase.from('semis').select('date_semis').order('date_semis', { ascending: false }).limit(1),
+    const [lignesData, especesData, semisData, cmdData, mvtsData, clientCount, tachesData] = await Promise.all([
+      fetchWithCache('home_semis_lignes', async () => {
+        const { data } = await supabase.from('semis_lignes')
+          .select('id, espece_id, format, quantite, date_dispo, date_peremption, prod_estimee, espece:especes(*)')
+          .not('date_peremption', 'is', null)
+        return data
+      }).then(r => r.data),
+      fetchWithCache('especes', async () => {
+        const { data } = await supabase.from('especes').select('*').eq('actif', true).order('nom')
+        return data
+      }).then(r => r.data),
+      // Dernier semis : live seulement (info récente)
+      supabase.from('semis').select('date_semis').order('date_semis', { ascending: false }).limit(1).then(r => r.data),
+      // Nouvelles commandes : live seulement
       supabase.from('bons_livraison')
         .select('*, client:clients(nom), bl_lignes(quantite, prix_ht, tva_pct)')
-        .gte('created_at', il_y_a_48h)
-        .order('created_at', { ascending: false }),
-      supabase.from('stock_mouvements').select('*').eq('type', 'semis').gte('created_at', il_y_a_28j),
-      supabase.from('clients').select('*', { count: 'exact', head: true }).eq('actif', true),
-      supabase.from('taches').select('id, titre, priorite, type, frequence, date_echeance, completions:taches_completions(date_completion)').eq('actif', true),
+        .gte('created_at', il_y_a_48h).order('created_at', { ascending: false }).then(r => r.data),
+      fetchWithCache(`home_mvts_${il_y_a_28j}`, async () => {
+        const { data } = await supabase.from('stock_mouvements').select('*').eq('type', 'semis').gte('created_at', il_y_a_28j)
+        return data
+      }).then(r => r.data),
+      // Nb clients : live
+      supabase.from('clients').select('*', { count: 'exact', head: true }).eq('actif', true).then(r => r.count),
+      fetchWithCache('taches', async () => {
+        const { data } = await supabase.from('taches').select('id, titre, priorite, type, frequence, date_echeance, completions:taches_completions(date_completion)').eq('actif', true)
+        return data
+      }).then(r => r.data),
     ])
 
-    if (lignesData)  setLignes(lignesData as unknown as LigneAvecEspece[])
-    if (especesData) setStockGraines(especesData)
+    if (lignesData?.length)  setLignes(lignesData as unknown as LigneAvecEspece[])
+    if (especesData?.length) setStockGraines(especesData)
     if (semisData?.[0]) setDernierSemis(semisData[0].date_semis)
-    if (mvtsData)    setMouvements(mvtsData as StockMouvement[])
+    if (mvtsData?.length)    setMouvements(mvtsData as StockMouvement[])
     if (cmdData)     setNouvellesCmds(cmdData as unknown as BonLivraison[])
-    if (clientCount) setNbClients(clientCount)
+    if (clientCount != null) setNbClients(clientCount)
 
     if (tachesData) {
       const today = new Date()
