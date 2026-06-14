@@ -267,7 +267,7 @@ function TemplateModal({ template, especes, onClose, onSave }: {
       <div className="bg-white w-full max-w-2xl mx-auto rounded-t-2xl p-4 pb-24 space-y-4 max-h-[90vh] overflow-y-auto"
         onClick={e => e.stopPropagation()}>
         <h2 className="text-lg font-bold">
-          {template ? `&Eacute;diter — ${template.nom}` : 'Nouveau template'}
+          {template ? <>&Eacute;diter &mdash; {template.nom}</> : 'Nouveau template'}
         </h2>
 
         <div className="space-y-2">
