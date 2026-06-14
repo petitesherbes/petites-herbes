@@ -6,24 +6,50 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { Espece, Template } from '@/types'
 
+type ParamsProduction = {
+  id: string
+  tapis_par_caisse: number | null
+  godets_par_serie: number | null
+}
+
 export default function ParametresPage() {
   const router = useRouter()
   const [onglet, setOnglet] = useState<'especes' | 'templates' | 'email' | 'export' | 'taches'>('especes')
   const [especes, setEspeces] = useState<Espece[]>([])
   const [templates, setTemplates] = useState<Template[]>([])
+  const [params, setParams] = useState<ParamsProduction | null>(null)
+  const [tapis, setTapis] = useState('')
+  const [godets, setGodets] = useState('')
+  const [savingParams, setSavingParams] = useState(false)
   const [loading, setLoading] = useState(true)
   const [editEspece, setEditEspece] = useState<Espece | null>(null)
 
   useEffect(() => { charger() }, [])
 
   async function charger() {
-    const [{ data: e }, { data: t }] = await Promise.all([
+    const [{ data: e }, { data: t }, { data: p }] = await Promise.all([
       supabase.from('especes').select('*').order('section,nom'),
       supabase.from('templates').select('*').order('nom'),
+      supabase.from('parametres_production').select('*').single(),
     ])
     if (e) setEspeces(e)
     if (t) setTemplates(t)
+    if (p) {
+      setParams(p as ParamsProduction)
+      setTapis((p as ParamsProduction).tapis_par_caisse?.toString() || '24')
+      setGodets((p as ParamsProduction).godets_par_serie?.toString() || '14')
+    }
     setLoading(false)
+  }
+
+  async function sauvegarderSeries() {
+    if (!params) return
+    setSavingParams(true)
+    await supabase.from('parametres_production').update({
+      tapis_par_caisse: parseInt(tapis) || 24,
+      godets_par_serie: parseInt(godets) || 14,
+    }).eq('id', params.id)
+    setSavingParams(false)
   }
 
   if (loading) return <div className="flex items-center justify-center h-64 text-gray-500">Chargement...</div>
@@ -31,6 +57,33 @@ export default function ParametresPage() {
   return (
     <div className="p-4 space-y-4">
       <h1 className="text-xl font-bold text-green-900">⚙️ Paramètres</h1>
+
+      {/* Series de production */}
+      <div className="bg-white rounded-2xl border border-green-200 p-4 space-y-3">
+        <div className="font-bold text-sm text-green-900">🌱 Séries de production</div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Tapis par série (caisse)</label>
+            <input
+              type="number" inputMode="numeric" value={tapis}
+              onChange={e => setTapis(e.target.value)}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-lg font-bold text-center focus:outline-none focus:border-green-400"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Godets par série (plaque)</label>
+            <input
+              type="number" inputMode="numeric" value={godets}
+              onChange={e => setGodets(e.target.value)}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-lg font-bold text-center focus:outline-none focus:border-green-400"
+            />
+          </div>
+        </div>
+        <button onClick={sauvegarderSeries} disabled={savingParams}
+          className="w-full bg-green-700 text-white py-2.5 rounded-xl font-semibold text-sm active:scale-95 transition-transform disabled:opacity-50">
+          {savingParams ? 'Sauvegarde...' : '💾 Enregistrer les séries'}
+        </button>
+      </div>
 
       <div className="flex rounded-lg overflow-hidden border border-gray-200">
         {[
@@ -309,16 +362,16 @@ function ExportPanel() {
   async function exporterTout() {
     setExporting('all')
     const tables = [
-      { key: 'clients',           sel: '*' },
-      { key: 'especes',           sel: '*' },
-      { key: 'semis',             sel: '*' },
-      { key: 'semis_lignes',      sel: '*' },
-      { key: 'bons_livraison',    sel: '*' },
-      { key: 'bl_lignes',         sel: '*' },
-      { key: 'cahier_culture',    sel: '*' },
-      { key: 'taches',            sel: '*' },
-      { key: 'pertes',            sel: '*' },
-      { key: 'especes_serre',     sel: '*' },
+      { key: 'clients',             sel: '*' },
+      { key: 'especes',             sel: '*' },
+      { key: 'semis',               sel: '*' },
+      { key: 'semis_lignes',        sel: '*' },
+      { key: 'bons_livraison',      sel: '*' },
+      { key: 'bl_lignes',           sel: '*' },
+      { key: 'cahier_culture',      sel: '*' },
+      { key: 'taches',              sel: '*' },
+      { key: 'pertes',              sel: '*' },
+      { key: 'especes_serre',       sel: '*' },
       { key: 'produits_traitement', sel: '*' },
     ]
     const allData: Record<string, unknown>[] = []
@@ -338,13 +391,13 @@ function ExportPanel() {
   }
 
   const exports = [
-    { key: 'clients',        label: 'Clients',          icon: '👤', desc: 'Noms, téléphones, liens boutique' },
-    { key: 'bons_livraison', label: 'Commandes (BLs)',  icon: '📦', desc: 'Tous les bons de livraison' },
-    { key: 'semis',          label: 'Semis',            icon: '🌱', desc: 'Historique des semis' },
-    { key: 'cahier_culture', label: 'Cahier terrain',   icon: '📖', desc: 'Toutes les entrées terrain' },
-    { key: 'taches',         label: 'Tâches',           icon: '✅', desc: 'Agenda et tâches' },
-    { key: 'pertes',         label: 'Pertes',           icon: '📉', desc: 'Invendus et pertes' },
-    { key: 'especes',        label: 'Espèces',          icon: '🌿', desc: 'Catalogue des espèces micropousses' },
+    { key: 'clients',        label: 'Clients',         icon: '👤', desc: 'Noms, téléphones, liens boutique' },
+    { key: 'bons_livraison', label: 'Commandes (BLs)', icon: '📦', desc: 'Tous les bons de livraison' },
+    { key: 'semis',          label: 'Semis',           icon: '🌱', desc: 'Historique des semis' },
+    { key: 'cahier_culture', label: 'Cahier terrain',  icon: '📖', desc: 'Toutes les entrées terrain' },
+    { key: 'taches',         label: 'Tâches',          icon: '✅', desc: 'Agenda et tâches' },
+    { key: 'pertes',         label: 'Pertes',          icon: '📉', desc: 'Invendus et pertes' },
+    { key: 'especes',        label: 'Espèces',         icon: '🌿', desc: 'Catalogue des espèces micropousses' },
   ]
 
   return (
@@ -355,10 +408,7 @@ function ExportPanel() {
         Faites un export complet 1×/semaine pour sauvegarder toutes vos données.
       </div>
 
-      {/* Export tout */}
-      <button
-        onClick={exporterTout}
-        disabled={!!exporting}
+      <button onClick={exporterTout} disabled={!!exporting}
         className="w-full py-4 rounded-2xl font-bold text-base flex items-center justify-center gap-3 active:scale-95 transition-transform disabled:opacity-60 bg-green-700 text-white shadow-sm">
         {exporting === 'all' ? (
           <><span className="animate-spin">⏳</span> Export en cours…</>
@@ -369,7 +419,6 @@ function ExportPanel() {
         )}
       </button>
 
-      {/* Exports individuels */}
       <div className="text-xs font-bold text-gray-400 uppercase tracking-wider">Par table</div>
       <div className="space-y-2">
         {exports.map(e => (
@@ -396,8 +445,7 @@ function ExportPanel() {
   )
 }
 
-
-// Taches Panel
+// ─── Taches Panel ─────────────────────────────────────────────────────────────
 
 type CatItem = { id: string; titre: string; categorie: string; icone: string; active: boolean; ordre: number }
 type ZoneLite = { id: string; nom: string; type: string }
