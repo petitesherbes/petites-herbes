@@ -3,6 +3,7 @@ import './globals.css'
 import BottomNav from '@/components/BottomNav'
 import PwaRegister from '@/components/PwaRegister'
 import ApercuChef from '@/components/ApercuChef'
+import OfflineBanner from '@/components/OfflineBanner'
 
 export const metadata: Metadata = {
   title: 'GAEC Les Petites Herbes',
@@ -34,6 +35,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="min-h-full flex flex-col bg-cream">
         <PwaRegister />
+        <OfflineBanner />
         <main className="flex-1 max-w-2xl mx-auto w-full pb-2">
           {children}
         </main>
