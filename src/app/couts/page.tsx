@@ -338,59 +338,88 @@ function Parametres({ params, contenants, onSave }: {
   onSave: () => void
 }) {
   const [form, setForm] = useState({
-    // Terreau
-    cout_terreau_litre: params?.cout_terreau_litre?.toString() || '0.15',
-    litres_par_caisse:  params?.litres_par_caisse?.toString()  || '15',
-    // TAPIS — plateaux de culture
-    prix_plateau:     params?.prix_plateau?.toString()     || '0.08',
-    tapis_par_caisse: params?.tapis_par_caisse?.toString() || '24',
-    // GODETS
-    prix_godet:       params?.prix_godet?.toString()       || '0.078',
-    godets_par_serie: params?.godets_par_serie?.toString() || '14',
-    litres_par_godet: params?.litres_par_godet?.toString() || '0.3',
+    tapis_par_caisse:        params?.tapis_par_caisse?.toString()        || '24',
+    nb_tapis_achat:          params?.nb_tapis_achat?.toString()          || '',
+    cout_achat_tapis:        params?.cout_achat_tapis?.toString()        || '',
+    prix_plateau:            params?.prix_plateau?.toString()            || '',
+    godets_par_serie:        params?.godets_par_serie?.toString()        || '14',
+    nb_godets_achat:         params?.nb_godets_achat?.toString()         || '',
+    cout_achat_godets:       params?.cout_achat_godets?.toString()       || '',
+    prix_godet:              params?.prix_godet?.toString()              || '',
+    litres_par_godet:        params?.litres_par_godet?.toString()        || '0.3',
+    cout_sac_terreau:        params?.cout_sac_terreau?.toString()        || '',
+    caisses_par_sac_terreau: params?.caisses_par_sac_terreau?.toString() || '',
+    cout_terreau_litre:      params?.cout_terreau_litre?.toString()      || '',
+    litres_par_caisse:       params?.litres_par_caisse?.toString()       || '15',
   })
   const [saving, setSaving] = useState(false)
 
-  // Apercu des couts calcules
-  const prixPlateau    = parseFloat(form.prix_plateau) || 0
-  const tapisCaisse    = parseInt(form.tapis_par_caisse) || 24
-  const prixGodet      = parseFloat(form.prix_godet) || 0
-  const godetsSerie    = parseInt(form.godets_par_serie) || 14
-  const litresGodet    = parseFloat(form.litres_par_godet) || 0
-  const coutTerreau    = parseFloat(form.cout_terreau_litre) || 0
-  const litresCaisse   = parseFloat(form.litres_par_caisse) || 0
+  function f(v: string) { return parseFloat(v) || 0 }
+  function i(v: string) { return parseInt(v) || 0 }
 
-  const coutCaisseTerreau = litresCaisse * coutTerreau
-  const coutCaisseTapis   = tapisCaisse * prixPlateau
-  const coutSerieGodets   = prixGodet + litresGodet * coutTerreau
+  // Prix unitaires : calculés depuis achat en gros, sinon saisie manuelle
+  const prixPlateau = (f(form.nb_tapis_achat) > 0 && f(form.cout_achat_tapis) > 0)
+    ? f(form.cout_achat_tapis) / f(form.nb_tapis_achat)
+    : f(form.prix_plateau)
+
+  const prixGodet = (f(form.nb_godets_achat) > 0 && f(form.cout_achat_godets) > 0)
+    ? f(form.cout_achat_godets) / f(form.nb_godets_achat)
+    : f(form.prix_godet)
+
+  // cout/caisse terreau : depuis achat sac, sinon litre × prix/L
+  const coutCaisseTerreau = (f(form.cout_sac_terreau) > 0 && f(form.caisses_par_sac_terreau) > 0)
+    ? f(form.cout_sac_terreau) / f(form.caisses_par_sac_terreau)
+    : f(form.litres_par_caisse) * f(form.cout_terreau_litre)
+  // cout/L dérivé pour les godets
+  const coutTerreauLitre = f(form.litres_par_caisse) > 0
+    ? coutCaisseTerreau / f(form.litres_par_caisse)
+    : f(form.cout_terreau_litre)
+
+  const tapisCaisse = i(form.tapis_par_caisse) || 24
+  const godetsSerie = i(form.godets_par_serie) || 14
+  const litresGodet = f(form.litres_par_godet)
+
+  const coutCaisseTapis = tapisCaisse * prixPlateau
+  const coutSerieGodets = prixGodet + litresGodet * coutTerreauLitre
+
+  const lotTapisActif   = f(form.nb_tapis_achat) > 0 && f(form.cout_achat_tapis) > 0
+  const lotGodetsActif  = f(form.nb_godets_achat) > 0 && f(form.cout_achat_godets) > 0
+  const lotTerreauActif = f(form.cout_sac_terreau) > 0 && f(form.caisses_par_sac_terreau) > 0
 
   async function sauvegarder() {
     setSaving(true)
     if (params) {
       await supabase.from('parametres_production').update({
-        cout_terreau_litre: parseFloat(form.cout_terreau_litre),
-        litres_par_caisse:  parseFloat(form.litres_par_caisse),
-        prix_plateau:       parseFloat(form.prix_plateau),
-        tapis_par_caisse:   parseInt(form.tapis_par_caisse),
-        prix_godet:         parseFloat(form.prix_godet),
-        godets_par_serie:   parseInt(form.godets_par_serie),
-        litres_par_godet:   parseFloat(form.litres_par_godet),
+        tapis_par_caisse:    i(form.tapis_par_caisse),
+        nb_tapis_achat:      i(form.nb_tapis_achat) || null,
+        cout_achat_tapis:    f(form.cout_achat_tapis) || null,
+        prix_plateau:        prixPlateau || null,
+        godets_par_serie:    i(form.godets_par_serie),
+        nb_godets_achat:          i(form.nb_godets_achat) || null,
+        cout_achat_godets:        f(form.cout_achat_godets) || null,
+        prix_godet:               prixGodet || null,
+        litres_par_godet:         f(form.litres_par_godet),
+        cout_sac_terreau:         f(form.cout_sac_terreau) || null,
+        caisses_par_sac_terreau:  f(form.caisses_par_sac_terreau) || null,
+        cout_terreau_litre:       coutTerreauLitre,
+        litres_par_caisse:        f(form.litres_par_caisse),
         updated_at: new Date().toISOString(),
       }).eq('id', params.id)
     }
     setSaving(false)
     onSave()
-    alert('Parametres sauvegardes !')
   }
 
-  function champ(key: keyof typeof form, label: string, note?: string) {
+  function inp(key: keyof typeof form, label: string, placeholder?: string, suffix?: string) {
     return (
-      <div key={key}>
-        <label className="block text-sm text-gray-600 mb-1">{label}</label>
-        {note && <div className="text-xs text-gray-400 mb-1">{note}</div>}
-        <input type="number" step="0.001" value={form[key]}
-          onChange={e => setForm(prev => ({ ...prev, [key]: e.target.value }))}
-          className="w-full border border-gray-200 rounded-lg p-2.5 text-sm" />
+      <div>
+        <label className="block text-xs text-gray-500 mb-1">{label}</label>
+        <div className="flex items-center gap-1">
+          <input type="number" step="0.001" value={form[key]} placeholder={placeholder}
+            onChange={e => setForm(prev => ({ ...prev, [key]: e.target.value }))}
+            className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-400" />
+          {suffix && <span className="text-xs text-gray-400 shrink-0">{suffix}</span>}
+        </div>
       </div>
     )
   }
@@ -400,43 +429,100 @@ function Parametres({ params, contenants, onSave }: {
 
       {/* TAPIS */}
       <div className="bg-white rounded-lg border border-green-200 p-4 space-y-3">
-        <h3 className="font-semibold text-sm text-green-800">Tapis (plateaux de culture)</h3>
-        <div className="bg-green-50 rounded-lg p-2 text-xs text-green-700">
-          Substrat : plateau 67x96x8mm perfore.
+        <h3 className="font-semibold text-sm text-green-800">🟩 Tapis (plateaux de culture)</h3>
+        {inp('tapis_par_caisse', 'Tapis par caisse', '24', 'tapis/caisse')}
+
+        <div className="border-t border-green-100 pt-3 space-y-2">
+          <div className="text-xs font-semibold text-green-700">📦 Achat en lot</div>
+          <div className="grid grid-cols-2 gap-2">
+            {inp('nb_tapis_achat', 'Quantité achetée', 'ex: 24000', 'tapis')}
+            {inp('cout_achat_tapis', 'Coût total achat', 'ex: 1800', '€')}
+          </div>
+          {!lotTapisActif && (
+            <div>
+              <div className="text-xs text-gray-400 mb-1">ou saisie directe du prix unitaire</div>
+              {inp('prix_plateau', 'Prix/plateau (€)', 'ex: 0.075', '€/tapis')}
+            </div>
+          )}
         </div>
-        {champ('tapis_par_caisse', 'Plateaux par caisse', 'Nombre de tapis dans une caisse (ex: 24)')}
-        {champ('prix_plateau', 'Prix plateau (€/piece)', 'Cout reel = produit + transport, ex: 0.08€')}
-        <div className="bg-gray-50 rounded-lg p-2 text-sm">
-          Cout substrat / caisse : <strong>{coutCaisseTapis.toFixed(2)}€</strong>
-          <span className="text-xs text-gray-400 ml-1">({tapisCaisse} × {prixPlateau.toFixed(3)}€)</span>
+
+        <div className={`rounded-lg p-3 text-sm space-y-1 ${lotTapisActif ? 'bg-green-50 border border-green-200' : 'bg-gray-50'}`}>
+          <div className="flex justify-between">
+            <span className="text-gray-500">Prix unitaire</span>
+            <span className="font-bold">{prixPlateau.toFixed(4)} €/tapis</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-gray-500">Coût caisse ({tapisCaisse} tapis)</span>
+            <span className="font-bold text-green-800">{coutCaisseTapis.toFixed(3)} €</span>
+          </div>
         </div>
       </div>
 
       {/* GODETS */}
       <div className="bg-white rounded-lg border border-orange-200 p-4 space-y-3">
-        <h3 className="font-semibold text-sm text-orange-800">Godets (TEKU TK914S)</h3>
-        <div className="bg-orange-50 rounded-lg p-2 text-xs text-orange-700">
-          Plaque recyclable. 1 serie = 1 plaque + terreau.
+        <h3 className="font-semibold text-sm text-orange-800">🟧 Godets (TEKU TK914S)</h3>
+        <div className="grid grid-cols-2 gap-2">
+          {inp('godets_par_serie', 'Godets par série (plaque)', '14', 'godets')}
+          {inp('litres_par_godet', 'Litres terreau/série', '0.3', 'L')}
         </div>
-        {champ('godets_par_serie', 'Godets par serie (plaque)', 'Nombre de godets par plaque (ex: 14)')}
-        {champ('prix_godet', 'Prix plaque godets (€/plaque)', 'TEKU TK914S, ex: 0.078€/plaque')}
-        {champ('litres_par_godet', 'Litres terreau par serie', `Volume total pour une serie de ${godetsSerie} godets`)}
-        <div className="bg-gray-50 rounded-lg p-2 text-sm">
-          Cout substrat / serie : <strong>{coutSerieGodets.toFixed(2)}€</strong>
-          <span className="text-xs text-gray-400 ml-1">
-            ({prixGodet.toFixed(3)}€ plaque + {(litresGodet * coutTerreau).toFixed(3)}€ terreau)
-          </span>
+
+        <div className="border-t border-orange-100 pt-3 space-y-2">
+          <div className="text-xs font-semibold text-orange-700">📦 Achat en lot</div>
+          <div className="grid grid-cols-2 gap-2">
+            {inp('nb_godets_achat', 'Quantité achetée', 'ex: 500', 'plaques')}
+            {inp('cout_achat_godets', 'Coût total achat', 'ex: 39', '€')}
+          </div>
+          {!lotGodetsActif && (
+            <div>
+              <div className="text-xs text-gray-400 mb-1">ou saisie directe</div>
+              {inp('prix_godet', 'Prix/plaque (€)', 'ex: 0.078', '€/plaque')}
+            </div>
+          )}
+        </div>
+
+        <div className={`rounded-lg p-3 text-sm space-y-1 ${lotGodetsActif ? 'bg-orange-50 border border-orange-200' : 'bg-gray-50'}`}>
+          <div className="flex justify-between">
+            <span className="text-gray-500">Prix plaque</span>
+            <span className="font-bold">{prixGodet.toFixed(4)} €/plaque</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-gray-500">Terreau ({litresGodet}L × {coutTerreauLitre.toFixed(3)}€/L)</span>
+            <span className="font-bold">{(litresGodet * coutTerreauLitre).toFixed(3)} €</span>
+          </div>
+          <div className="flex justify-between border-t border-orange-100 pt-1">
+            <span className="text-gray-500">Coût série ({godetsSerie} godets)</span>
+            <span className="font-bold text-orange-800">{coutSerieGodets.toFixed(3)} €</span>
+          </div>
         </div>
       </div>
 
       {/* TERREAU */}
       <div className="bg-white rounded-lg border border-stone-200 p-4 space-y-3">
-        <h3 className="font-semibold text-sm text-stone-700">Terreau (caisses)</h3>
-        {champ('cout_terreau_litre', 'Prix terreau (€/litre)')}
-        {champ('litres_par_caisse', 'Litres par caisse terreau')}
-        <div className="bg-gray-50 rounded-lg p-2 text-sm">
-          Cout substrat / caisse : <strong>{coutCaisseTerreau.toFixed(2)}€</strong>
-          <span className="text-xs text-gray-400 ml-1">({litresCaisse}L × {coutTerreau}€/L)</span>
+        <h3 className="font-semibold text-sm text-stone-700">🟫 Terreau (substrat)</h3>
+
+        <div className="grid grid-cols-2 gap-2">
+          {inp('cout_sac_terreau', 'Prix du sac (€)', 'ex: 10.50', '€')}
+          {inp('caisses_par_sac_terreau', 'Caisses par sac', 'ex: 25', 'caisses')}
+        </div>
+        {!lotTerreauActif && (
+          <div>
+            <div className="text-xs text-gray-400 mb-1">ou saisie directe du prix au litre</div>
+            <div className="grid grid-cols-2 gap-2">
+              {inp('cout_terreau_litre', 'Prix/litre (€)', 'ex: 0.15', '€/L')}
+              {inp('litres_par_caisse', 'L/caisse', '15', 'L')}
+            </div>
+          </div>
+        )}
+
+        <div className={`rounded-lg p-3 text-sm space-y-1 ${lotTerreauActif ? 'bg-stone-50 border border-stone-200' : 'bg-gray-50'}`}>
+          <div className="flex justify-between">
+            <span className="text-gray-500">Coût par caisse</span>
+            <span className="font-bold text-stone-800">{coutCaisseTerreau.toFixed(3)} €</span>
+          </div>
+          <div className="flex justify-between text-xs">
+            <span className="text-gray-400">Équiv. litre (godets)</span>
+            <span className="text-gray-500">{coutTerreauLitre.toFixed(4)} €/L</span>
+          </div>
         </div>
       </div>
 
@@ -451,8 +537,8 @@ function Parametres({ params, contenants, onSave }: {
       )}
 
       <button onClick={sauvegarder} disabled={saving}
-        className="w-full bg-green-700 text-white py-3 rounded-lg font-semibold disabled:opacity-50">
-        {saving ? 'Sauvegarde...' : 'Sauvegarder'}
+        className="w-full bg-green-700 text-white py-3 rounded-lg font-semibold disabled:opacity-50 active:scale-95 transition-transform">
+        {saving ? 'Sauvegarde...' : '💾 Sauvegarder les coûts'}
       </button>
     </div>
   )
@@ -490,9 +576,11 @@ function Simulateur({ params, contenants, marge, setMarge }: {
   const nbTapis      = params?.tapis_par_caisse ?? 24
   const coutTapis    = nbTapis * prixPlateau
 
-  // TERREAU : terreau + bac eventuellement
+  // TERREAU : depuis sac ou litres × prix/L
   const coutTerreauCaisse = params
-    ? params.litres_par_caisse * params.cout_terreau_litre
+    ? (params.cout_sac_terreau && params.caisses_par_sac_terreau
+        ? params.cout_sac_terreau / params.caisses_par_sac_terreau
+        : params.litres_par_caisse * params.cout_terreau_litre)
     : 0
   const coutTerreauTotal = coutTerreauCaisse + (cTerreau?.cout_unitaire || 0)
 
@@ -539,7 +627,9 @@ function Simulateur({ params, contenants, marge, setMarge }: {
             {
               label: 'Caisse terreau',
               cout: coutTerreauTotal,
-              detail: `${params?.litres_par_caisse || 0}L × ${params?.cout_terreau_litre || 0}€/L`,
+              detail: params?.caisses_par_sac_terreau
+                ? `1 sac = ${params.caisses_par_sac_terreau} caisses à ${params.cout_sac_terreau}€`
+                : `${params?.litres_par_caisse || 0}L × ${params?.cout_terreau_litre || 0}€/L`,
               unite: 'caisse',
             },
             {

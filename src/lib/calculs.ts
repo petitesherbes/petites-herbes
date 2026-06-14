@@ -44,17 +44,22 @@ export function calculerCoutGraines(poidsG: number, prixKg: number | null): numb
 /**
  * Calcule le cout du substrat/terreau selon le format :
  * - TAPIS   : 0€ (utilise des plateaux de culture, pas de terreau)
- * - TERREAU : quantite x litres_par_caisse x cout_terreau_litre
- * - GODET   : quantite x litres_par_godet  x cout_terreau_litre
+ * - TERREAU : quantite x cout_caisse (depuis achat sac, ou litres x prix/L)
+ * - GODET   : quantite x litres_par_godet x cout_terreau_litre
  */
 export function calculerCoutTerreau(
   format: Format,
   quantite: number,
   params: ParametresProduction
 ): number {
-  if (format === 'TAPIS')   return 0
-  if (format === 'TERREAU') return quantite * params.litres_par_caisse * params.cout_terreau_litre
-  if (format === 'GODET')   return quantite * params.litres_par_godet  * params.cout_terreau_litre
+  if (format === 'TAPIS') return 0
+  if (format === 'TERREAU') {
+    if (params.cout_sac_terreau && params.caisses_par_sac_terreau) {
+      return quantite * params.cout_sac_terreau / params.caisses_par_sac_terreau
+    }
+    return quantite * params.litres_par_caisse * params.cout_terreau_litre
+  }
+  if (format === 'GODET') return quantite * params.litres_par_godet * params.cout_terreau_litre
   return 0
 }
 
