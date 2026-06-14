@@ -1,7 +1,7 @@
 'use client'
 export const dynamic = 'force-dynamic'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { Espece, Template } from '@/types'
@@ -408,21 +408,25 @@ function EspecesPanel({ especes, onEdit, onRefresh, tapis, setTapis, godets, set
           <div className="divide-y divide-gray-50">
             {especes.filter(e => e.section === sec).map(e => (
               <div key={e.id} className={`px-3 py-2 flex items-center gap-2 ${!e.actif ? 'opacity-40' : ''}`}>
-                <div className="flex-1">
-                  <div className="text-sm font-medium">{e.nom}</div>
+                {e.photo_url
+                  ? <img src={e.photo_url} alt={e.nom} className="w-9 h-9 rounded-lg object-cover flex-shrink-0" />
+                  : <div className="w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center text-sm font-bold text-gray-300 flex-shrink-0">{e.nom[0]}</div>
+                }
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium truncate">{e.nom}</div>
                   <div className="text-xs text-gray-400">
                     {e.prix_graine_kg ? `${e.prix_graine_kg}€/kg` : 'Prix non renseigné'}
                     {' · '}
-                    {e.stock_actuel_g}g en stock
+                    {e.stock_actuel_g}g
                   </div>
                 </div>
                 <button onClick={() => onEdit(e)}
-                  className="text-xs text-blue-600 px-2 py-1 rounded border border-blue-200">
+                  className="text-xs text-blue-600 px-2 py-1 rounded border border-blue-200 flex-shrink-0">
                   &Eacute;diter
                 </button>
                 <button onClick={() => toggleActif(e)}
-                  className={`text-xs px-2 py-1 rounded border ${e.actif ? 'text-gray-500 border-gray-200' : 'text-green-600 border-green-200'}`}>
-                  {e.actif ? 'Désactiver' : 'Activer'}
+                  className={`text-xs px-2 py-1 rounded border flex-shrink-0 ${e.actif ? 'text-gray-500 border-gray-200' : 'text-green-600 border-green-200'}`}>
+                  {e.actif ? 'Off' : 'On'}
                 </button>
               </div>
             ))}
@@ -434,6 +438,9 @@ function EspecesPanel({ especes, onEdit, onRefresh, tapis, setTapis, godets, set
 }
 
 function EspeceModal({ espece, onClose, onSave }: { espece: Espece; onClose: () => void; onSave: () => void }) {
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [photoUrl, setPhotoUrl] = useState<string | null>(espece.photo_url)
+  const [uploading, setUploading] = useState(false)
   const [form, setForm] = useState({
     nom:            espece.nom,
     g_tapis:        espece.g_tapis?.toString()       || '',
@@ -448,21 +455,36 @@ function EspeceModal({ espece, onClose, onSave }: { espece: Espece; onClose: () 
   })
   const [saving, setSaving] = useState(false)
 
+  async function handlePhoto(file: File) {
+    setUploading(true)
+    const ext  = file.name.split('.').pop() || 'jpg'
+    const path = `${espece.id}.${ext}`
+    const { error } = await supabase.storage
+      .from('especes-photos')
+      .upload(path, file, { upsert: true, contentType: file.type })
+    if (!error) {
+      const { data } = supabase.storage.from('especes-photos').getPublicUrl(path)
+      setPhotoUrl(data.publicUrl)
+    }
+    setUploading(false)
+  }
+
   function n(v: string) { return v ? parseFloat(v) : null }
 
   async function sauvegarder() {
     setSaving(true)
     await supabase.from('especes').update({
-      nom:           form.nom,
-      g_tapis:       n(form.g_tapis),
-      g_godet:       n(form.g_godet),
-      g_caisse:      n(form.g_caisse),
-      pct_perte:     form.pct_perte ? parseFloat(form.pct_perte) / 100 : null,
-      jours_pousse:  form.jours_pousse  ? parseInt(form.jours_pousse)  : null,
-      jours_conserv: form.jours_conserv ? parseInt(form.jours_conserv) : null,
-      rendement:     n(form.rendement),
+      nom:            form.nom,
+      g_tapis:        n(form.g_tapis),
+      g_godet:        n(form.g_godet),
+      g_caisse:       n(form.g_caisse),
+      pct_perte:      form.pct_perte ? parseFloat(form.pct_perte) / 100 : null,
+      jours_pousse:   form.jours_pousse  ? parseInt(form.jours_pousse)  : null,
+      jours_conserv:  form.jours_conserv ? parseInt(form.jours_conserv) : null,
+      rendement:      n(form.rendement),
       prix_graine_kg: n(form.prix_graine_kg),
       stock_actuel_g: parseFloat(form.stock_actuel_g) || 0,
+      photo_url:      photoUrl,
     }).eq('id', espece.id)
     setSaving(false); onSave(); onClose()
   }
@@ -482,9 +504,36 @@ function EspeceModal({ espece, onClose, onSave }: { espece: Espece; onClose: () 
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-end" onClick={onClose}>
-      <div className="bg-white w-full max-w-2xl mx-auto rounded-t-2xl p-4 pb-24 space-y-3 max-h-[85vh] overflow-y-auto"
+      <div className="bg-white w-full max-w-2xl mx-auto rounded-t-2xl p-4 pb-24 space-y-3 max-h-[90vh] overflow-y-auto"
         onClick={e => e.stopPropagation()}>
         <h2 className="text-lg font-bold">&Eacute;diter &mdash; {espece.nom}</h2>
+
+        {/* Zone photo */}
+        <input ref={fileRef} type="file" accept="image/*" className="hidden"
+          onChange={e => { const f = e.target.files?.[0]; if (f) handlePhoto(f) }} />
+        <button onClick={() => fileRef.current?.click()} disabled={uploading}
+          className="w-full relative overflow-hidden rounded-2xl border-2 border-dashed border-gray-200 hover:border-green-400 transition-colors"
+          style={{ aspectRatio: '3/1' }}>
+          {photoUrl ? (
+            <img src={photoUrl} alt={espece.nom} className="w-full h-full object-cover" />
+          ) : (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-gray-400">
+              <span className="text-2xl">&#x1F4F7;</span>
+              <span className="text-xs">Ajouter une photo</span>
+            </div>
+          )}
+          {uploading && (
+            <div className="absolute inset-0 bg-white/70 flex items-center justify-center">
+              <span className="text-sm text-gray-600 animate-pulse">Envoi...</span>
+            </div>
+          )}
+          {photoUrl && !uploading && (
+            <div className="absolute bottom-2 right-2 bg-black/50 text-white text-xs px-2 py-1 rounded-full">
+              Changer
+            </div>
+          )}
+        </button>
+
         <div className="grid grid-cols-2 gap-3">
           {champs.map(c => (
             <div key={c.key} className={c.key === 'nom' ? 'col-span-2' : ''}>
@@ -497,7 +546,7 @@ function EspeceModal({ espece, onClose, onSave }: { espece: Espece; onClose: () 
         </div>
         <div className="flex gap-2 pt-2">
           <button onClick={onClose} className="flex-1 py-3 rounded-lg border border-gray-200 text-gray-600">Annuler</button>
-          <button onClick={sauvegarder} disabled={saving}
+          <button onClick={sauvegarder} disabled={saving || uploading}
             className="flex-1 py-3 rounded-lg bg-green-700 text-white font-semibold disabled:opacity-50"
             dangerouslySetInnerHTML={{ __html: saving ? 'Sauvegarde...' : '&#x1F4BE; Sauvegarder' }} />
         </div>
@@ -603,7 +652,7 @@ function ExportPanel() {
         dangerouslySetInnerHTML={{ __html: exporting === 'all'
           ? '<span class="animate-spin">&#x23F3;</span> Export en cours&hellip;'
           : done === 'all'
-          ? '&#x2705; Téléchargé !'
+          ? '&#x2705; T&eacute;l&eacute;charg&eacute; !'
           : '<span>&#x1F4E6;</span> Export complet (toutes les tables)' }} />
       <div className="text-xs font-bold text-gray-400 uppercase tracking-wider">Par table</div>
       <div className="space-y-2">

@@ -226,6 +226,10 @@ function StockGraines({ especes, mouvements, onReappro }: {
                   <div key={e.id} className="px-3 py-3">
                     <div className="flex justify-between items-center mb-1.5">
                       <div className="flex items-center gap-2 flex-1 min-w-0">
+                        {e.photo_url
+                          ? <img src={e.photo_url} alt={e.nom} className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
+                          : <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-400 flex-shrink-0">{e.nom[0]}</div>
+                        }
                         <span className="text-sm font-medium truncate">{e.nom}</span>
                         {jours !== null && (
                           <span className={`text-xs px-2 py-0.5 rounded-full shrink-0 ${badge}`}>
