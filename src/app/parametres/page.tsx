@@ -48,7 +48,7 @@ export default function ParametresPage() {
     if (t) setTemplates(t as unknown as TemplateComplet[])
     if (p) {
       setParams(p as ParamsProduction)
-      setTapis((p as ParamsProduction).tapis_par_caisse?.toString() || '24')
+      setTapis((p as ParamsProduction).tapis_par_caisse?.toString() || '30')
       setGodets((p as ParamsProduction).godets_par_serie?.toString() || '14')
     }
     setLoading(false)
@@ -58,7 +58,7 @@ export default function ParametresPage() {
     if (!params) return
     setSavingParams(true)
     await supabase.from('parametres_production').update({
-      tapis_par_caisse: parseInt(tapis) || 24,
+      tapis_par_caisse: parseInt(tapis) || 30,
       godets_par_serie: parseInt(godets) || 14,
     }).eq('id', params.id)
     setSavingParams(false)
@@ -339,9 +339,8 @@ function TemplateModal({ template, especes, onClose, onSave }: {
             Annuler
           </button>
           <button onClick={sauvegarder} disabled={saving || !nom.trim()}
-            className="flex-1 py-3 rounded-xl bg-green-700 text-white font-bold disabled:opacity-50 active:scale-95">
-            {saving ? 'Sauvegarde...' : '&#x1F4BE; Sauvegarder'}
-          </button>
+            className="flex-1 py-3 rounded-xl bg-green-700 text-white font-bold disabled:opacity-50 active:scale-95"
+            dangerouslySetInnerHTML={{ __html: saving ? 'Sauvegarde...' : '&#x1F4BE; Sauvegarder' }} />
         </div>
       </div>
     </div>
@@ -393,9 +392,8 @@ function EspecesPanel({ especes, onEdit, onRefresh, tapis, setTapis, godets, set
           </div>
         </div>
         <button onClick={sauvegarderSeries} disabled={savingParams}
-          className="w-full bg-green-700 text-white py-2.5 rounded-xl font-semibold text-sm active:scale-95 transition-transform disabled:opacity-50">
-          {savingParams ? 'Sauvegarde...' : '&#x1F4BE; Enregistrer les séries'}
-        </button>
+          className="w-full bg-green-700 text-white py-2.5 rounded-xl font-semibold text-sm active:scale-95 transition-transform disabled:opacity-50"
+          dangerouslySetInnerHTML={{ __html: savingParams ? 'Sauvegarde...' : '&#x1F4BE; Enregistrer les s&eacute;ries' }} />
       </div>
 
       {sections.map(sec => (
@@ -500,9 +498,8 @@ function EspeceModal({ espece, onClose, onSave }: { espece: Espece; onClose: () 
         <div className="flex gap-2 pt-2">
           <button onClick={onClose} className="flex-1 py-3 rounded-lg border border-gray-200 text-gray-600">Annuler</button>
           <button onClick={sauvegarder} disabled={saving}
-            className="flex-1 py-3 rounded-lg bg-green-700 text-white font-semibold disabled:opacity-50">
-            {saving ? 'Sauvegarde...' : '&#x1F4BE; Sauvegarder'}
-          </button>
+            className="flex-1 py-3 rounded-lg bg-green-700 text-white font-semibold disabled:opacity-50"
+            dangerouslySetInnerHTML={{ __html: saving ? 'Sauvegarde...' : '&#x1F4BE; Sauvegarder' }} />
         </div>
       </div>
     </div>
@@ -528,9 +525,8 @@ function EmailPanel() {
         <p className="text-xs text-gray-400">Modifiable via la variable EMAIL_DESTINATION dans .env.local</p>
       </div>
       <button onClick={testerEmail} disabled={testing}
-        className="w-full py-3 rounded-lg bg-blue-600 text-white font-semibold disabled:opacity-50">
-        {testing ? 'Envoi...' : '&#x1F4E7; Envoyer un email de test'}
-      </button>
+        className="w-full py-3 rounded-lg bg-blue-600 text-white font-semibold disabled:opacity-50"
+        dangerouslySetInnerHTML={{ __html: testing ? 'Envoi...' : '&#x1F4E7; Envoyer un email de test' }} />
     </div>
   )
 }
@@ -590,24 +586,25 @@ function ExportPanel() {
     { key: 'bons_livraison', label: 'Commandes (BLs)', icon: '&#x1F4E6;', desc: 'Tous les bons de livraison' },
     { key: 'semis',          label: 'Semis',           icon: '&#x1F331;', desc: 'Historique des semis' },
     { key: 'cahier_culture', label: 'Cahier terrain',  icon: '&#x1F4D6;', desc: 'Toutes les entrées terrain' },
-    { key: 'taches',         label: 'Tâches',    icon: '&#x2705;',  desc: 'Agenda et tâches' },
+    { key: 'taches',         label: 'Tâches',     icon: '&#x2705;',  desc: 'Agenda et tâches' },
     { key: 'pertes',         label: 'Pertes',          icon: '&#x1F4C9;', desc: 'Invendus et pertes' },
-    { key: 'especes',        label: 'Espèces',   icon: '&#x1F33F;', desc: 'Catalogue des espèces micropousses' },
+    { key: 'especes',        label: 'Espèces',    icon: '&#x1F33F;', desc: 'Catalogue des espèces micropousses' },
   ]
 
   return (
     <div className="space-y-4">
       <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 text-sm text-blue-800">
-        <div className="font-bold mb-1">&#x1F4BE; Export de vos données</div>
+        <div className="font-bold mb-1">&#x1F4BE; Export de vos donn&eacute;es</div>
         Les fichiers CSV s&apos;ouvrent directement dans Excel ou Google Sheets.
-        Faites un export complet 1&times;/semaine pour sauvegarder toutes vos données.
+        Faites un export complet 1&times;/semaine pour sauvegarder toutes vos donn&eacute;es.
       </div>
       <button onClick={exporterTout} disabled={!!exporting}
-        className="w-full py-4 rounded-2xl font-bold text-base flex items-center justify-center gap-3 active:scale-95 transition-transform disabled:opacity-60 bg-green-700 text-white shadow-sm">
-        {exporting === 'all' ? <><span className="animate-spin">&#x23F3;</span> Export en cours&hellip;</> :
-         done === 'all'      ? '&#x2705; Téléchargé !' :
-         <><span>&#x1F4E6;</span> Export complet (toutes les tables)</>}
-      </button>
+        className="w-full py-4 rounded-2xl font-bold text-base flex items-center justify-center gap-3 active:scale-95 transition-transform disabled:opacity-60 bg-green-700 text-white shadow-sm"
+        dangerouslySetInnerHTML={{ __html: exporting === 'all'
+          ? '<span class="animate-spin">&#x23F3;</span> Export en cours&hellip;'
+          : done === 'all'
+          ? '&#x2705; Téléchargé !'
+          : '<span>&#x1F4E6;</span> Export complet (toutes les tables)' }} />
       <div className="text-xs font-bold text-gray-400 uppercase tracking-wider">Par table</div>
       <div className="space-y-2">
         {exports.map(e => (
@@ -623,9 +620,10 @@ function ExportPanel() {
             <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
               exporting === e.key ? 'bg-amber-100 text-amber-700' :
               done === e.key     ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
-            }`}>
-              {exporting === e.key ? '&#x23F3; …' : done === e.key ? '&#x2705; OK' : '&#x2193; CSV'}
-            </span>
+            }`} dangerouslySetInnerHTML={{ __html:
+              exporting === e.key ? '&#x23F3; &hellip;' :
+              done === e.key      ? '&#x2705; OK' : '&#x2193; CSV'
+            }} />
           </button>
         ))}
       </div>
