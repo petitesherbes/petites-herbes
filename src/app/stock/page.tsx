@@ -2,7 +2,7 @@
 export const dynamic = 'force-dynamic'
 
 import { useEffect, useState } from 'react'
-import { fetchWithCache } from '@/lib/offline'
+import { fetchWithCache, queueMutation } from '@/lib/offline'
 import { supabase } from '@/lib/supabase'
 import { Espece, SemisLigne, StockMouvement } from '@/types'
 import { format, parseISO, differenceInDays, subDays } from 'date-fns'
@@ -375,6 +375,19 @@ function ReapproModal({ espece, onClose, onDone }: { espece: Espece, onClose: ()
   async function valider() {
     setSaving(true)
     const prix = parseFloat(prixKg) || null
+
+    if (!navigator.onLine) {
+      if (mode === 'reappro') {
+        await queueMutation({ table: 'stock_mouvements', method: 'insert', payload: { espece_id: espece.id, type: 'reappro', quantite_g: qteg, prix_kg: prix } })
+        await queueMutation({ table: 'especes', method: 'update', payload: { stock_actuel_g: espece.stock_actuel_g + qteg, ...(prix ? { prix_graine_kg: prix } : {}) }, matchCol: 'id', matchVal: espece.id })
+      } else {
+        const exact = parseFloat(stockExact) || 0
+        await queueMutation({ table: 'stock_mouvements', method: 'insert', payload: { espece_id: espece.id, type: 'ajustement', quantite_g: exact - espece.stock_actuel_g, prix_kg: prix } })
+        await queueMutation({ table: 'especes', method: 'update', payload: { stock_actuel_g: exact, ...(prix ? { prix_graine_kg: prix } : {}) }, matchCol: 'id', matchVal: espece.id })
+      }
+      setSaving(false); onDone(); onClose()
+      return
+    }
 
     if (mode === 'reappro') {
       await supabase.from('stock_mouvements').insert({

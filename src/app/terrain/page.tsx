@@ -351,13 +351,19 @@ export default function TerrainPage() {
     if (!taskTitre.trim()) return
     setTaskSaving(true)
     const zids = taskZoneIds.length > 0 ? taskZoneIds : [null]
-    await Promise.all(zids.map(zid =>
-      supabase.from('taches').insert({
-        titre: taskTitre.trim(), type: 'ponctuelle',
-        date_echeance: taskDate, priorite: taskPrio,
-        zone_id: zid,
-      })
-    ))
+    if (!navigator.onLine) {
+      await Promise.all(zids.map(zid =>
+        queueMutation({ table: 'taches', method: 'insert', payload: { titre: taskTitre.trim(), type: 'ponctuelle', date_echeance: taskDate, priorite: taskPrio, zone_id: zid } })
+      ))
+    } else {
+      await Promise.all(zids.map(zid =>
+        supabase.from('taches').insert({
+          titre: taskTitre.trim(), type: 'ponctuelle',
+          date_echeance: taskDate, priorite: taskPrio,
+          zone_id: zid,
+        })
+      ))
+    }
     setTaskSaving(false); setTaskRapide(false)
     setTaskTitre(''); setTaskPrio('normale'); setTaskZoneIds([])
     setTaskDate(format(new Date(), 'yyyy-MM-dd'))
@@ -1055,17 +1061,29 @@ function AgendaTab({ taches, zones, catalogueTaches, zoneTaches, onSaved }: {
   async function cocher(t: Tache) {
     const todayStr = format(new Date(), 'yyyy-MM-dd')
     if (tacheEstCompleteeAujourdHui(t)) {
-      await supabase.from('taches_completions').delete()
-        .eq('tache_id', t.id).eq('date_completion', todayStr)
+      if (!navigator.onLine) {
+        await queueMutation({ table: 'taches_completions', method: 'delete', payload: {}, matchCol: 'tache_id', matchVal: t.id })
+      } else {
+        await supabase.from('taches_completions').delete()
+          .eq('tache_id', t.id).eq('date_completion', todayStr)
+      }
     } else {
-      await supabase.from('taches_completions')
-        .upsert({ tache_id: t.id, date_completion: todayStr }, { onConflict: 'tache_id,date_completion' })
+      const payload = { tache_id: t.id, date_completion: todayStr }
+      if (!navigator.onLine) {
+        await queueMutation({ table: 'taches_completions', method: 'upsert', payload, onConflict: 'tache_id,date_completion' })
+      } else {
+        await supabase.from('taches_completions').upsert(payload, { onConflict: 'tache_id,date_completion' })
+      }
     }
     onSaved()
   }
 
   async function supprimer(id: string) {
-    await supabase.from('taches').update({ actif: false }).eq('id', id)
+    if (!navigator.onLine) {
+      await queueMutation({ table: 'taches', method: 'update', payload: { actif: false }, matchCol: 'id', matchVal: id })
+    } else {
+      await supabase.from('taches').update({ actif: false }).eq('id', id)
+    }
     onSaved()
   }
 
@@ -1073,14 +1091,20 @@ function AgendaTab({ taches, zones, catalogueTaches, zoneTaches, onSaved }: {
     if (!titre.trim()) return
     setSaving(true)
     const zids = zoneIds.length > 0 ? zoneIds : [null]
-    await Promise.all(zids.map(zid =>
-      supabase.from('taches').insert({
-        titre: titre.trim(), type,
-        frequence: type === 'recurrente' ? frequence.join(',') || 'quotidien' : null,
-        date_echeance: type === 'ponctuelle' ? echeance : null,
-        zone_id: zid, priorite,
-      })
-    ))
+    if (!navigator.onLine) {
+      await Promise.all(zids.map(zid =>
+        queueMutation({ table: 'taches', method: 'insert', payload: { titre: titre.trim(), type, frequence: type === 'recurrente' ? frequence.join(',') || 'quotidien' : null, date_echeance: type === 'ponctuelle' ? echeance : null, zone_id: zid, priorite } })
+      ))
+    } else {
+      await Promise.all(zids.map(zid =>
+        supabase.from('taches').insert({
+          titre: titre.trim(), type,
+          frequence: type === 'recurrente' ? frequence.join(',') || 'quotidien' : null,
+          date_echeance: type === 'ponctuelle' ? echeance : null,
+          zone_id: zid, priorite,
+        })
+      ))
+    }
     setSaving(false); setAjout(false)
     setTitre(''); setType('ponctuelle'); setFreq([]); setPrio('normale'); setZoneIds([])
     onSaved()
@@ -1493,10 +1517,12 @@ function PertesTab({ pertes, especes, onSaved }: {
   async function sauvegarder() {
     if (!designation.trim() || !raison) return
     setSaving(true)
-    await supabase.from('pertes').insert({
-      designation: designation.trim(), espece_id: especeId || null,
-      quantite, unite, raison, notes: notes || null,
-    })
+    const payload = { designation: designation.trim(), espece_id: especeId || null, quantite, unite, raison, notes: notes || null }
+    if (!navigator.onLine) {
+      await queueMutation({ table: 'pertes', method: 'insert', payload })
+    } else {
+      await supabase.from('pertes').insert(payload)
+    }
     setSaving(false)
     setDesignation(''); setEspeceId(''); setQuantite(1); setRaison(''); setNotes(''); setRecherche('')
     onSaved()
@@ -1654,13 +1680,12 @@ function HeuresTab({ taches, entrees, zones, pointages, onSaved }: {
 
   async function sauvegarder() {
     setSaving(true)
-    await supabase.from('pointages').upsert({
-      date: dateVue, auteur,
-      heure_arrivee: arrivee || null,
-      heure_depart: depart || null,
-      pause_minutes: pause,
-      notes: notes || null,
-    }, { onConflict: 'date,auteur' })
+    const payload = { date: dateVue, auteur, heure_arrivee: arrivee || null, heure_depart: depart || null, pause_minutes: pause, notes: notes || null }
+    if (!navigator.onLine) {
+      await queueMutation({ table: 'pointages', method: 'upsert', payload, onConflict: 'date,auteur' })
+    } else {
+      await supabase.from('pointages').upsert(payload, { onConflict: 'date,auteur' })
+    }
     setSaving(false)
     onSaved()
   }

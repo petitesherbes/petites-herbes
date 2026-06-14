@@ -14,10 +14,11 @@ const DB_VERSION = 1
 type MutationRecord = {
   id?: number
   table: string
-  method: 'insert' | 'update' | 'delete'
+  method: 'insert' | 'update' | 'delete' | 'upsert'
   payload: unknown
   matchCol?: string
   matchVal?: string
+  onConflict?: string
   ts: number
 }
 
@@ -111,13 +112,18 @@ export async function syncQueue(): Promise<{ synced: number; errors: number }> {
     for (const item of items) {
       try {
         if (item.method === 'insert') {
-          const { error } = await supabase.from(item.table).insert(item.payload as Record<string, unknown>)
+          // payload peut être un objet ou un tableau (batch insert)
+          const { error } = await supabase.from(item.table).insert(item.payload as Record<string, unknown> | Record<string, unknown>[])
           if (error) throw error
         } else if (item.method === 'update' && item.matchCol && item.matchVal) {
           const { error } = await supabase.from(item.table).update(item.payload as Record<string, unknown>).eq(item.matchCol, item.matchVal)
           if (error) throw error
         } else if (item.method === 'delete' && item.matchCol && item.matchVal) {
           const { error } = await supabase.from(item.table).delete().eq(item.matchCol, item.matchVal)
+          if (error) throw error
+        } else if (item.method === 'upsert') {
+          const opts = item.onConflict ? { onConflict: item.onConflict } : undefined
+          const { error } = await supabase.from(item.table).upsert(item.payload as Record<string, unknown> | Record<string, unknown>[], opts)
           if (error) throw error
         }
         await new Promise<void>((resolve) => {

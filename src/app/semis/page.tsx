@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic'
 
 import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
-import { fetchWithCache } from '@/lib/offline'
+import { fetchWithCache, queueMutation, saveCache } from '@/lib/offline'
 import { Espece, Template, SemisLigneForm, Format, ParametresProduction, Contenant } from '@/types'
 import {
   calculerPoidsGraines, calculerProdEstimee, calculerDates,
@@ -153,18 +153,15 @@ export default function NouveauSemisPage() {
     if (lignes.length === 0) return
     setSaving(true)
 
-    const { data: semisData, error } = await supabase
-      .from('semis')
-      .insert({ date_semis: dateSemis, nom_template: templateChoisi || null, cout_total: totalCout })
-      .select().single()
-
-    if (error || !semisData) { setSaving(false); alert('Erreur lors de la création du semis'); return }
+    // Génère l'UUID ici pour pouvoir l'utiliser offline
+    const semisId = crypto.randomUUID()
+    const semisPayload = { id: semisId, date_semis: dateSemis, nom_template: templateChoisi || null, cout_total: totalCout }
 
     const lignesInsert = lignes.map(l => {
       const calc = calculerLigne(l)
       const dates = l.espece ? calculerDates(new Date(dateSemis + 'T12:00:00'), l.espece) : { date_dispo: null, date_peremption: null }
       return {
-        semis_id: semisData.id,
+        semis_id: semisId,
         espece_id: l.espece_id,
         format: l.format,
         quantite: l.quantite,
@@ -178,6 +175,36 @@ export default function NouveauSemisPage() {
         cout_total_ligne: calc.total,
       }
     })
+
+    if (!navigator.onLine) {
+      // Queue toutes les opérations pour sync ultérieure
+      await queueMutation({ table: 'semis', method: 'insert', payload: semisPayload })
+      await queueMutation({ table: 'semis_lignes', method: 'insert', payload: lignesInsert })
+      for (const l of lignes) {
+        const poids = calculerLigne(l).poids
+        const esp = especes.find(e => e.id === l.espece_id)
+        if (!esp || poids === 0) continue
+        await queueMutation({ table: 'stock_mouvements', method: 'insert', payload: { espece_id: l.espece_id, type: 'semis', quantite_g: -poids, semis_id: semisId } })
+        await queueMutation({ table: 'especes', method: 'update', payload: { stock_actuel_g: Math.max(0, esp.stock_actuel_g - poids) }, matchCol: 'id', matchVal: l.espece_id })
+      }
+      // Mise à jour optimiste du cache espèces
+      const especesUpdated = especes.map(e => {
+        const ligne = lignes.find(l => l.espece_id === e.id)
+        if (!ligne) return e
+        return { ...e, stock_actuel_g: Math.max(0, e.stock_actuel_g - calculerLigne(ligne).poids) }
+      })
+      await saveCache('especes', especesUpdated)
+      setSaving(false)
+      router.push('/semis/historique')
+      return
+    }
+
+    const { data: semisData, error } = await supabase
+      .from('semis')
+      .insert(semisPayload)
+      .select().single()
+
+    if (error || !semisData) { setSaving(false); alert('Erreur lors de la création du semis'); return }
 
     await supabase.from('semis_lignes').insert(lignesInsert)
 

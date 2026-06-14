@@ -2,7 +2,7 @@
 export const dynamic = 'force-dynamic'
 
 import { useEffect, useState, ReactNode } from 'react'
-import { fetchWithCache } from '@/lib/offline'
+import { fetchWithCache, queueMutation } from '@/lib/offline'
 import { supabase } from '@/lib/supabase'
 import { Espece, BonLivraison, StockMouvement } from '@/types'
 import { format, parseISO, differenceInDays, subDays, startOfWeek } from 'date-fns'
@@ -206,7 +206,17 @@ export default function AccueilPage() {
     const heure = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`
     const today = format(now, 'yyyy-MM-dd')
     const champ = type === 'arrivee' ? 'heure_arrivee' : 'heure_depart'
-    await supabase.from('pointages').upsert({ auteur, date: today, [champ]: heure }, { onConflict: 'date,auteur' })
+    const payload = { auteur, date: today, [champ]: heure }
+    if (!navigator.onLine) {
+      await queueMutation({ table: 'pointages', method: 'upsert', payload, onConflict: 'date,auteur' })
+      setPointagesAuj(prev => {
+        const exists = prev.find(p => p.auteur === auteur)
+        if (exists) return prev.map(p => p.auteur === auteur ? { ...p, [champ]: heure } : p)
+        return [...prev, { auteur, heure_arrivee: null, heure_depart: null, pause_minutes: 0, [champ]: heure }]
+      })
+      return
+    }
+    await supabase.from('pointages').upsert(payload, { onConflict: 'date,auteur' })
     const { data: ptg } = await supabase.from('pointages')
       .select('auteur, heure_arrivee, heure_depart, pause_minutes').eq('date', today)
     if (ptg) setPointagesAuj(ptg as {auteur:string;heure_arrivee:string|null;heure_depart:string|null;pause_minutes:number}[])
