@@ -38,6 +38,9 @@ export default function BLDetailPage() {
   const [bl, setBl] = useState<BLComplet | null>(null)
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
+  const [dupliquerDate, setDupliquerDate] = useState('')
+  const [dupliquerOpen, setDupliquerOpen] = useState(false)
+  const [dupliquerSaving, setDupliquerSaving] = useState(false)
 
   useEffect(() => { charger() }, [id])
 
@@ -79,6 +82,40 @@ export default function BLDetailPage() {
     if (!confirm('Supprimer ce BL ?')) return
     await supabase.from('bons_livraison').delete().eq('id', id)
     router.push('/commandes')
+  }
+
+  async function dupliquer() {
+    if (!bl || !dupliquerDate) return
+    setDupliquerSaving(true)
+    const { data: params } = await supabase.from('parametres_production').select('id, prochain_numero_bl').single()
+    const numero = String(params?.prochain_numero_bl || 1777).padStart(7, '0')
+    const { data: newBl, error } = await supabase.from('bons_livraison').insert({
+      numero,
+      client_id: bl.client_id,
+      date_livraison: dupliquerDate,
+      statut: 'brouillon',
+    }).select().single()
+    if (!error && newBl) {
+      await supabase.from('bl_lignes').insert(
+        bl.bl_lignes.map((l, i) => ({
+          bl_id: newBl.id,
+          produit_id: null,
+          designation: l.designation,
+          reference: l.reference,
+          quantite: l.quantite,
+          prix_ht: l.prix_ht,
+          tva_pct: l.tva_pct,
+          ordre: i,
+        }))
+      )
+      if (params) {
+        await supabase.from('parametres_production')
+          .update({ prochain_numero_bl: (params.prochain_numero_bl || 1777) + 1 })
+          .eq('id', params.id)
+      }
+      router.push(`/commandes/${newBl.id}`)
+    }
+    setDupliquerSaving(false)
   }
 
   if (loading) return <div className="flex items-center justify-center h-64 text-gray-500">Chargement...</div>
@@ -232,13 +269,48 @@ export default function BLDetailPage() {
         </div>
       </div>
 
-      {/* ── Danger zone ── */}
-      <div className="no-print px-4 pb-24">
+      {/* ── Actions secondaires ── */}
+      <div className="no-print px-4 pb-24 space-y-2">
+        <button onClick={() => { setDupliquerDate(format(new Date(), 'yyyy-MM-dd')); setDupliquerOpen(true) }}
+          className="w-full py-3 rounded-xl border-2 border-green-200 text-green-700 text-sm font-semibold bg-green-50">
+          🔁 Dupliquer ce BL (nouvelle date)
+        </button>
         <button onClick={supprimer}
           className="w-full py-3 rounded-xl border border-red-200 text-red-400 text-sm">
           Supprimer ce BL
         </button>
       </div>
+
+      {/* ── Modal dupliquer ── */}
+      {dupliquerOpen && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end" onClick={() => setDupliquerOpen(false)}>
+          <div className="bg-white w-full max-w-2xl mx-auto rounded-t-2xl p-5 space-y-4 pb-10"
+            onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-bold">🔁 Dupliquer le BL</h2>
+              <button onClick={() => setDupliquerOpen(false)} className="text-gray-400 text-2xl leading-none">×</button>
+            </div>
+            <p className="text-sm text-gray-600">
+              Un nouveau BL sera créé pour <strong>{bl?.client?.nom}</strong> avec les mêmes lignes.
+            </p>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1.5">Date de livraison</label>
+              <input type="date" value={dupliquerDate} onChange={e => setDupliquerDate(e.target.value)}
+                className="w-full border-2 border-gray-200 rounded-xl p-3 text-base focus:border-green-500 focus:outline-none" />
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => setDupliquerOpen(false)}
+                className="flex-1 py-3 rounded-xl border border-gray-200 text-gray-600 text-sm">
+                Annuler
+              </button>
+              <button onClick={dupliquer} disabled={!dupliquerDate || dupliquerSaving}
+                className="flex-1 py-3 rounded-xl bg-green-700 text-white font-semibold text-sm disabled:opacity-50">
+                {dupliquerSaving ? 'Création...' : 'Créer le BL'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }

@@ -8,6 +8,7 @@ const tabs = [
   { href: '/',            icon: '🏠', label: 'Accueil' },
   { href: '/semis',       icon: '🌱', label: 'Semis' },
   { href: '/commandes',   icon: '🛒', label: 'Commandes' },
+  { href: '/planning',    icon: '📅', label: 'Planning' },
   { href: '/terrain',     icon: '🌿', label: 'Terrain' },
   { href: '/stock',       icon: '🌾', label: 'Stock' },
   { href: '/parametres',  icon: '⚙️',  label: 'Réglages' },
@@ -58,7 +59,7 @@ export default function BottomNav() {
                   </span>
                 )}
               </span>
-              <span className={`text-[10px] font-medium ${active ? 'text-green-800' : ''}`}>
+              <span className={`text-[9px] font-medium ${active ? 'text-green-800' : ''}`}>
                 {tab.label}
               </span>
               {active && (

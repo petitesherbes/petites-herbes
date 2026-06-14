@@ -428,11 +428,164 @@ function RappelsModal({ jour, onClose }: { jour: string; onClose: () => void }) 
 
 // ─── Boutons préparation + rappels ────────────────────────────
 
+// ─── Modal flux livraison ─────────────────────────────────────
+
+type ClientFlux = {
+  id: string; nom: string; telephone: string | null; email: string | null
+  jours_livraison: string[]; order_token: string | null
+  dernierBL?: { id: string; numero: string; date_livraison: string; bl_lignes: { designation: string; reference: string | null; quantite: number; prix_ht: number; tva_pct: number }[] } | null
+}
+
+function FluxLivraisonModal({ jour, onClose }: { jour: string; onClose: () => void }) {
+  const router = useRouter()
+  const [clients, setClients] = useState<ClientFlux[]>([])
+  const [loading, setLoading] = useState(true)
+  const [creating, setCreating] = useState<string | null>(null)
+  const [dateLivraison, setDateLivraison] = useState(prochainJour(JOURS_NUM[jour] || 2))
+  const jourLabel = jour.charAt(0).toUpperCase() + jour.slice(1)
+
+  useEffect(() => { charger() }, [])
+
+  async function charger() {
+    setLoading(true)
+    const { data: clientsRaw } = await supabase
+      .from('clients')
+      .select('id, nom, telephone, email, jours_livraison, order_token')
+      .eq('actif', true)
+      .contains('jours_livraison', [jour])
+      .order('nom')
+
+    if (!clientsRaw) { setLoading(false); return }
+
+    const enrichis = await Promise.all(
+      clientsRaw.map(async (c) => {
+        const { data: bls } = await supabase
+          .from('bons_livraison')
+          .select('id, numero, date_livraison, bl_lignes(designation, reference, quantite, prix_ht, tva_pct)')
+          .eq('client_id', c.id)
+          .order('date_livraison', { ascending: false })
+          .limit(1)
+        return { ...c, dernierBL: bls?.[0] || null }
+      })
+    )
+    setClients(enrichis as ClientFlux[])
+    setLoading(false)
+  }
+
+  async function recreerBL(client: ClientFlux) {
+    setCreating(client.id)
+    const { data: params } = await supabase.from('parametres_production').select('id, prochain_numero_bl').single()
+    const numero = String(params?.prochain_numero_bl || 1777).padStart(7, '0')
+
+    const { data: newBl, error } = await supabase.from('bons_livraison').insert({
+      numero, client_id: client.id, date_livraison: dateLivraison, statut: 'brouillon',
+    }).select().single()
+
+    if (!error && newBl) {
+      const lignes = client.dernierBL?.bl_lignes ?? []
+      if (lignes.length > 0) {
+        await supabase.from('bl_lignes').insert(
+          lignes.map((l, i) => ({
+            bl_id: newBl.id, produit_id: null,
+            designation: l.designation, reference: l.reference,
+            quantite: l.quantite, prix_ht: l.prix_ht, tva_pct: l.tva_pct, ordre: i,
+          }))
+        )
+      }
+      if (params) {
+        await supabase.from('parametres_production')
+          .update({ prochain_numero_bl: (params.prochain_numero_bl || 1777) + 1 })
+          .eq('id', params.id)
+      }
+      router.push(`/commandes/${newBl.id}`)
+    }
+    setCreating(null)
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-end" onClick={onClose}>
+      <div className="bg-white w-full max-w-2xl mx-auto rounded-t-2xl p-4 pb-10 space-y-4 max-h-[88vh] overflow-y-auto"
+        onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-bold">🚚 Flux livraison — {jourLabel}</h2>
+            <p className="text-xs text-gray-400 mt-0.5">Crée les BL de tous vos clients du {jourLabel}</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 text-2xl leading-none">×</button>
+        </div>
+
+        <div>
+          <label className="text-xs font-semibold text-gray-500 block mb-1.5">Date de livraison</label>
+          <input type="date" value={dateLivraison} onChange={e => setDateLivraison(e.target.value)}
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-400" />
+        </div>
+
+        {loading ? (
+          <div className="text-sm text-gray-400 text-center py-6">Chargement…</div>
+        ) : clients.length === 0 ? (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-700">
+            Aucun client assigné au {jourLabel}. Ajoutez un créneau dans la fiche client.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {clients.map(c => {
+              const lignes = c.dernierBL?.bl_lignes || []
+              const isBusy = creating === c.id
+              const phone = c.telephone?.replace(/\D/g, '')
+              const waNum = phone?.startsWith('0') ? '33' + phone.slice(1) : phone
+              return (
+                <div key={c.id} className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+                  <div className="flex items-center justify-between px-3 py-2.5 bg-gray-50">
+                    <div>
+                      <div className="font-semibold text-sm text-gray-800">{c.nom}</div>
+                      {c.dernierBL && (
+                        <div className="text-xs text-gray-400">
+                          Dernier BL : {c.dernierBL.numero} du {fmtDate(c.dernierBL.date_livraison)}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex gap-1.5">
+                      {waNum && (
+                        <a href={`https://wa.me/${waNum}`} target="_blank" rel="noopener noreferrer"
+                          className="w-8 h-8 flex items-center justify-center bg-[#25D366] text-white rounded-lg text-sm">
+                          💬
+                        </a>
+                      )}
+                      <button onClick={() => recreerBL(c)} disabled={isBusy}
+                        className="px-3 py-1.5 bg-green-700 text-white text-xs font-bold rounded-lg disabled:opacity-50">
+                        {isBusy ? '…' : c.dernierBL ? '🔁 Recréer BL' : '+ Nouveau BL'}
+                      </button>
+                    </div>
+                  </div>
+                  {lignes.length > 0 && (
+                    <div className="divide-y divide-gray-50">
+                      {lignes.map((l, i) => (
+                        <div key={i} className="px-3 py-1.5 flex justify-between text-xs text-gray-600">
+                          <span>{l.designation}</span>
+                          <span className="font-semibold text-gray-700">× {l.quantite}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {!c.dernierBL && (
+                    <div className="px-3 py-2 text-xs text-gray-400 italic">Pas de BL précédent — un BL vide sera créé</div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function PrepaButtons() {
   const [loadingPrepa, setLoadingPrepa] = useState<string | null>(null)
   const [autreDate, setAutreDate] = useState(false)
   const [dateChoisie, setDateChoisie] = useState('')
   const [rappelJour, setRappelJour] = useState<string | null>(null)
+  const [fluxJour, setFluxJour] = useState<string | null>(null)
 
   async function genererPrepa(date: string) {
     const jourLabel = new Date(date + 'T12:00:00').toLocaleDateString('fr-FR', { weekday: 'long' })
@@ -510,10 +663,29 @@ function PrepaButtons() {
             ))}
           </div>
         </div>
+
+        <div className="border-t border-green-200 pt-2 space-y-1">
+          <div className="text-xs font-semibold text-green-800">🚚 Flux livraison — recréer tous les BL</div>
+          <div className="grid grid-cols-3 gap-2">
+            {creneaux.map(({ nom }) => (
+              <button key={nom}
+                onClick={() => setFluxJour(nom)}
+                className="py-2 rounded-lg bg-green-700 text-white text-xs font-semibold capitalize">
+                {nom.charAt(0).toUpperCase() + nom.slice(1)}
+              </button>
+            ))}
+          </div>
+          <p className="text-[10px] text-gray-400 pt-0.5">
+            Recrée les BL de vos clients à partir de leur dernière commande.
+          </p>
+        </div>
       </div>
 
       {rappelJour && (
         <RappelsModal jour={rappelJour} onClose={() => setRappelJour(null)} />
+      )}
+      {fluxJour && (
+        <FluxLivraisonModal jour={fluxJour} onClose={() => setFluxJour(null)} />
       )}
     </>
   )
