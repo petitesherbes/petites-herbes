@@ -1647,7 +1647,7 @@ function HeuresTab({ taches, entrees, zones, pointages, onSaved }: {
   taches: Tache[]; entrees: EntreeCahier[]; zones: Zone[]
   pointages: Pointage[]; onSaved: () => void
 }) {
-  const [auteur, setAuteur]   = useState(() =>
+  const [auteur, setAuteur] = useState(() =>
     typeof window !== 'undefined' ? localStorage.getItem('terrain_auteur') || 'Antoine' : 'Antoine'
   )
   const [dateVue, setDateVue] = useState(format(new Date(), 'yyyy-MM-dd'))
@@ -1656,38 +1656,100 @@ function HeuresTab({ taches, entrees, zones, pointages, onSaved }: {
   const [pause, setPause]     = useState(0)
   const [notes, setNotes]     = useState('')
   const [saving, setSaving]   = useState(false)
+  const [modifManu, setModifManu] = useState(false)
+  const [pauseDebut, setPauseDebut] = useState<string | null>(null)
+  const [tick, setTick]       = useState(0)
 
+  const pauseKey = `pointage_pause_${auteur}_${dateVue}`
   const pointage = pointages.find(p => p.auteur === auteur && p.date === dateVue)
+  const isAujourdHui = dateVue === format(new Date(), 'yyyy-MM-dd')
 
+  // Charge pauseDebut depuis localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') setPauseDebut(localStorage.getItem(pauseKey))
+  }, [pauseKey])
+
+  // Sync champs quand le pointage change
   useEffect(() => {
     setArrivee(pointage?.heure_arrivee?.slice(0, 5) || '')
     setDepart(pointage?.heure_depart?.slice(0, 5) || '')
     setPause(pointage?.pause_minutes || 0)
     setNotes(pointage?.notes || '')
+    setModifManu(false)
   }, [auteur, dateVue, pointage?.id])
 
-  const isAujourdHui = dateVue === format(new Date(), 'yyyy-MM-dd')
-  const totalMin = arrivee && depart ? calcMinutes(arrivee, depart) - pause : null
+  // Timer live (mise à jour toutes les 30s)
+  useEffect(() => {
+    const iv = setInterval(() => setTick(t => t + 1), 30000)
+    return () => clearInterval(iv)
+  }, [])
 
-  const tachesJour = taches.filter(t =>
-    (t.completions || []).some(c => c.date_completion === dateVue)
-  )
-  const entreesJour = entrees.filter(e => e.date_operation === dateVue)
+  // États dérivés
+  const enCours    = !!arrivee && !depart && isAujourdHui
+  const enPause    = enCours && !!pauseDebut
+  const terminee   = !!arrivee && !!depart
+  const totalMin   = terminee ? calcMinutes(arrivee, depart) - pause : null
 
-  function aller(delta: number) {
-    setDateVue(format(addDays(parseISO(dateVue), delta), 'yyyy-MM-dd'))
+  // Chrono live (minutes depuis l'arrivée, moins les pauses déjà validées)
+  let chronoMin: number | null = null
+  if (enCours && !enPause) {
+    const [ah, am] = arrivee.split(':').map(Number)
+    chronoMin = Math.floor((Date.now() - new Date().setHours(ah, am, 0, 0)) / 60000) - pause
+  }
+  let pauseElapsedMin: number | null = null
+  if (enPause && pauseDebut) {
+    pauseElapsedMin = Math.floor((Date.now() - new Date(pauseDebut).getTime()) / 60000)
   }
 
-  async function sauvegarder() {
+  async function sauvegarderAvec(updates: {
+    heure_arrivee?: string | null; heure_depart?: string | null
+    pause_minutes?: number; notes?: string | null
+  }) {
     setSaving(true)
-    const payload = { date: dateVue, auteur, heure_arrivee: arrivee || null, heure_depart: depart || null, pause_minutes: pause, notes: notes || null }
+    const payload = {
+      date: dateVue, auteur,
+      heure_arrivee:  updates.heure_arrivee  !== undefined ? updates.heure_arrivee  : (arrivee || null),
+      heure_depart:   updates.heure_depart   !== undefined ? updates.heure_depart   : (depart || null),
+      pause_minutes:  updates.pause_minutes  !== undefined ? updates.pause_minutes  : pause,
+      notes:          updates.notes          !== undefined ? updates.notes          : (notes || null),
+    }
     if (!navigator.onLine) {
       await queueMutation({ table: 'pointages', method: 'upsert', payload, onConflict: 'date,auteur' })
     } else {
       await supabase.from('pointages').upsert(payload, { onConflict: 'date,auteur' })
     }
-    setSaving(false)
-    onSaved()
+    setSaving(false); onSaved()
+  }
+
+  async function pointer(type: 'arrivee' | 'depart') {
+    const h = format(new Date(), 'HH:mm')
+    if (type === 'arrivee') { setArrivee(h); await sauvegarderAvec({ heure_arrivee: h }) }
+    else                    { setDepart(h);  await sauvegarderAvec({ heure_depart: h }) }
+  }
+
+  function debutPause_fn() {
+    const iso = new Date().toISOString()
+    localStorage.setItem(pauseKey, iso)
+    setPauseDebut(iso)
+  }
+
+  async function finPause_fn() {
+    if (!pauseDebut) return
+    const mins = Math.max(1, Math.round((Date.now() - new Date(pauseDebut).getTime()) / 60000))
+    const nouvPause = pause + mins
+    localStorage.removeItem(pauseKey)
+    setPauseDebut(null)
+    setPause(nouvPause)
+    await sauvegarderAvec({ pause_minutes: nouvPause })
+  }
+
+  async function sauvegarderManu() {
+    await sauvegarderAvec({ heure_arrivee: arrivee || null, heure_depart: depart || null, pause_minutes: pause, notes: notes || null })
+    setModifManu(false)
+  }
+
+  function aller(delta: number) {
+    setDateVue(format(addDays(parseISO(dateVue), delta), 'yyyy-MM-dd'))
   }
 
   const semaine = Array.from({ length: 7 }, (_, i) => {
@@ -1700,8 +1762,12 @@ function HeuresTab({ taches, entrees, zones, pointages, onSaved }: {
     return { date: d, mins }
   })
   const totalSemaine = semaine.reduce((s, d) => s + (d.mins && d.mins > 0 ? d.mins : 0), 0)
-
+  const tachesJour   = taches.filter(t => (t.completions || []).some(c => c.date_completion === dateVue))
+  const entreesJour  = entrees.filter(e => e.date_operation === dateVue)
   const TYPES_OP_ALL = [...TYPES_OP_CHAMP, ...TYPES_OP_SERRE]
+
+  // Void reference to suppress unused-var warning for tick
+  void tick
 
   return (
     <div className="space-y-4">
@@ -1721,103 +1787,197 @@ function HeuresTab({ taches, entrees, zones, pointages, onSaved }: {
       {/* Navigation date */}
       <div className="flex items-center gap-2">
         <button onClick={() => aller(-1)}
-          className="w-11 h-11 rounded-xl border border-gray-200 flex items-center justify-center text-gray-500 font-bold active:bg-gray-100 text-lg">
-          ←
-        </button>
+          className="w-11 h-11 rounded-xl border border-gray-200 flex items-center justify-center text-gray-500 font-bold active:bg-gray-100 text-lg">←</button>
         <div className="flex-1 text-center">
           <div className="font-bold text-gray-800 capitalize text-base">
             {isAujourdHui ? "Aujourd'hui" : format(parseISO(dateVue), 'EEEE d MMMM', { locale: fr })}
           </div>
           {!isAujourdHui && (
             <button onClick={() => setDateVue(format(new Date(), 'yyyy-MM-dd'))}
-              className="text-xs text-green-700 font-semibold">
-              Revenir a aujourd'hui
-            </button>
+              className="text-xs text-green-700 font-semibold">Revenir a aujourd'hui</button>
           )}
         </div>
         <button onClick={() => aller(1)} disabled={isAujourdHui}
-          className="w-11 h-11 rounded-xl border border-gray-200 flex items-center justify-center text-gray-500 font-bold active:bg-gray-100 text-lg disabled:opacity-30">
-          →
-        </button>
+          className="w-11 h-11 rounded-xl border border-gray-200 flex items-center justify-center text-gray-500 font-bold active:bg-gray-100 text-lg disabled:opacity-30">→</button>
       </div>
 
-      {/* Pointage */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        <div className="px-4 py-3 bg-green-900 text-white font-bold text-sm">
-          Pointage du jour
-        </div>
-        <div className="p-4 space-y-3">
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <div className="text-xs font-semibold text-gray-500">Arrivee</div>
-              <div className="flex gap-1.5">
-                <input type="time" value={arrivee} onChange={e => setArrivee(e.target.value)}
-                  className="flex-1 border border-gray-200 rounded-xl px-2 py-2.5 text-base font-bold text-center focus:outline-none focus:border-green-400"
-                />
-                {isAujourdHui && (
-                  <button onClick={() => setArrivee(format(new Date(), 'HH:mm'))}
-                    className="px-2 bg-green-50 text-green-700 rounded-xl text-[11px] font-bold active:scale-95 border border-green-200">
-                    Maint.
-                  </button>
-                )}
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <div className="text-xs font-semibold text-gray-500">Depart</div>
-              <div className="flex gap-1.5">
-                <input type="time" value={depart} onChange={e => setDepart(e.target.value)}
-                  className="flex-1 border border-gray-200 rounded-xl px-2 py-2.5 text-base font-bold text-center focus:outline-none focus:border-green-400"
-                />
-                {isAujourdHui && (
-                  <button onClick={() => setDepart(format(new Date(), 'HH:mm'))}
-                    className="px-2 bg-green-50 text-green-700 rounded-xl text-[11px] font-bold active:scale-95 border border-green-200">
-                    Maint.
-                  </button>
-                )}
-              </div>
-            </div>
+      {/* ── Pointage rapide (aujourd'hui uniquement) ── */}
+      {isAujourdHui && (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="px-4 py-3 bg-green-900 text-white font-bold text-sm flex items-center justify-between">
+            <span>⏱️ Pointage</span>
+            {saving && <span className="text-[11px] text-green-300 font-normal">Sauvegarde...</span>}
           </div>
+          <div className="p-4 space-y-3">
 
-          <div className="flex items-center gap-3">
-            <div className="text-xs font-semibold text-gray-500 shrink-0">Pause (min)</div>
-            <div className="flex gap-1.5 flex-wrap">
-              {[0, 15, 30, 45, 60].map(m => (
-                <button key={m} onClick={() => setPause(m)}
-                  className={`w-9 h-9 rounded-lg text-xs font-bold border active:scale-95 transition-transform
-                    ${pause === m ? 'bg-green-700 text-white border-green-700' : 'bg-gray-50 text-gray-600 border-gray-200'}`}>
-                  {m}
+            {/* État : pas encore arrivé */}
+            {!arrivee && (
+              <button onClick={() => pointer('arrivee')} disabled={saving}
+                className="w-full py-5 rounded-2xl bg-green-600 text-white font-bold text-xl active:scale-95 transition-transform disabled:opacity-50 shadow-md">
+                🟢 Pointer l'arrivée
+              </button>
+            )}
+
+            {/* État : en cours de travail */}
+            {enCours && !enPause && (
+              <>
+                <div className="bg-green-50 border border-green-200 rounded-2xl px-4 py-4 text-center">
+                  <div className="text-xs text-green-600 font-semibold uppercase tracking-wide">En cours depuis {arrivee}</div>
+                  <div className="text-4xl font-bold text-green-800 mt-1">
+                    {chronoMin !== null && chronoMin > 0 ? formatDuree(chronoMin) : '—'}
+                  </div>
+                  {pause > 0 && <div className="text-xs text-gray-400 mt-1">dont {pause}min de pause déjà validée</div>}
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <button onClick={debutPause_fn} disabled={saving}
+                    className="py-4 rounded-2xl bg-amber-500 text-white font-bold text-base active:scale-95 transition-transform disabled:opacity-50">
+                    ☕ Début pause
+                  </button>
+                  <button onClick={() => pointer('depart')} disabled={saving}
+                    className="py-4 rounded-2xl bg-red-500 text-white font-bold text-base active:scale-95 transition-transform disabled:opacity-50">
+                    🔴 Fin journée
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* État : en pause */}
+            {enPause && (
+              <>
+                <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-4 text-center">
+                  <div className="text-xs text-amber-600 font-semibold uppercase tracking-wide">☕ En pause</div>
+                  <div className="text-4xl font-bold text-amber-700 mt-1">
+                    {pauseElapsedMin !== null ? formatDuree(pauseElapsedMin) : '—'}
+                  </div>
+                </div>
+                <button onClick={finPause_fn} disabled={saving}
+                  className="w-full py-4 rounded-2xl bg-green-600 text-white font-bold text-xl active:scale-95 transition-transform disabled:opacity-50">
+                  ▶️ Reprendre le travail
                 </button>
-              ))}
-            </div>
+              </>
+            )}
+
+            {/* État : journée terminée */}
+            {terminee && (
+              <div className="bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-1">
+                    <div className="text-xs text-gray-500">
+                      🟢 {arrivee} → 🔴 {depart}
+                      {pause > 0 && <span className="ml-2">☕ {pause}min de pause</span>}
+                    </div>
+                    {totalMin !== null && totalMin > 0 && (
+                      <div className="text-2xl font-bold text-green-800">{formatDuree(totalMin)} travaillées</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Lien modifier manuellement */}
+            {(arrivee || !isAujourdHui) && (
+              <button onClick={() => setModifManu(m => !m)}
+                className="w-full text-xs text-gray-400 text-center py-1 underline">
+                {modifManu ? 'Masquer' : '✏️ Modifier manuellement'}
+              </button>
+            )}
+
+            {/* Formulaire manuel (toujours visible si pas aujourd'hui) */}
+            {(modifManu || !isAujourdHui) && (
+              <div className="space-y-3 pt-1 border-t border-gray-100">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <div className="text-xs font-semibold text-gray-500">Arrivée</div>
+                    <input type="time" value={arrivee} onChange={e => setArrivee(e.target.value)}
+                      className="w-full border border-gray-200 rounded-xl px-2 py-2.5 text-base font-bold text-center focus:outline-none focus:border-green-400" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <div className="text-xs font-semibold text-gray-500">Départ</div>
+                    <input type="time" value={depart} onChange={e => setDepart(e.target.value)}
+                      className="w-full border border-gray-200 rounded-xl px-2 py-2.5 text-base font-bold text-center focus:outline-none focus:border-green-400" />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <div className="text-xs font-semibold text-gray-500">Pause (min)</div>
+                  <div className="flex gap-1.5 flex-wrap">
+                    {[0, 15, 30, 45, 60, 90].map(m => (
+                      <button key={m} onClick={() => setPause(m)}
+                        className={`px-3 h-9 rounded-lg text-xs font-bold border active:scale-95 transition-transform
+                          ${pause === m ? 'bg-green-700 text-white border-green-700' : 'bg-gray-50 text-gray-600 border-gray-200'}`}>
+                        {m}min
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {arrivee && depart && calcMinutes(arrivee, depart) - pause > 0 && (
+                  <div className="text-center text-sm font-bold text-green-700">
+                    = {formatDuree(calcMinutes(arrivee, depart) - pause)} travaillées
+                  </div>
+                )}
+                <textarea value={notes} onChange={e => setNotes(e.target.value)}
+                  placeholder="Notes du jour..." rows={2}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-green-400 resize-none" />
+                <button onClick={sauvegarderManu} disabled={saving}
+                  className="w-full bg-green-700 text-white py-3.5 rounded-xl font-bold text-base active:scale-95 transition-transform disabled:opacity-50">
+                  {saving ? 'Enregistrement...' : 'Enregistrer'}
+                </button>
+              </div>
+            )}
           </div>
-
-          {totalMin !== null && totalMin > 0 && (
-            <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3 text-center">
-              <div className="text-xs text-green-600 font-semibold">Total travaille</div>
-              <div className="text-3xl font-bold text-green-800">{formatDuree(totalMin)}</div>
-            </div>
-          )}
-
-          <textarea value={notes} onChange={e => setNotes(e.target.value)}
-            placeholder="Notes du jour (optionnel)..."
-            rows={2}
-            className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-green-400 resize-none"
-          />
-
-          <button onClick={sauvegarder} disabled={saving}
-            className="w-full bg-green-700 text-white py-3.5 rounded-xl font-bold text-base active:scale-95 transition-transform disabled:opacity-50">
-            {saving ? 'Enregistrement...' : 'Enregistrer le pointage'}
-          </button>
         </div>
-      </div>
+      )}
 
-      {/* Travaux du jour — automatique */}
+      {/* Pointage passé (jours précédents) */}
+      {!isAujourdHui && (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="px-4 py-3 bg-green-900 text-white font-bold text-sm">Pointage</div>
+          <div className="p-4 space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <div className="text-xs font-semibold text-gray-500">Arrivée</div>
+                <input type="time" value={arrivee} onChange={e => setArrivee(e.target.value)}
+                  className="w-full border border-gray-200 rounded-xl px-2 py-2.5 text-base font-bold text-center focus:outline-none focus:border-green-400" />
+              </div>
+              <div className="space-y-1.5">
+                <div className="text-xs font-semibold text-gray-500">Départ</div>
+                <input type="time" value={depart} onChange={e => setDepart(e.target.value)}
+                  className="w-full border border-gray-200 rounded-xl px-2 py-2.5 text-base font-bold text-center focus:outline-none focus:border-green-400" />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <div className="text-xs font-semibold text-gray-500">Pause (min)</div>
+              <div className="flex gap-1.5 flex-wrap">
+                {[0, 15, 30, 45, 60, 90].map(m => (
+                  <button key={m} onClick={() => setPause(m)}
+                    className={`px-3 h-9 rounded-lg text-xs font-bold border active:scale-95 transition-transform
+                      ${pause === m ? 'bg-green-700 text-white border-green-700' : 'bg-gray-50 text-gray-600 border-gray-200'}`}>
+                    {m}min
+                  </button>
+                ))}
+              </div>
+            </div>
+            {totalMin !== null && totalMin > 0 && (
+              <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3 text-center">
+                <div className="text-3xl font-bold text-green-800">{formatDuree(totalMin)}</div>
+              </div>
+            )}
+            <textarea value={notes} onChange={e => setNotes(e.target.value)}
+              placeholder="Notes du jour..." rows={2}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-green-400 resize-none" />
+            <button onClick={sauvegarderManu} disabled={saving}
+              className="w-full bg-green-700 text-white py-3.5 rounded-xl font-bold text-base active:scale-95 transition-transform disabled:opacity-50">
+              {saving ? 'Enregistrement...' : 'Enregistrer'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Tâches du jour */}
       {(tachesJour.length > 0 || entreesJour.length > 0) && (
         <div className="rounded-2xl border border-gray-100 overflow-hidden">
           <div className="px-4 py-3 bg-gray-50 border-b border-gray-100">
             <div className="font-bold text-sm text-gray-700">Travaux du jour</div>
-            <div className="text-xs text-gray-400">Remonte automatiquement depuis Agenda et Cahier</div>
+            <div className="text-xs text-gray-400">Agenda + Cahier</div>
           </div>
           <div className="divide-y divide-gray-100">
             {tachesJour.map(t => {
@@ -1829,14 +1989,12 @@ function HeuresTab({ taches, entrees, zones, pointages, onSaved }: {
                     <div className="text-sm font-semibold text-gray-800">{t.titre}</div>
                     {zone && <div className="text-xs text-gray-400">{zone.type === 'serre' ? '🪴' : '📍'} {zone.nom}</div>}
                   </div>
-                  <span className="text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-semibold shrink-0">
-                    tache
-                  </span>
+                  <span className="text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-semibold shrink-0">tâche</span>
                 </div>
               )
             })}
             {entreesJour.map(e => {
-              const op   = TYPES_OP_ALL.find(t => t.val === e.type_operation)
+              const op  = TYPES_OP_ALL.find(t => t.val === e.type_operation)
               const zone = e.zone as { nom: string } | null
               const esp  = e.espece as { nom: string } | null
               return (
@@ -1852,9 +2010,7 @@ function HeuresTab({ taches, entrees, zones, pointages, onSaved }: {
                       {e.quantite && <span>{e.quantite} {e.unite}</span>}
                     </div>
                   </div>
-                  <span className="text-[10px] bg-sky-100 text-sky-700 px-2 py-0.5 rounded-full font-semibold shrink-0">
-                    cahier
-                  </span>
+                  <span className="text-[10px] bg-sky-100 text-sky-700 px-2 py-0.5 rounded-full font-semibold shrink-0">cahier</span>
                 </div>
               )
             })}
@@ -1867,14 +2023,14 @@ function HeuresTab({ taches, entrees, zones, pointages, onSaved }: {
         <div className="px-4 py-3 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
           <div className="font-bold text-sm text-gray-700">7 derniers jours — {auteur}</div>
           {totalSemaine > 0 && (
-            <div className="text-green-700 font-bold text-sm">{formatDuree(totalSemaine)} cette semaine</div>
+            <div className="text-green-700 font-bold text-sm">{formatDuree(totalSemaine)} cette sem.</div>
           )}
         </div>
         <div className="px-3 py-3 grid grid-cols-7 gap-1">
           {semaine.map(({ date: d, mins }) => {
-            const jour     = parseISO(d)
-            const estAuj   = d === format(new Date(), 'yyyy-MM-dd')
-            const estSel   = d === dateVue
+            const jour   = parseISO(d)
+            const estAuj = d === format(new Date(), 'yyyy-MM-dd')
+            const estSel = d === dateVue
             return (
               <button key={d} onClick={() => setDateVue(d)}
                 className={`flex flex-col items-center py-2.5 rounded-xl transition-colors
@@ -1885,11 +2041,10 @@ function HeuresTab({ taches, entrees, zones, pointages, onSaved }: {
                 <span className={`text-xs font-bold mt-0.5 ${estAuj ? 'text-green-800' : 'text-gray-700'}`}>
                   {format(jour, 'd')}
                 </span>
-                {mins !== null && mins > 0 ? (
-                  <span className="text-[9px] text-green-700 font-bold mt-0.5">{formatDuree(mins)}</span>
-                ) : (
-                  <span className="text-[9px] text-gray-300 mt-1">—</span>
-                )}
+                {mins !== null && mins > 0
+                  ? <span className="text-[9px] text-green-700 font-bold mt-0.5">{formatDuree(mins)}</span>
+                  : <span className="text-[9px] text-gray-300 mt-1">—</span>
+                }
               </button>
             )
           })}
