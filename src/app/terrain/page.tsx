@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic'
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { fetchWithCache, queueMutation, saveCache } from '@/lib/offline'
+import { fetchWithCache, queueMutation, saveCache, queuePhoto } from '@/lib/offline'
 import { format, parseISO, isToday, isTomorrow, addDays } from 'date-fns'
 import { fr } from 'date-fns/locale'
 
@@ -583,9 +583,16 @@ function CahierTab({ zones, especes, especesSerre, produits, entrees, onSaved, o
   const [saving, setSaving]         = useState(false)
   const [filtre, setFiltre]         = useState<'tout' | 'traitements'>('tout')
   const [uploadingPhoto, setUploadingPhoto] = useState<string | null>(null)
+  const [pendingPhotos, setPendingPhotos] = useState<Record<string, string[]>>({})
 
   async function uploadPhoto(entreeId: string, file: File) {
     setUploadingPhoto(entreeId)
+    if (!navigator.onLine) {
+      const localUrl = await queuePhoto(entreeId, file)
+      setPendingPhotos(prev => ({ ...prev, [entreeId]: [...(prev[entreeId] || []), localUrl] }))
+      setUploadingPhoto(null)
+      return
+    }
     const ext  = file.name.split('.').pop() || 'jpg'
     const path = `${entreeId}/${Date.now()}.${ext}`
     const { data: up } = await supabase.storage.from('cahier-photos').upload(path, file, { upsert: false })
@@ -976,12 +983,18 @@ function CahierTab({ zones, especes, especesSerre, produits, entrees, onSaved, o
                         </label>
                       </div>
                     </div>
-                    {e.photos && e.photos.length > 0 && (
+                    {((e.photos && e.photos.length > 0) || pendingPhotos[e.id]?.length > 0) && (
                       <div className="flex gap-2 flex-wrap pl-8">
-                        {e.photos.map((p: CahierPhoto) => (
+                        {e.photos?.map((p: CahierPhoto) => (
                           <a key={p.id} href={p.url} target="_blank" rel="noreferrer">
                             <img src={p.url} alt="" className="w-16 h-16 object-cover rounded-lg border border-gray-200" />
                           </a>
+                        ))}
+                        {pendingPhotos[e.id]?.map((url, i) => (
+                          <div key={`pending-${i}`} className="relative">
+                            <img src={url} alt="" className="w-16 h-16 object-cover rounded-lg border-2 border-amber-400 opacity-80" />
+                            <span className="absolute top-0.5 right-0.5 text-[8px] bg-amber-500 text-white rounded px-1 leading-tight">⏳</span>
+                          </div>
                         ))}
                       </div>
                     )}

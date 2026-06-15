@@ -1,6 +1,6 @@
 'use client'
 import { useEffect } from 'react'
-import { precacheAll, syncQueue } from '@/lib/offline'
+import { precacheAll, syncQueue, syncPhotos } from '@/lib/offline'
 
 export default function PwaRegister() {
   useEffect(() => {
@@ -34,8 +34,7 @@ export default function PwaRegister() {
 
     // Sync la queue quand le réseau revient
     window.addEventListener('online', async () => {
-      await syncQueue()
-      // Re-cache après sync
+      await Promise.all([syncQueue(), syncPhotos()])
       setTimeout(() => precacheAll(), 1000)
     })
   }, [])

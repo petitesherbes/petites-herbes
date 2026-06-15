@@ -9,7 +9,7 @@
 import { supabase } from '@/lib/supabase'
 
 const DB_NAME = 'petites-herbes-v1'
-const DB_VERSION = 1
+const DB_VERSION = 2
 
 type MutationRecord = {
   id?: number
@@ -19,6 +19,15 @@ type MutationRecord = {
   matchCol?: string
   matchVal?: string
   onConflict?: string
+  ts: number
+}
+
+type PhotoQueueRecord = {
+  id?: number
+  entreeId: string
+  fileName: string
+  mimeType: string
+  data: ArrayBuffer
   ts: number
 }
 
@@ -34,6 +43,9 @@ function openDB(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains('queue')) {
         db.createObjectStore('queue', { keyPath: 'id', autoIncrement: true })
+      }
+      if (!db.objectStoreNames.contains('photo_queue')) {
+        db.createObjectStore('photo_queue', { keyPath: 'id', autoIncrement: true })
       }
     }
     req.onsuccess = () => resolve(req.result)
@@ -86,12 +98,21 @@ export async function queueMutation(m: Omit<MutationRecord, 'id' | 'ts'>): Promi
 export async function getPendingCount(): Promise<number> {
   try {
     const db = await openDB()
-    return new Promise<number>((resolve) => {
-      const tx = db.transaction('queue', 'readonly')
-      const req = tx.objectStore('queue').count()
-      req.onsuccess = () => resolve(req.result)
-      req.onerror = () => resolve(0)
-    })
+    const [mutations, photos] = await Promise.all([
+      new Promise<number>((resolve) => {
+        const tx = db.transaction('queue', 'readonly')
+        const req = tx.objectStore('queue').count()
+        req.onsuccess = () => resolve(req.result)
+        req.onerror = () => resolve(0)
+      }),
+      new Promise<number>((resolve) => {
+        const tx = db.transaction('photo_queue', 'readonly')
+        const req = tx.objectStore('photo_queue').count()
+        req.onsuccess = () => resolve(req.result)
+        req.onerror = () => resolve(0)
+      }),
+    ])
+    return mutations + photos
   } catch {
     return 0
   }
@@ -166,6 +187,57 @@ export async function fetchWithCache<T>(
     const cached = await loadCache<T[]>(key)
     return { data: cached ?? [], fromCache: true }
   }
+}
+
+// ─── Queue de photos hors-ligne ───────────────────────────────────────────────
+
+export async function queuePhoto(entreeId: string, file: File): Promise<string> {
+  const data = await file.arrayBuffer()
+  const fileName = `${Date.now()}.${file.name.split('.').pop() || 'jpg'}`
+  try {
+    const db = await openDB()
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction('photo_queue', 'readwrite')
+      tx.objectStore('photo_queue').add({ entreeId, fileName, mimeType: file.type || 'image/jpeg', data, ts: Date.now() })
+      tx.oncomplete = () => resolve()
+      tx.onerror = () => reject(tx.error)
+    })
+  } catch { /* silencieux */ }
+  return URL.createObjectURL(new Blob([data], { type: file.type }))
+}
+
+export async function syncPhotos(): Promise<{ synced: number; errors: number }> {
+  let synced = 0
+  let errors = 0
+  try {
+    const db = await openDB()
+    const items: PhotoQueueRecord[] = await new Promise((resolve) => {
+      const tx = db.transaction('photo_queue', 'readonly')
+      const req = tx.objectStore('photo_queue').getAll()
+      req.onsuccess = () => resolve(req.result as PhotoQueueRecord[])
+      req.onerror = () => resolve([])
+    })
+    for (const item of items) {
+      try {
+        const file = new File([item.data], item.fileName, { type: item.mimeType })
+        const { data: up } = await supabase.storage
+          .from('cahier-photos')
+          .upload(`${item.entreeId}/${item.fileName}`, file, { upsert: false })
+        if (!up) throw new Error('Upload échoué')
+        const { data: urlData } = supabase.storage.from('cahier-photos').getPublicUrl(up.path)
+        await supabase.from('cahier_photos').insert({ entree_id: item.entreeId, url: urlData.publicUrl })
+        await new Promise<void>((resolve) => {
+          const tx = db.transaction('photo_queue', 'readwrite')
+          tx.objectStore('photo_queue').delete(item.id!)
+          tx.oncomplete = () => resolve()
+        })
+        synced++
+      } catch {
+        errors++
+      }
+    }
+  } catch { /* silencieux */ }
+  return { synced, errors }
 }
 
 // ─── Pré-chargement au démarrage ─────────────────────────────────────────────

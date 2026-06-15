@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
-import { getPendingCount, syncQueue } from '@/lib/offline'
+import { getPendingCount, syncQueue, syncPhotos } from '@/lib/offline'
 
 export default function OfflineBanner() {
   const isOnline = useOnlineStatus()
@@ -26,7 +26,7 @@ export default function OfflineBanner() {
       const n = await getPendingCount()
       if (n === 0) return
       setSyncing(true)
-      await syncQueue()
+      await Promise.all([syncQueue(), syncPhotos()])
       setSyncing(false)
       setSyncDone(true)
       await refreshPending()
@@ -37,7 +37,7 @@ export default function OfflineBanner() {
 
   async function syncManuel() {
     setSyncing(true)
-    await syncQueue()
+    await Promise.all([syncQueue(), syncPhotos()])
     setSyncing(false)
     setSyncDone(true)
     await refreshPending()
