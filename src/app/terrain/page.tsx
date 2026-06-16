@@ -30,11 +30,16 @@ type EntreeCahier = {
   produit?: { nom: string } | null
   photos?: CahierPhoto[]
 }
+type TempsTache = {
+  id: string; tache_id: string; date: string; auteur: string
+  minutes: number; chrono_debut: string | null
+}
 type Tache = {
   id: string; titre: string; description: string | null; type: string
   frequence: string | null; date_echeance: string | null
   zone_id: string | null; priorite: string; actif: boolean
   completions?: { date_completion: string }[]
+  temps?: TempsTache[]
 }
 type Perte = {
   id: string; date_perte: string; designation: string
@@ -118,6 +123,17 @@ function formatDuree(minutes: number): string {
   const h = Math.floor(Math.abs(minutes) / 60)
   const m = Math.abs(minutes) % 60
   return m === 0 ? `${h}h` : `${h}h${String(m).padStart(2, '0')}`
+}
+
+async function ajouterAuCatalogueSiNouveau(titre: string, catalogueTaches: TacheCatalogue[]) {
+  const t = titre.trim()
+  if (!t || catalogueTaches.some(c => c.titre.toLowerCase() === t.toLowerCase())) return
+  const payload = { titre: t, categorie: 'autre', icone: '📝', active: true, ordre: 999 }
+  if (!navigator.onLine) {
+    await queueMutation({ table: 'taches_catalogue', method: 'insert', payload })
+  } else {
+    await supabase.from('taches_catalogue').insert(payload)
+  }
 }
 
 function prioriteColor(p: string): string {
@@ -298,7 +314,7 @@ export default function TerrainPage() {
       }).then(r => r.data),
       fetchWithCache('taches', async () => {
         const { data } = await supabase.from('taches')
-          .select('*, completions:taches_completions(date_completion)')
+          .select('*, completions:taches_completions(date_completion), temps:taches_temps(id, tache_id, date, auteur, minutes, chrono_debut)')
           .eq('actif', true).order('priorite', { ascending: false })
         return data
       }).then(r => r.data),
@@ -364,6 +380,7 @@ export default function TerrainPage() {
         })
       ))
     }
+    await ajouterAuCatalogueSiNouveau(taskTitre, catalogueTaches)
     setTaskSaving(false); setTaskRapide(false)
     setTaskTitre(''); setTaskPrio('normale'); setTaskZoneIds([])
     setTaskDate(format(new Date(), 'yyyy-MM-dd'))
@@ -1067,9 +1084,62 @@ function AgendaTab({ taches, zones, catalogueTaches, zoneTaches, onSaved }: {
   const [zoneIds, setZoneIds]   = useState<string[]>([])
   const [priorite, setPrio]     = useState('normale')
   const [saving, setSaving]     = useState(false)
+  const [auteur] = useState(() =>
+    typeof window !== 'undefined' ? localStorage.getItem('terrain_auteur') || 'Antoine' : 'Antoine'
+  )
+  const [tempsOuvert, setTempsOuvert] = useState<string | null>(null)
+  const [tick, setTick] = useState(0)
+
+  useEffect(() => {
+    const iv = setInterval(() => setTick(t => t + 1), 30000)
+    return () => clearInterval(iv)
+  }, [])
+  void tick
 
   const aujTaches    = taches.filter(t => tacheEstAujourdHui(t))
   const autresTaches = taches.filter(t => !tacheEstAujourdHui(t))
+
+  function tempsAujourdHui(t: Tache): TempsTache | undefined {
+    const todayStr = format(new Date(), 'yyyy-MM-dd')
+    return t.temps?.find(x => x.date === todayStr && x.auteur === auteur)
+  }
+
+  async function demarrerChrono(t: Tache) {
+    const todayStr = format(new Date(), 'yyyy-MM-dd')
+    const existant = tempsAujourdHui(t)
+    const payload = { tache_id: t.id, date: todayStr, auteur, minutes: existant?.minutes || 0, chrono_debut: new Date().toISOString() }
+    if (!navigator.onLine) {
+      await queueMutation({ table: 'taches_temps', method: 'upsert', payload, onConflict: 'tache_id,date,auteur' })
+    } else {
+      await supabase.from('taches_temps').upsert(payload, { onConflict: 'tache_id,date,auteur' })
+    }
+    onSaved()
+  }
+
+  async function arreterChrono(t: Tache) {
+    const tt = tempsAujourdHui(t)
+    if (!tt?.chrono_debut) return
+    const ecoule = Math.max(1, Math.round((Date.now() - new Date(tt.chrono_debut).getTime()) / 60000))
+    const payload = { tache_id: t.id, date: tt.date, auteur, minutes: tt.minutes + ecoule, chrono_debut: null }
+    if (!navigator.onLine) {
+      await queueMutation({ table: 'taches_temps', method: 'upsert', payload, onConflict: 'tache_id,date,auteur' })
+    } else {
+      await supabase.from('taches_temps').upsert(payload, { onConflict: 'tache_id,date,auteur' })
+    }
+    onSaved()
+  }
+
+  async function ajouterTempsManuel(t: Tache, minutes: number) {
+    const todayStr = format(new Date(), 'yyyy-MM-dd')
+    const existant = tempsAujourdHui(t)
+    const payload = { tache_id: t.id, date: todayStr, auteur, minutes: (existant?.minutes || 0) + minutes, chrono_debut: existant?.chrono_debut || null }
+    if (!navigator.onLine) {
+      await queueMutation({ table: 'taches_temps', method: 'upsert', payload, onConflict: 'tache_id,date,auteur' })
+    } else {
+      await supabase.from('taches_temps').upsert(payload, { onConflict: 'tache_id,date,auteur' })
+    }
+    onSaved()
+  }
 
   async function cocher(t: Tache) {
     const todayStr = format(new Date(), 'yyyy-MM-dd')
@@ -1118,6 +1188,7 @@ function AgendaTab({ taches, zones, catalogueTaches, zoneTaches, onSaved }: {
         })
       ))
     }
+    await ajouterAuCatalogueSiNouveau(titre, catalogueTaches)
     setSaving(false); setAjout(false)
     setTitre(''); setType('ponctuelle'); setFreq([]); setPrio('normale'); setZoneIds([])
     onSaved()
@@ -1151,6 +1222,11 @@ function AgendaTab({ taches, zones, catalogueTaches, zoneTaches, onSaved }: {
           {aujTaches.map(t => {
             const faite = tacheEstCompleteeAujourdHui(t)
             const zone  = zones.find(z => z.id === t.zone_id)
+            const tt = tempsAujourdHui(t)
+            const enChrono = !!tt?.chrono_debut
+            const chronoMin = enChrono && tt
+              ? Math.max(0, Math.floor((Date.now() - new Date(tt.chrono_debut!).getTime()) / 60000)) + tt.minutes
+              : null
             return (
               <div key={t.id} className={`px-4 py-3 flex items-start gap-3 ${faite ? 'opacity-50' : ''}`}>
                 <button onClick={() => cocher(t)}
@@ -1168,7 +1244,42 @@ function AgendaTab({ taches, zones, catalogueTaches, zoneTaches, onSaved }: {
                       {t.priorite}
                     </span>
                     {t.type === 'recurrente' && <span>🔁 {t.frequence}</span>}
+                    {!enChrono && (tt?.minutes ?? 0) > 0 && (
+                      <span className="text-green-700 font-semibold">⏱ {formatDuree(tt!.minutes)}</span>
+                    )}
                   </div>
+                  <div className="flex items-center gap-1.5 mt-1.5">
+                    {enChrono ? (
+                      <>
+                        <span className="text-xs font-bold text-amber-600">⏱ {formatDuree(chronoMin || 0)}</span>
+                        <button onClick={() => arreterChrono(t)}
+                          className="text-[11px] px-2.5 py-1 rounded-full bg-red-500 text-white font-semibold active:scale-95 transition-transform">
+                          ⏹ Stop
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button onClick={() => demarrerChrono(t)}
+                          className="text-[11px] px-2.5 py-1 rounded-full bg-green-600 text-white font-semibold active:scale-95 transition-transform">
+                          ▶️ Chrono
+                        </button>
+                        <button onClick={() => setTempsOuvert(tempsOuvert === t.id ? null : t.id)}
+                          className="text-[11px] px-2.5 py-1 rounded-full border border-gray-200 text-gray-500 font-semibold active:scale-95 transition-transform">
+                          ✏️ +temps
+                        </button>
+                      </>
+                    )}
+                  </div>
+                  {tempsOuvert === t.id && (
+                    <div className="flex gap-1.5 mt-1.5">
+                      {[5, 15, 30, 60].map(m => (
+                        <button key={m} onClick={() => { ajouterTempsManuel(t, m); setTempsOuvert(null) }}
+                          className="text-[11px] px-2.5 py-1 rounded-lg bg-gray-50 border border-gray-200 font-semibold text-gray-600 active:scale-95 transition-transform">
+                          +{m}min
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <button onClick={() => supprimer(t.id)} className="text-gray-300 active:text-red-400 text-lg leading-none">x</button>
               </div>
@@ -1761,6 +1872,17 @@ function HeuresTab({ taches, entrees, zones, pointages, onSaved }: {
     setModifManu(false)
   }
 
+  function ajouterTachesAuxNotes() {
+    const lignes = tachesJour.map(t => {
+      const tt = t.temps?.find(x => x.date === dateVue && x.auteur === auteur)
+      const dureeTxt = tt?.minutes ? ` (${formatDuree(tt.minutes)})` : ''
+      return `- ${t.titre}${dureeTxt}`
+    })
+    if (lignes.length === 0) return
+    setNotes(prev => (prev ? prev + '\n' : '') + lignes.join('\n'))
+    setModifManu(true)
+  }
+
   function aller(delta: number) {
     setDateVue(format(addDays(parseISO(dateVue), delta), 'yyyy-MM-dd'))
   }
@@ -1988,9 +2110,17 @@ function HeuresTab({ taches, entrees, zones, pointages, onSaved }: {
       {/* Tâches du jour */}
       {(tachesJour.length > 0 || entreesJour.length > 0) && (
         <div className="rounded-2xl border border-gray-100 overflow-hidden">
-          <div className="px-4 py-3 bg-gray-50 border-b border-gray-100">
-            <div className="font-bold text-sm text-gray-700">Travaux du jour</div>
-            <div className="text-xs text-gray-400">Agenda + Cahier</div>
+          <div className="px-4 py-3 bg-gray-50 border-b border-gray-100 flex items-center justify-between gap-2">
+            <div>
+              <div className="font-bold text-sm text-gray-700">Travaux du jour</div>
+              <div className="text-xs text-gray-400">Agenda + Cahier</div>
+            </div>
+            {tachesJour.length > 0 && (
+              <button onClick={ajouterTachesAuxNotes}
+                className="text-xs font-semibold text-green-700 bg-green-50 px-2.5 py-1.5 rounded-full shrink-0 active:scale-95 transition-transform">
+                📋 Ajouter aux notes
+              </button>
+            )}
           </div>
           <div className="divide-y divide-gray-100">
             {tachesJour.map(t => {

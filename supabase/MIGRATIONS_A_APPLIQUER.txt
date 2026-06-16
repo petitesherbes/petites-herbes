@@ -1,0 +1,334 @@
+-- ==================================================================
+-- MIGRATIONS SUPABASE — Les Petites Herbes
+-- Coller en entier dans : Supabase > SQL Editor > Run
+-- Sans risque : peut être relancé plusieurs fois (idempotent)
+-- ==================================================================
+
+-- ── Migration 018 : Zones, cahier de culture, tâches, pertes ──────
+
+CREATE TABLE IF NOT EXISTS zones (
+  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  nom           text NOT NULL,
+  type          text NOT NULL DEFAULT 'plein_champ',
+  superficie_m2 decimal,
+  description   text,
+  ordre         int NOT NULL DEFAULT 0,
+  actif         boolean NOT NULL DEFAULT true,
+  created_at    timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE zones ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "allow all" ON zones;
+CREATE POLICY "allow all" ON zones FOR ALL USING (true) WITH CHECK (true);
+
+CREATE UNIQUE INDEX IF NOT EXISTS zones_nom_unique ON zones (nom);
+INSERT INTO zones (nom, type, ordre) VALUES
+  ('J1', 'plein_champ', 1),
+  ('J2', 'plein_champ', 2),
+  ('J3', 'plein_champ', 3),
+  ('J4', 'plein_champ', 4),
+  ('J5', 'plein_champ', 5)
+ON CONFLICT (nom) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS zone_planches (
+  id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  zone_id    uuid NOT NULL REFERENCES zones(id) ON DELETE CASCADE,
+  nom        text NOT NULL,
+  longueur_m decimal,
+  largeur_m  decimal,
+  notes      text,
+  ordre      int NOT NULL DEFAULT 0,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE zone_planches ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "allow all" ON zone_planches;
+CREATE POLICY "allow all" ON zone_planches FOR ALL USING (true) WITH CHECK (true);
+
+CREATE TABLE IF NOT EXISTS cahier_culture (
+  id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  zone_id        uuid REFERENCES zones(id),
+  date_operation date NOT NULL DEFAULT current_date,
+  type_operation text NOT NULL,
+  espece_id      uuid REFERENCES especes(id),
+  quantite       decimal,
+  unite          text DEFAULT 'barquettes',
+  notes          text,
+  auteur         text DEFAULT 'Moi',
+  created_at     timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE cahier_culture ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "allow all" ON cahier_culture;
+CREATE POLICY "allow all" ON cahier_culture FOR ALL USING (true) WITH CHECK (true);
+
+CREATE TABLE IF NOT EXISTS taches (
+  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  titre         text NOT NULL,
+  description   text,
+  type          text NOT NULL DEFAULT 'ponctuelle',
+  frequence     text,
+  date_echeance date,
+  zone_id       uuid REFERENCES zones(id),
+  priorite      text NOT NULL DEFAULT 'normale',
+  actif         boolean NOT NULL DEFAULT true,
+  created_at    timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE taches ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "allow all" ON taches;
+CREATE POLICY "allow all" ON taches FOR ALL USING (true) WITH CHECK (true);
+
+CREATE TABLE IF NOT EXISTS taches_completions (
+  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tache_id        uuid NOT NULL REFERENCES taches(id) ON DELETE CASCADE,
+  date_completion date NOT NULL DEFAULT current_date,
+  auteur          text,
+  notes           text,
+  created_at      timestamptz NOT NULL DEFAULT now(),
+  UNIQUE(tache_id, date_completion)
+);
+ALTER TABLE taches_completions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "allow all" ON taches_completions;
+CREATE POLICY "allow all" ON taches_completions FOR ALL USING (true) WITH CHECK (true);
+
+CREATE TABLE IF NOT EXISTS pertes (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  date_perte  date NOT NULL DEFAULT current_date,
+  espece_id   uuid REFERENCES especes(id),
+  designation text NOT NULL,
+  quantite    decimal NOT NULL,
+  unite       text NOT NULL DEFAULT 'barquettes',
+  raison      text NOT NULL,
+  notes       text,
+  created_at  timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE pertes ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "allow all" ON pertes;
+CREATE POLICY "allow all" ON pertes FOR ALL USING (true) WITH CHECK (true);
+
+
+-- ── Migration 019 : Serre, espèces terrain, produits traitement ───
+
+INSERT INTO zones (nom, type, ordre) VALUES ('Serre', 'serre', 0)
+ON CONFLICT (nom) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS especes_serre (
+  id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  nom        text NOT NULL,
+  categorie  text NOT NULL DEFAULT 'plante',
+  actif      boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE especes_serre ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "allow all" ON especes_serre;
+CREATE POLICY "allow all" ON especes_serre FOR ALL USING (true) WITH CHECK (true);
+CREATE UNIQUE INDEX IF NOT EXISTS especes_serre_nom ON especes_serre (nom);
+
+INSERT INTO especes_serre (nom, categorie) VALUES
+  ('Tomate',        'legume'),
+  ('Poivron',       'legume'),
+  ('Aubergine',     'legume'),
+  ('Courgette',     'legume'),
+  ('Menthe',        'aromatique'),
+  ('Basilic',       'aromatique'),
+  ('Agastache',     'aromatique'),
+  ('Thym',          'aromatique'),
+  ('Romarin',       'aromatique'),
+  ('Sarriette',     'aromatique'),
+  ('Ciboulette',    'aromatique'),
+  ('Persil',        'aromatique'),
+  ('Lavande',       'fleur'),
+  ('Bourrache',     'fleur'),
+  ('Capucine',      'fleur')
+ON CONFLICT (nom) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS produits_traitement (
+  id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  nom        text NOT NULL,
+  type       text NOT NULL DEFAULT 'purin',
+  actif      boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE produits_traitement ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "allow all" ON produits_traitement;
+CREATE POLICY "allow all" ON produits_traitement FOR ALL USING (true) WITH CHECK (true);
+CREATE UNIQUE INDEX IF NOT EXISTS produits_traitement_nom ON produits_traitement (nom);
+
+INSERT INTO produits_traitement (nom, type) VALUES
+  ('Purin d''ortie mel 4',     'purin'),
+  ('Purin d''ortie mel 5',     'purin'),
+  ('Purin de consoude',        'purin'),
+  ('Purin de prêle',           'purin'),
+  ('Décoction de prêle',       'purin'),
+  ('Compost',                  'engrais'),
+  ('Engrais azoté',            'engrais'),
+  ('Engrais ternaire',         'engrais'),
+  ('Guano',                    'engrais'),
+  ('Bicarbonate de soude',     'fongicide'),
+  ('Soufre mouillable',        'fongicide'),
+  ('Huile essentielle d''ail', 'insecticide')
+ON CONFLICT (nom) DO NOTHING;
+
+ALTER TABLE cahier_culture
+  ADD COLUMN IF NOT EXISTS produit_traitement_id uuid REFERENCES produits_traitement(id);
+
+
+-- ── Migration 020 : Catalogue de ~70 tâches maraîcher ─────────────
+
+CREATE TABLE IF NOT EXISTS taches_catalogue (
+  id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  titre      text NOT NULL,
+  categorie  text NOT NULL,
+  icone      text NOT NULL DEFAULT '📋',
+  active     boolean NOT NULL DEFAULT true,
+  ordre      int NOT NULL DEFAULT 0,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE taches_catalogue ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "allow all" ON taches_catalogue;
+CREATE POLICY "allow all" ON taches_catalogue FOR ALL USING (true) WITH CHECK (true);
+
+CREATE TABLE IF NOT EXISTS zone_taches_catalogue (
+  zone_id      uuid NOT NULL REFERENCES zones(id) ON DELETE CASCADE,
+  catalogue_id uuid NOT NULL REFERENCES taches_catalogue(id) ON DELETE CASCADE,
+  PRIMARY KEY (zone_id, catalogue_id)
+);
+ALTER TABLE zone_taches_catalogue ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "allow all" ON zone_taches_catalogue;
+CREATE POLICY "allow all" ON zone_taches_catalogue FOR ALL USING (true) WITH CHECK (true);
+
+INSERT INTO taches_catalogue (titre, categorie, icone, ordre) VALUES
+  ('Trempage des graines',              'Semis & démarrage',   '🌱', 10),
+  ('Préparation des plateaux / godets', 'Semis & démarrage',   '🌱', 11),
+  ('Semis micropousses',                'Semis & démarrage',   '🌱', 12),
+  ('Mise en germination (obscurité)',   'Semis & démarrage',   '🌱', 13),
+  ('Levée de l''obscurité / lumière',   'Semis & démarrage',   '🌱', 14),
+  ('Contrôle germination',              'Semis & démarrage',   '🌱', 15),
+  ('Semis sous abri / tunnel',          'Semis & démarrage',   '🌱', 16),
+  ('Semis en plein champ',              'Semis & démarrage',   '🌱', 17),
+  ('Repiquage plants (serre)',          'Semis & démarrage',   '🌱', 18),
+  ('Transplantation au champ',          'Semis & démarrage',   '🌱', 19),
+  ('Tri et sélection des plants',       'Semis & démarrage',   '🌱', 20),
+  ('Préparation terreau / substrat',    'Semis & démarrage',   '🌱', 21),
+  ('Arrosage serre / micropousses',     'Arrosage & eau',      '💧', 30),
+  ('Arrosage plein champ',              'Arrosage & eau',      '💧', 31),
+  ('Arrosage goutte-à-goutte',          'Arrosage & eau',      '💧', 32),
+  ('Contrôle humidité plateaux',        'Arrosage & eau',      '💧', 33),
+  ('Vérification système irrigation',   'Arrosage & eau',      '💧', 34),
+  ('Drainage / ressuyage',              'Arrosage & eau',      '💧', 35),
+  ('Remplissage réserve / cuve',        'Arrosage & eau',      '💧', 36),
+  ('Récolte micropousses',              'Récolte & ventes',    '✂️', 40),
+  ('Récolte légumes de plein champ',    'Récolte & ventes',    '✂️', 41),
+  ('Récolte herbes aromatiques',        'Récolte & ventes',    '✂️', 42),
+  ('Conditionnement barquettes',        'Récolte & ventes',    '✂️', 43),
+  ('Préparation commandes clients',     'Récolte & ventes',    '✂️', 44),
+  ('Livraisons clients',                'Récolte & ventes',    '✂️', 45),
+  ('Vérification qualité / tri',        'Récolte & ventes',    '✂️', 46),
+  ('Étiquetage produits',               'Récolte & ventes',    '✂️', 47),
+  ('Mise en chambre froide',            'Récolte & ventes',    '✂️', 48),
+  ('Pesée et traçabilité',              'Récolte & ventes',    '✂️', 49),
+  ('Désherbage manuel',                 'Entretien cultures',  '🌿', 50),
+  ('Désherbage mécanique',              'Entretien cultures',  '🌿', 51),
+  ('Application purin d''ortie',        'Entretien cultures',  '🌿', 52),
+  ('Application purin de consoude',     'Entretien cultures',  '🌿', 53),
+  ('Application purin de prêle',        'Entretien cultures',  '🌿', 54),
+  ('Traitement préventif',              'Entretien cultures',  '🌿', 55),
+  ('Taille / écimage',                  'Entretien cultures',  '🌿', 56),
+  ('Tutelage / palissage',              'Entretien cultures',  '🌿', 57),
+  ('Ébourgeonnage',                     'Entretien cultures',  '🌿', 58),
+  ('Effeuillage',                       'Entretien cultures',  '🌿', 59),
+  ('Bâchage cultures',                  'Entretien cultures',  '🌿', 60),
+  ('Pose filets anti-insectes',         'Entretien cultures',  '🌿', 61),
+  ('Retrait filets / bâches',           'Entretien cultures',  '🌿', 62),
+  ('Pollinisation manuelle',            'Entretien cultures',  '🌿', 63),
+  ('Éclaircissage',                     'Entretien cultures',  '🌿', 64),
+  ('Apport de compost',                 'Sol & amendements',   '🪱', 70),
+  ('Épandage fumier / BRF',             'Sol & amendements',   '🪱', 71),
+  ('Bêchage / labour manuel',           'Sol & amendements',   '🪱', 72),
+  ('Travail sol à la grelinette',       'Sol & amendements',   '🪱', 73),
+  ('Préparation des planches',          'Sol & amendements',   '🪱', 74),
+  ('Buttage',                           'Sol & amendements',   '🪱', 75),
+  ('Paillage (paille / BRF)',           'Sol & amendements',   '🪱', 76),
+  ('Apport chaux / dolomie',            'Sol & amendements',   '🪱', 77),
+  ('Analyse de sol',                    'Sol & amendements',   '🪱', 78),
+  ('Nettoyage plateaux / godets',       'Matériel & entretien','🏠', 80),
+  ('Nettoyage et désinfection outils',  'Matériel & entretien','🏠', 81),
+  ('Entretien tunnel / serre',          'Matériel & entretien','🏠', 82),
+  ('Désinfection espace de travail',    'Matériel & entretien','🏠', 83),
+  ('Entretien motobineuse / fraise',    'Matériel & entretien','🏠', 84),
+  ('Nettoyage chambre froide',          'Matériel & entretien','🏠', 85),
+  ('Affûtage outils tranchants',        'Matériel & entretien','🏠', 86),
+  ('Réparation / bricolage',            'Matériel & entretien','🏠', 87),
+  ('Tri et rangement matériel',         'Matériel & entretien','🏠', 88),
+  ('Tour de parcelles quotidien',       'Surveillance',        '👁', 90),
+  ('Relevé température serre',          'Surveillance',        '👁', 91),
+  ('Contrôle ravageurs / maladies',     'Surveillance',        '👁', 92),
+  ('Prise de photos / documentation',   'Surveillance',        '👁', 93),
+  ('Comptage plants / plateaux',        'Surveillance',        '👁', 94),
+  ('Observation phénologie',            'Surveillance',        '👁', 95),
+  ('Mise à jour cahier de culture',     'Administratif',       '📋',100),
+  ('Inventaire stocks de graines',      'Administratif',       '📋',101),
+  ('Commande fournitures / graines',    'Administratif',       '📋',102),
+  ('Facturation clients',               'Administratif',       '📋',103),
+  ('Contact clients / prospection',     'Administratif',       '📋',104),
+  ('Relevé météo',                      'Administratif',       '📋',105),
+  ('Gestion comptabilité',              'Administratif',       '📋',106),
+  ('Préparation audit bio',             'Administratif',       '📋',107),
+  ('Registre phytosanitaire',           'Administratif',       '📋',108),
+  ('Planification hebdomadaire',        'Administratif',       '📋',109)
+ON CONFLICT DO NOTHING;
+
+
+-- ── Migration 021 : Dimensions des planches ───────────────────────
+
+ALTER TABLE zone_planches
+  ADD COLUMN IF NOT EXISTS longueur_m    numeric(6,2) DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS largeur_m     numeric(6,2) DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS plants_par_m2 int          DEFAULT NULL;
+
+
+-- ── Migration 022 : Feuilles d'heures (pointages) ────────────────
+
+CREATE TABLE IF NOT EXISTS pointages (
+  id            uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  date          date        NOT NULL DEFAULT CURRENT_DATE,
+  auteur        text        NOT NULL,
+  heure_arrivee time        DEFAULT NULL,
+  heure_depart  time        DEFAULT NULL,
+  pause_minutes int         NOT NULL DEFAULT 0,
+  notes         text        DEFAULT NULL,
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT pointages_date_auteur_key UNIQUE (date, auteur)
+);
+ALTER TABLE pointages ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "allow all" ON pointages;
+CREATE POLICY "allow all" ON pointages FOR ALL USING (true) WITH CHECK (true);
+
+
+-- ── Migration 025 : suivi du temps par tâche (chrono + ajout manuel) ──
+
+CREATE TABLE IF NOT EXISTS taches_temps (
+  id           uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  tache_id     uuid        NOT NULL REFERENCES taches(id) ON DELETE CASCADE,
+  date         date        NOT NULL,
+  auteur       text        NOT NULL,
+  minutes      int         NOT NULL DEFAULT 0,
+  chrono_debut timestamptz DEFAULT NULL,
+  created_at   timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT taches_temps_tache_date_auteur_key UNIQUE (tache_id, date, auteur)
+);
+ALTER TABLE taches_temps ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "allow all" ON taches_temps;
+CREATE POLICY "allow all" ON taches_temps FOR ALL USING (true) WITH CHECK (true);
+
+
+-- ── Vérification finale : doit retourner 12 tables ───────────────
+
+SELECT table_name
+FROM information_schema.tables
+WHERE table_schema = 'public'
+  AND table_name IN (
+    'zones', 'zone_planches', 'cahier_culture',
+    'taches', 'taches_completions', 'pertes',
+    'especes_serre', 'produits_traitement',
+    'taches_catalogue', 'zone_taches_catalogue',
+    'pointages', 'taches_temps'
+  )
+ORDER BY table_name;
