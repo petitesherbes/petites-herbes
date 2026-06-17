@@ -319,7 +319,33 @@ DROP POLICY IF EXISTS "allow all" ON taches_temps;
 CREATE POLICY "allow all" ON taches_temps FOR ALL USING (true) WITH CHECK (true);
 
 
--- ── Vérification finale : doit retourner 12 tables ───────────────
+-- ── Migration 026 : cycle de vie des cultures (champs + micro-pousses) ──────
+
+CREATE TABLE IF NOT EXISTS cultures (
+  id                 uuid  PRIMARY KEY DEFAULT gen_random_uuid(),
+  espece             text  NOT NULL,
+  nom                text,
+  famille            text  NOT NULL DEFAULT 'champs',
+  zone_id            uuid  REFERENCES zones(id) ON DELETE SET NULL,
+  statut             text  NOT NULL DEFAULT 'semis',
+  date_semis         date,
+  date_plantation    date,
+  date_debut_recolte date,
+  date_fin_recolte   date,
+  quantite           text,
+  notes              text,
+  auteur             text,
+  actif              boolean NOT NULL DEFAULT true,
+  created_at         timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT cultures_statut_check  CHECK (statut  IN ('semis','pret_planter','en_place','recolte','termine')),
+  CONSTRAINT cultures_famille_check CHECK (famille IN ('champs','micro_pousse'))
+);
+ALTER TABLE cultures ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "allow all" ON cultures;
+CREATE POLICY "allow all" ON cultures FOR ALL USING (true) WITH CHECK (true);
+
+
+-- ── Vérification finale : doit retourner 13 tables ───────────────
 
 SELECT table_name
 FROM information_schema.tables
@@ -329,6 +355,6 @@ WHERE table_schema = 'public'
     'taches', 'taches_completions', 'pertes',
     'especes_serre', 'produits_traitement',
     'taches_catalogue', 'zone_taches_catalogue',
-    'pointages', 'taches_temps'
+    'pointages', 'taches_temps', 'cultures'
   )
 ORDER BY table_name;

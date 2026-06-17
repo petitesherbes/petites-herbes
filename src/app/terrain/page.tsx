@@ -56,6 +56,15 @@ type Pointage = {
   heure_arrivee: string | null; heure_depart: string | null
   pause_minutes: number; notes: string | null
 }
+type StatutCulture  = 'semis' | 'pret_planter' | 'en_place' | 'recolte' | 'termine'
+type FamilleCulture = 'champs' | 'micro_pousse'
+type Culture = {
+  id: string; espece: string; nom: string | null; zone_id: string | null
+  statut: StatutCulture; famille: FamilleCulture
+  date_semis: string | null; date_plantation: string | null
+  date_debut_recolte: string | null; date_fin_recolte: string | null
+  quantite: string | null; notes: string | null; auteur: string | null; actif: boolean
+}
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
@@ -264,7 +273,7 @@ function ListeAvecAjout<T extends { id: string; nom: string }>({ items, valeur, 
 
 // ─── Page principale ───────────────────────────────────────────────────────────
 
-type Tab = 'cahier' | 'agenda' | 'zones' | 'pertes' | 'heures'
+type Tab = 'cahier' | 'agenda' | 'zones' | 'pertes' | 'heures' | 'cultures'
 
 export default function TerrainPage() {
   const [onglet, setOnglet]             = useState<Tab>(() => {
@@ -291,11 +300,12 @@ export default function TerrainPage() {
   const [catalogueTaches, setCatalogueTaches] = useState<TacheCatalogue[]>([])
   const [zoneTaches, setZoneTaches]     = useState<ZoneTacheCat[]>([])
   const [pointages, setPointages]       = useState<Pointage[]>([])
+  const [cultures, setCultures]         = useState<Culture[]>([])
 
   useEffect(() => { charger() }, [])
 
   async function charger() {
-    const [z, pl, ent, ta, pe, esp, esSerre, prod, cat, zt, pts] = await Promise.all([
+    const [z, pl, ent, ta, pe, esp, esSerre, prod, cat, zt, pts, cult] = await Promise.all([
       fetchWithCache('zones', async () => {
         const { data } = await supabase.from('zones').select('*').eq('actif', true).order('ordre')
         return data
@@ -354,6 +364,11 @@ export default function TerrainPage() {
         const { data } = await supabase.from('pointages').select('*').order('date', { ascending: false }).limit(60)
         return data
       }).then(r => r.data),
+      fetchWithCache('cultures', async () => {
+        const { data } = await supabase.from('cultures').select('*').eq('actif', true)
+          .order('created_at', { ascending: false })
+        return data
+      }).then(r => r.data),
     ])
     if (z?.length)      setZones(z)
     if (pl?.length)     setPlanches(pl)
@@ -366,6 +381,7 @@ export default function TerrainPage() {
     if (cat?.length)    setCatalogueTaches(cat as unknown as TacheCatalogue[])
     if (zt?.length)     setZoneTaches(zt)
     if (pts?.length)    setPointages(pts as unknown as Pointage[])
+    if (cult?.length)   setCultures(cult as unknown as Culture[])
   }
 
   // Cree une tache par zone selectionnee (ou une sans zone si aucune)
@@ -410,11 +426,12 @@ export default function TerrainPage() {
   }
 
   const tabs: { id: Tab; icon: string; label: string }[] = [
-    { id: 'agenda', icon: '✅', label: 'Agenda' },
-    { id: 'cahier', icon: '📖', label: 'Cahier' },
-    { id: 'zones',  icon: '🗺️', label: 'Zones' },
-    { id: 'pertes', icon: '📉', label: 'Pertes' },
-    { id: 'heures', icon: '⏱️', label: 'Heures' },
+    { id: 'agenda',   icon: '✅',  label: 'Agenda' },
+    { id: 'cahier',   icon: '📖',  label: 'Cahier' },
+    { id: 'cultures', icon: '🌱',  label: 'Cultures' },
+    { id: 'zones',    icon: '🗺️', label: 'Zones' },
+    { id: 'pertes',   icon: '📉',  label: 'Pertes' },
+    { id: 'heures',   icon: '⏱️', label: 'Heures' },
   ]
 
   return (
@@ -550,10 +567,10 @@ export default function TerrainPage() {
         )
       })()}
 
-      <div className="flex border-b border-gray-200 bg-white sticky top-0 z-10">
+      <div className="flex border-b border-gray-200 bg-white sticky top-0 z-10 overflow-x-auto">
         {tabs.map(t => (
           <button key={t.id} onClick={() => setOnglet(t.id)}
-            className={`flex-1 py-3 flex flex-col items-center gap-0.5 text-xs font-semibold transition-colors
+            className={`shrink-0 flex-1 min-w-[60px] py-3 flex flex-col items-center gap-0.5 text-xs font-semibold transition-colors
               ${onglet === t.id ? 'text-green-800 border-b-2 border-green-700' : 'text-gray-400'}`}>
             <span className="text-lg leading-none">{t.icon}</span>{t.label}
           </button>
@@ -579,6 +596,9 @@ export default function TerrainPage() {
         {onglet === 'pertes' && <PertesTab pertes={pertes} especes={especes} onSaved={charger} />}
         {onglet === 'heures' && (
           <HeuresTab taches={taches} entrees={entrees} zones={zones} pointages={pointages} onSaved={charger} />
+        )}
+        {onglet === 'cultures' && (
+          <CulturesTab cultures={cultures} zones={zones} onSaved={charger} />
         )}
       </div>
     </div>
@@ -2206,6 +2226,359 @@ function HeuresTab({ taches, entrees, zones, pointages, onSaved }: {
         </div>
       </div>
 
+    </div>
+  )
+}
+
+// ─── Tab : Cultures ─────────────────────────────────────────────────────────────
+
+const STATUT_CULT: Record<StatutCulture, { label: string; icon: string; color: string }> = {
+  semis:       { label: 'En semis',       icon: '🌱', color: 'bg-yellow-100 text-yellow-800'   },
+  pret_planter:{ label: 'Prêt à planter', icon: '🪴', color: 'bg-blue-100 text-blue-800'      },
+  en_place:    { label: 'En place',       icon: '🌿', color: 'bg-green-100 text-green-800'     },
+  recolte:     { label: 'En récolte',     icon: '🥬', color: 'bg-emerald-100 text-emerald-800' },
+  termine:     { label: 'Terminé',        icon: '✅', color: 'bg-gray-100 text-gray-500'       },
+}
+
+// Chaîne de statuts selon la famille
+const CHAINE_CHAMPS:      StatutCulture[] = ['semis','pret_planter','en_place','recolte','termine']
+const CHAINE_MICRO:       StatutCulture[] = ['semis','recolte','termine']
+const STATUTS_ACTIFS_CHAMPS: StatutCulture[] = ['semis','pret_planter','en_place','recolte']
+const STATUTS_ACTIFS_MICRO:  StatutCulture[] = ['semis','recolte']
+
+function prochainStatut(c: Culture): StatutCulture | null {
+  const chaine = c.famille === 'micro_pousse' ? CHAINE_MICRO : CHAINE_CHAMPS
+  const idx = chaine.indexOf(c.statut)
+  return idx >= 0 && idx < chaine.length - 1 ? chaine[idx + 1] : null
+}
+
+function CulturesTab({ cultures, zones, onSaved }: {
+  cultures: Culture[]; zones: Zone[]; onSaved: () => void
+}) {
+  const [familleVue, setFamilleVue]   = useState<FamilleCulture>('champs')
+  const [filtreStatut, setFiltreStatut] = useState<StatutCulture | 'tout'>('tout')
+  const [ouvert, setOuvert]           = useState<string | null>(null)
+  const [ajout, setAjout]             = useState(false)
+  const [saving, setSaving]           = useState(false)
+
+  // Formulaire nouvelle culture
+  const [famille, setFamille]       = useState<FamilleCulture>('champs')
+  const [espece, setEspece]         = useState('')
+  const [nom, setNom]               = useState('')
+  const [zoneId, setZoneId]         = useState('')
+  const [quantite, setQuantite]     = useState('')
+  const [notes, setNotes]           = useState('')
+  const [dateSemis, setDateSemis]   = useState(format(new Date(), 'yyyy-MM-dd'))
+
+  // Reset filtre statut quand on change de famille
+  function changerFamille(f: FamilleCulture) {
+    setFamilleVue(f)
+    setFiltreStatut('tout')
+    setOuvert(null)
+  }
+
+  const statutsActifs = familleVue === 'micro_pousse' ? STATUTS_ACTIFS_MICRO : STATUTS_ACTIFS_CHAMPS
+  const cultsFamille  = cultures.filter(c => c.famille === familleVue)
+
+  const filtered = filtreStatut === 'tout'
+    ? cultsFamille.filter(c => c.statut !== 'termine')
+    : cultsFamille.filter(c => c.statut === filtreStatut)
+
+  async function avancer(c: Culture) {
+    const next = prochainStatut(c)
+    if (!next) return
+    const now = format(new Date(), 'yyyy-MM-dd')
+    const patch: Partial<Culture> = { statut: next }
+    if (next === 'en_place') patch.date_plantation    = now
+    if (next === 'recolte')  patch.date_debut_recolte = now
+    if (next === 'termine')  patch.date_fin_recolte   = now
+    if (!navigator.onLine) {
+      await queueMutation({ table: 'cultures', method: 'update', payload: patch, matchCol: 'id', matchVal: c.id })
+    } else {
+      await supabase.from('cultures').update(patch).eq('id', c.id)
+    }
+    onSaved()
+  }
+
+  async function archiver(c: Culture) {
+    if (!confirm(`Archiver "${c.espece}" ?`)) return
+    if (!navigator.onLine) {
+      await queueMutation({ table: 'cultures', method: 'update', payload: { actif: false }, matchCol: 'id', matchVal: c.id })
+    } else {
+      await supabase.from('cultures').update({ actif: false }).eq('id', c.id)
+    }
+    onSaved()
+  }
+
+  async function sauvegarder() {
+    if (!espece.trim()) return
+    setSaving(true)
+    const payload = {
+      espece: espece.trim(),
+      nom: nom.trim() || null,
+      famille,
+      zone_id: zoneId || null,
+      quantite: quantite.trim() || null,
+      notes: notes.trim() || null,
+      date_semis: dateSemis || null,
+      statut: 'semis' as StatutCulture,
+    }
+    if (!navigator.onLine) {
+      await queueMutation({ table: 'cultures', method: 'insert', payload })
+    } else {
+      await supabase.from('cultures').insert(payload)
+    }
+    setSaving(false); setAjout(false)
+    setEspece(''); setNom(''); setZoneId(''); setQuantite(''); setNotes('')
+    setDateSemis(format(new Date(), 'yyyy-MM-dd'))
+    changerFamille(famille)
+    onSaved()
+  }
+
+  function ouvrirAjout(f: FamilleCulture) {
+    setFamille(f)
+    setEspece(''); setNom(''); setZoneId(''); setQuantite(''); setNotes('')
+    setDateSemis(format(new Date(), 'yyyy-MM-dd'))
+    setAjout(true)
+  }
+
+  return (
+    <div className="space-y-4 pb-4">
+
+      {/* Sélecteur de famille */}
+      <div className="grid grid-cols-2 gap-2">
+        <button onClick={() => changerFamille('champs')}
+          className={`flex flex-col items-center py-4 rounded-xl border-2 font-semibold transition-colors
+            ${familleVue === 'champs'
+              ? 'bg-amber-50 border-amber-500 text-amber-800'
+              : 'bg-white border-gray-200 text-gray-500'}`}>
+          <span className="text-2xl mb-1">🌾</span>
+          <span className="text-sm">Champs</span>
+          <span className="text-xs font-normal mt-0.5 opacity-70">
+            {cultures.filter(c => c.famille === 'champs' && c.statut !== 'termine').length} en cours
+          </span>
+        </button>
+        <button onClick={() => changerFamille('micro_pousse')}
+          className={`flex flex-col items-center py-4 rounded-xl border-2 font-semibold transition-colors
+            ${familleVue === 'micro_pousse'
+              ? 'bg-green-50 border-green-600 text-green-800'
+              : 'bg-white border-gray-200 text-gray-500'}`}>
+          <span className="text-2xl mb-1">🌱</span>
+          <span className="text-sm">Micro-pousses</span>
+          <span className="text-xs font-normal mt-0.5 opacity-70">
+            {cultures.filter(c => c.famille === 'micro_pousse' && c.statut !== 'termine').length} en cours
+          </span>
+        </button>
+      </div>
+
+      {/* Bouton ajouter */}
+      <button onClick={() => ouvrirAjout(familleVue)}
+        className={`w-full flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm active:scale-95 transition-transform text-white
+          ${familleVue === 'champs' ? 'bg-amber-600' : 'bg-green-700'}`}>
+        + Nouvelle {familleVue === 'champs' ? 'culture champs' : 'micro-pousse'}
+      </button>
+
+      {/* Filtres statut */}
+      <div className="flex gap-2 overflow-x-auto pb-1">
+        <button onClick={() => setFiltreStatut('tout')}
+          className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors
+            ${filtreStatut === 'tout' ? 'bg-green-700 text-white border-green-700' : 'bg-white text-gray-600 border-gray-200'}`}>
+          Tout ({cultsFamille.filter(c => c.statut !== 'termine').length})
+        </button>
+        {statutsActifs.map(s => {
+          const info = STATUT_CULT[s]
+          const count = cultsFamille.filter(c => c.statut === s).length
+          return (
+            <button key={s} onClick={() => setFiltreStatut(s)}
+              className={`shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors
+                ${filtreStatut === s ? 'bg-green-700 text-white border-green-700' : 'bg-white text-gray-600 border-gray-200'}`}>
+              {info.icon} {info.label} ({count})
+            </button>
+          )
+        })}
+        <button onClick={() => setFiltreStatut('termine')}
+          className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors
+            ${filtreStatut === 'termine' ? 'bg-gray-600 text-white border-gray-600' : 'bg-white text-gray-400 border-gray-200'}`}>
+          ✅ Terminés ({cultsFamille.filter(c => c.statut === 'termine').length})
+        </button>
+      </div>
+
+      {/* Liste cultures */}
+      {filtered.length === 0 ? (
+        <div className="text-center py-12 text-gray-400">
+          <div className="text-4xl mb-3">{familleVue === 'champs' ? '🌾' : '🌱'}</div>
+          <div className="text-sm">
+            Aucune {familleVue === 'champs' ? 'culture champs' : 'micro-pousse'}
+            {filtreStatut !== 'tout' ? ' dans cette phase' : ''}
+          </div>
+          <div className="text-xs mt-1">Appuie sur le bouton + pour commencer</div>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {filtered.map(c => {
+            const info    = STATUT_CULT[c.statut]
+            const next    = prochainStatut(c)
+            const zone    = zones.find(z => z.id === c.zone_id)
+            const isOpen  = ouvert === c.id
+            return (
+              <div key={c.id} className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+                <button onClick={() => setOuvert(isOpen ? null : c.id)}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-left">
+                  <div className={`shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-xl ${info.color}`}>
+                    {info.icon}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold text-gray-800 text-sm truncate">
+                      {c.espece}{c.nom ? ` — ${c.nom}` : ''}
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${info.color}`}>
+                        {info.label}
+                      </span>
+                      {zone && <span className="text-[10px] text-gray-400">{zone.nom}</span>}
+                      {c.date_semis && (
+                        <span className="text-[10px] text-gray-400">
+                          Semé {format(parseISO(c.date_semis), 'd MMM', { locale: fr })}
+                        </span>
+                      )}
+                      {c.quantite && <span className="text-[10px] text-gray-400">{c.quantite}</span>}
+                    </div>
+                  </div>
+                  <span className={`text-gray-300 text-sm transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}>▼</span>
+                </button>
+
+                {isOpen && (
+                  <div className="px-4 pb-4 space-y-3 border-t border-gray-50 pt-3">
+                    <div className="grid grid-cols-2 gap-2">
+                      {([
+                        { label: '🌱 Semis',      val: c.date_semis },
+                        { label: '🪴 Plantation', val: c.date_plantation },
+                        { label: '🥬 Récolte',    val: c.date_debut_recolte },
+                        { label: '✅ Fin',         val: c.date_fin_recolte },
+                      ] as { label: string; val: string | null }[]).filter(d => d.val).map(({ label, val }) => (
+                        <div key={label} className="bg-gray-50 rounded-lg px-3 py-2">
+                          <div className="text-[10px] text-gray-400">{label}</div>
+                          <div className="text-xs font-semibold text-gray-700">
+                            {format(parseISO(val!), 'd MMMM yyyy', { locale: fr })}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {c.notes && (
+                      <div className="bg-amber-50 rounded-lg px-3 py-2 text-xs text-amber-800">{c.notes}</div>
+                    )}
+
+                    {next && (
+                      <button onClick={() => avancer(c)}
+                        className="w-full py-2.5 rounded-xl bg-green-700 text-white text-sm font-semibold active:scale-95 transition-transform">
+                        {STATUT_CULT[next].icon} → {STATUT_CULT[next].label}
+                      </button>
+                    )}
+                    <button onClick={() => archiver(c)}
+                      className="w-full py-2 rounded-xl border border-red-100 text-red-400 text-xs">
+                      Archiver
+                    </button>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Modal nouvelle culture */}
+      {ajout && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end" onClick={() => setAjout(false)}>
+          <div className="bg-white w-full max-w-2xl mx-auto rounded-t-2xl p-5 space-y-4 pb-10 max-h-[90vh] overflow-y-auto"
+            onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h2 className="font-bold text-gray-800 text-lg">
+                {famille === 'champs' ? '🌾 Nouvelle culture champs' : '🌱 Nouvelle micro-pousse'}
+              </h2>
+              <button onClick={() => setAjout(false)} className="text-gray-400 text-2xl leading-none">×</button>
+            </div>
+
+            {/* Choix famille */}
+            <div className="grid grid-cols-2 gap-2">
+              {(['champs','micro_pousse'] as FamilleCulture[]).map(f => (
+                <button key={f} onClick={() => setFamille(f)}
+                  className={`flex items-center justify-center gap-2 py-3 rounded-xl border-2 text-sm font-semibold transition-colors
+                    ${famille === f
+                      ? f === 'champs' ? 'bg-amber-50 border-amber-500 text-amber-800' : 'bg-green-50 border-green-600 text-green-800'
+                      : 'bg-white border-gray-200 text-gray-400'}`}>
+                  {f === 'champs' ? '🌾 Champs' : '🌱 Micro-pousse'}
+                </button>
+              ))}
+            </div>
+
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Espèce / Plante *</label>
+              <input value={espece} onChange={e => setEspece(e.target.value)}
+                placeholder={famille === 'champs' ? 'Ex : Tomate, Courgette, Persil...' : 'Ex : Basilic, Radis, Pois...'}
+                autoFocus
+                className="w-full border border-gray-200 rounded-xl px-3 py-3 text-base focus:outline-none focus:border-green-400" />
+            </div>
+
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Variété / Nom</label>
+              <input value={nom} onChange={e => setNom(e.target.value)}
+                placeholder="Ex : Genovese, Cherry Roma..."
+                className="w-full border border-gray-200 rounded-xl px-3 py-3 text-sm focus:outline-none focus:border-green-400" />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Date de semis</label>
+                <input type="date" value={dateSemis} onChange={e => setDateSemis(e.target.value)}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-green-400" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">
+                  {famille === 'champs' ? 'Nombre de plants' : 'Quantité (caisses…)'}
+                </label>
+                <input value={quantite} onChange={e => setQuantite(e.target.value)}
+                  placeholder={famille === 'champs' ? 'Ex : 30 plants' : 'Ex : 4 caisses'}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-green-400" />
+              </div>
+            </div>
+
+            {zones.length > 0 && (
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Zone / Emplacement</label>
+                <div className="flex gap-2 flex-wrap">
+                  <button onClick={() => setZoneId('')}
+                    className={`px-3 py-1.5 rounded-full text-xs font-semibold border
+                      ${zoneId === '' ? 'bg-green-700 text-white border-green-700' : 'bg-gray-50 text-gray-500 border-gray-200'}`}>
+                    Aucune
+                  </button>
+                  {zones.map(z => (
+                    <button key={z.id} onClick={() => setZoneId(z.id)}
+                      className={`px-3 py-1.5 rounded-full text-xs font-semibold border active:scale-95 transition-transform
+                        ${zoneId === z.id ? 'bg-green-700 text-white border-green-700' : 'bg-gray-50 text-gray-600 border-gray-200'}`}>
+                      {z.nom}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Notes</label>
+              <textarea value={notes} onChange={e => setNotes(e.target.value)}
+                placeholder="Observations, conditions de culture..."
+                rows={2}
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-green-400 resize-none" />
+            </div>
+
+            <button onClick={sauvegarder} disabled={saving || !espece.trim()}
+              className={`w-full text-white py-4 rounded-xl font-bold text-base active:scale-95 transition-transform disabled:opacity-50
+                ${famille === 'champs' ? 'bg-amber-600' : 'bg-green-700'}`}>
+              {saving ? 'Enregistrement...' : famille === 'champs' ? '🌾 Démarrer la culture' : '🌱 Démarrer la micro-pousse'}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
