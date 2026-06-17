@@ -87,11 +87,18 @@ export default function ParametresPage() {
         ))}
       </div>
 
-      <button onClick={() => router.push('/couts')}
-        className="w-full flex items-center justify-between p-3 bg-amber-50 border border-amber-200 rounded-xl text-sm">
-        <span className="font-medium text-amber-800">Dashboard co&ucirc;ts de production</span>
-        <span className="text-amber-600">›</span>
-      </button>
+      <div className="grid grid-cols-2 gap-2">
+        <button onClick={() => router.push('/couts')}
+          className="flex items-center justify-between p-3 bg-amber-50 border border-amber-200 rounded-xl text-sm">
+          <span className="font-medium text-amber-800 text-xs">📊 Co&ucirc;ts production</span>
+          <span className="text-amber-600">›</span>
+        </button>
+        <button onClick={() => router.push('/stock')}
+          className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-xl text-sm">
+          <span className="font-medium text-green-800 text-xs">🌾 Stock &amp; produits</span>
+          <span className="text-green-600">›</span>
+        </button>
+      </div>
 
       {onglet === 'especes' && (
         <EspecesPanel
@@ -170,7 +177,7 @@ function NavPanel() {
           </div>
           <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs font-bold
             ${visible.includes(tab.href) ? 'bg-green-600 border-green-600 text-white' : 'border-gray-300 bg-white'}`}>
-            {visible.includes(tab.href) && '✓'}
+            {visible.includes(tab.href) ? '✓' : ''}
           </div>
         </button>
       ))}
@@ -433,7 +440,6 @@ function EspecesPanel({ especes, onEdit, onRefresh, tapis, setTapis, godets, set
   return (
     <div className="space-y-4">
 
-      {/* Total stock */}
       <div className="grid grid-cols-2 gap-3">
         <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3">
           <div className="text-xs text-green-700 font-semibold mb-0.5">Stock total</div>
@@ -449,7 +455,6 @@ function EspecesPanel({ especes, onEdit, onRefresh, tapis, setTapis, godets, set
         </div>
       </div>
 
-      {/* Séries de production */}
       <div className="bg-white rounded-2xl border border-green-200 p-4 space-y-3">
         <div className="font-bold text-sm text-green-900">🌱 S&eacute;ries de production</div>
         <div className="grid grid-cols-2 gap-3">
@@ -618,7 +623,6 @@ function EspeceModal({ espece, onClose, onSave }: { espece: Espece; onClose: () 
         onClick={e => e.stopPropagation()}>
         <h2 className="text-lg font-bold">&Eacute;diter &mdash; {espece.nom}</h2>
 
-        {/* Zone photo */}
         <input ref={fileRef} type="file" accept="image/*" className="hidden"
           onChange={e => { const f = e.target.files?.[0]; if (f) handlePhoto(f) }} />
         <button onClick={() => fileRef.current?.click()} disabled={uploading}
@@ -644,7 +648,6 @@ function EspeceModal({ espece, onClose, onSave }: { espece: Espece; onClose: () 
           )}
         </button>
 
-        {/* Famille */}
         <div>
           <label className="block text-xs text-gray-500 mb-1.5">Famille</label>
           <div className="grid grid-cols-2 gap-2">
@@ -779,7 +782,7 @@ function ExportPanel() {
       </div>
       <button onClick={exporterTout} disabled={!!exporting}
         className="w-full py-4 rounded-2xl font-bold text-base flex items-center justify-center gap-3 active:scale-95 transition-transform disabled:opacity-60 bg-green-700 text-white shadow-sm">
-        {exporting === 'all' ? '⏳ Export en cours…' : done === 'all' ? '✅ Téléchargé !' : '📦 Export complet (toutes les tables)'}
+        {exporting === 'all' ? '⏳ Export en cours…' : done === 'all' ? '✅ Téléchargé !' : '\u{1F4E6} Export complet (toutes les tables)'}
       </button>
       <div className="text-xs font-bold text-gray-400 uppercase tracking-wider">Par table</div>
       <div className="space-y-2">
@@ -853,10 +856,10 @@ function TachesPanel() {
   return (
     <div className="space-y-4">
       <div className="bg-green-50 border border-green-200 rounded-2xl p-4 text-sm text-green-900">
-        <div className="font-bold mb-1">Catalogue de tâches maraîcher</div>
+        <div className="font-bold mb-1">Catalogue de t&acirc;ches mara&icirc;cher</div>
         <div className="text-xs text-green-700">
-          {catalogue.length} tâches au total &middot; {activeCount} actives.
-          Associez les tâches typiques à chaque zone pour des suggestions personnalisées.
+          {catalogue.length} t&acirc;ches au total &middot; {activeCount} actives.
+          Associez les t&acirc;ches typiques &agrave; chaque zone pour des suggestions personnalis&eacute;es.
         </div>
       </div>
       <div className="flex gap-1.5 overflow-x-auto pb-1">
@@ -875,7 +878,7 @@ function TachesPanel() {
       </div>
       {vue === 'global' ? (
         <div className="space-y-2">
-          <div className="text-xs text-gray-400">Activez / désactivez les tâches du catalogue.</div>
+          <div className="text-xs text-gray-400">Activez / d&eacute;sactivez les t&acirc;ches du catalogue.</div>
           {categories.map(cat => {
             const items = catalogue.filter(c => c.categorie === cat)
             return (
@@ -889,7 +892,7 @@ function TachesPanel() {
                     className={`w-full flex items-center gap-3 px-4 py-3 border-b border-gray-50 last:border-0 text-left active:bg-gray-50 ${!c.active ? 'opacity-40' : ''}`}>
                     <div className={`w-6 h-6 rounded-full border-2 flex-shrink-0 flex items-center justify-center text-xs
                       ${c.active ? 'bg-green-600 border-green-600 text-white' : 'border-gray-300 bg-white'}`}>
-                      {c.active && '✓'}
+                      {c.active ? '✓' : ''}
                     </div>
                     <span className="text-sm text-gray-800 flex-1">{c.titre}</span>
                     {saving === c.id && <span className="text-xs text-gray-400 animate-pulse">...</span>}
@@ -902,7 +905,7 @@ function TachesPanel() {
       ) : (
         <div className="space-y-2">
           <div className="text-xs text-gray-400">
-            Tâches typiques de {zones.find(z => z.id === vue)?.nom} &mdash;
+            T&acirc;ches typiques de {zones.find(z => z.id === vue)?.nom} &mdash;
             apparaissent en suggestions lors de l&apos;ajout rapide.
           </div>
           {categories.map(cat => {
@@ -922,7 +925,7 @@ function TachesPanel() {
                       className="w-full flex items-center gap-3 px-4 py-3 border-b border-gray-50 last:border-0 text-left active:bg-gray-50">
                       <div className={`w-6 h-6 rounded-full border-2 flex-shrink-0 flex items-center justify-center text-xs
                         ${checked ? 'bg-green-600 border-green-600 text-white' : 'border-gray-300 bg-white'}`}>
-                        {checked && '✓'}
+                        {checked ? '✓' : ''}
                       </div>
                       <span className="text-sm text-gray-800 flex-1">{c.titre}</span>
                       {saving === c.id && <span className="text-xs text-gray-400 animate-pulse">...</span>}
@@ -933,7 +936,7 @@ function TachesPanel() {
             )
           })}
           <div className="text-center text-xs text-gray-400 pt-1">
-            Pour voir toutes les tâches, activez-les dans Global.
+            Pour voir toutes les t&acirc;ches, activez-les dans Global.
           </div>
         </div>
       )}
