@@ -125,8 +125,9 @@ export default function AccueilPage() {
     const il_y_a_48h   = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString()
     const debutSemaine = startOfWeek(new Date(), { weekStartsOn: 1 }).toISOString()
     const il_y_a_28j   = format(subDays(new Date(), 28), 'yyyy-MM-dd')
+    const today        = format(new Date(), 'yyyy-MM-dd')
 
-    const [lignesData, especesData, semisData, cmdData, mvtsData, clientCount, tachesData] = await Promise.all([
+    const [lignesData, especesData, semisData, blSemaineData, mvtsData, clientCount, tachesData, ptgData] = await Promise.all([
       fetchWithCache('home_semis_lignes', async () => {
         const { data } = await supabase.from('semis_lignes')
           .select('id, espece_id, format, quantite, date_dispo, date_peremption, prod_estimee, espece:especes(*)')
@@ -139,11 +140,11 @@ export default function AccueilPage() {
       }).then(r => r.data),
       // Dernier semis : live seulement (info récente)
       supabase.from('semis').select('date_semis').order('date_semis', { ascending: false }).limit(1).then(r => r.data),
-      // Nouvelles commandes : live seulement
+      // Une seule requête bons_livraison depuis lundi (couvre aussi les 48h pour le badge)
       supabase.from('bons_livraison')
         .select('*, client:clients(nom), bl_lignes(quantite, prix_ht, tva_pct)')
-        .gte('created_at', il_y_a_48h).order('created_at', { ascending: false }).then(r => r.data),
-      fetchWithCache(`home_mvts_${il_y_a_28j}`, async () => {
+        .gte('created_at', debutSemaine).order('created_at', { ascending: false }).then(r => r.data),
+      fetchWithCache('home_mvts_stock', async () => {
         const { data } = await supabase.from('stock_mouvements').select('*').eq('type', 'semis').gte('created_at', il_y_a_28j)
         return data
       }).then(r => r.data),
@@ -153,19 +154,35 @@ export default function AccueilPage() {
         const { data } = await supabase.from('taches').select('id, titre, priorite, type, frequence, date_echeance, completions:taches_completions(date_completion)').eq('actif', true)
         return data
       }).then(r => r.data),
+      // Pointages du jour : en parallèle avec le reste
+      supabase.from('pointages').select('auteur, heure_arrivee, heure_depart, pause_minutes').eq('date', today).then(r => r.data),
     ])
 
     if (lignesData?.length)  setLignes(lignesData as unknown as LigneAvecEspece[])
     if (especesData?.length) setStockGraines(especesData)
     if (semisData?.[0]) setDernierSemis(semisData[0].date_semis)
     if (mvtsData?.length)    setMouvements(mvtsData as StockMouvement[])
-    if (cmdData)     setNouvellesCmds(cmdData as unknown as BonLivraison[])
     if (clientCount != null) setNbClients(clientCount)
+    if (ptgData) setPointagesAuj(ptgData as {auteur:string;heure_arrivee:string|null;heure_depart:string|null;pause_minutes:number}[])
+
+    // Une seule liste BL : séparer badge (48h) et CA semaine
+    if (blSemaineData) {
+      type BLRaw = { created_at: string; client: {nom:string}|null; bl_lignes: {quantite:number;prix_ht:number;tva_pct:number}[] }
+      const raw = blSemaineData as unknown as BLRaw[]
+      const nouvelles = raw.filter(bl => bl.created_at >= il_y_a_48h)
+      setNouvellesCmds(nouvelles as unknown as BonLivraison[])
+      const total = raw.flatMap(bl => bl.bl_lignes || []).reduce((s, l) => s + l.quantite * l.prix_ht * (1 + l.tva_pct / 100), 0)
+      if (total > 0) setCaSemaine(total)
+      setBlsSemaine(raw.map(bl => ({
+        client: bl.client, created_at: bl.created_at,
+        montant: (bl.bl_lignes || []).reduce((s, l) => s + l.quantite * l.prix_ht * (1 + l.tva_pct / 100), 0),
+      })))
+    }
 
     if (tachesData) {
-      const today = new Date()
-      const todayStr = format(today, 'yyyy-MM-dd')
-      const jourFr = ['dimanche','lundi','mardi','mercredi','jeudi','vendredi','samedi'][today.getDay()]
+      const todayDate = new Date()
+      const todayStr = format(todayDate, 'yyyy-MM-dd')
+      const jourFr = ['dimanche','lundi','mardi','mercredi','jeudi','vendredi','samedi'][todayDate.getDay()]
       const duJour = (tachesData as unknown as {id:string;titre:string;priorite:string;type:string;frequence:string|null;date_echeance:string|null;completions:{date_completion:string}[]}[])
         .filter(t => {
           if (t.type === 'ponctuelle') return t.date_echeance === todayStr
@@ -176,27 +193,6 @@ export default function AccueilPage() {
         })
       setTachesAujourdHui(duJour)
     }
-
-    const { data: blSemaine } = await supabase
-      .from('bons_livraison')
-      .select('created_at, client:clients(nom), bl_lignes(quantite, prix_ht, tva_pct)')
-      .gte('created_at', debutSemaine)
-      .order('created_at', { ascending: false })
-    if (blSemaine) {
-      type BLRaw = { created_at: string; client: {nom:string}|null; bl_lignes: {quantite:number;prix_ht:number;tva_pct:number}[] }
-      const raw = blSemaine as unknown as BLRaw[]
-      const total = raw.flatMap(bl => bl.bl_lignes || []).reduce((s, l) => s + l.quantite * l.prix_ht * (1 + l.tva_pct / 100), 0)
-      if (total > 0) setCaSemaine(total)
-      setBlsSemaine(raw.map(bl => ({
-        client: bl.client, created_at: bl.created_at,
-        montant: (bl.bl_lignes || []).reduce((s, l) => s + l.quantite * l.prix_ht * (1 + l.tva_pct / 100), 0),
-      })))
-    }
-
-    const { data: ptg } = await supabase.from('pointages')
-      .select('auteur, heure_arrivee, heure_depart, pause_minutes')
-      .eq('date', format(new Date(), 'yyyy-MM-dd'))
-    if (ptg) setPointagesAuj(ptg as {auteur:string;heure_arrivee:string|null;heure_depart:string|null;pause_minutes:number}[])
 
     setLoading(false)
   }

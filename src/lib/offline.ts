@@ -250,6 +250,7 @@ export async function precacheAll(): Promise<void> {
     'especes', 'semis', 'zones', 'clients',
     'taches_catalogue', 'parametres_production', 'contenants',
     'zone_planches', 'zone_taches_catalogue', 'especes_serre',
+    'cultures',
   ]
   await Promise.allSettled(
     tables.map(async (table) => {
@@ -264,6 +265,11 @@ export async function precacheAll(): Promise<void> {
       .select('*, semis_lignes(*, espece:especes(*))')
       .order('date_semis', { ascending: false }).limit(30)
       .then(({ data }) => data && saveCache('semis_complets', data)),
+
+    // Templates semis avec lignes
+    supabase.from('templates')
+      .select('*, templates_lignes(*, espece:especes(*))').order('nom')
+      .then(({ data }) => data && saveCache('templates', data)),
 
     // Tâches complètes (agenda + heures + planning)
     supabase.from('taches')

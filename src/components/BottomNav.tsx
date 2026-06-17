@@ -45,7 +45,7 @@ export default function BottomNav() {
     compter()
     const interval = setInterval(compter, 5 * 60 * 1000)
     return () => { actif = false; clearInterval(interval) }
-  }, [pathname])
+  }, [])
 
   if (estBoutique) return null
 
