@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { fetchWithCache, queueMutation, loadCache } from '@/lib/offline'
 import { format, startOfWeek, addDays, isToday, parseISO } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import Link from 'next/link'
@@ -67,30 +68,49 @@ export default function PlanningPage() {
 
   async function charger() {
     setLoading(true)
-    const [{ data: t }, { data: b }] = await Promise.all([
-      supabase.from('taches')
-        .select('*, completions:taches_completions(date_completion), zone:zones(nom)')
-        .eq('actif', true),
-      supabase.from('bons_livraison')
+    const [tResult, blsCaches] = await Promise.all([
+      fetchWithCache('taches', async () => {
+        const { data } = await supabase.from('taches')
+          .select('*, completions:taches_completions(date_completion), zone:zones(nom)')
+          .eq('actif', true)
+        return data
+      }),
+      loadCache<BL[]>('commandes'),
+    ])
+    if (tResult.data.length) setTaches(tResult.data as unknown as Tache[])
+
+    // BLs : en ligne on filtre côté serveur, hors ligne on filtre le cache
+    if (navigator.onLine) {
+      const { data: b } = await supabase.from('bons_livraison')
         .select('id, numero, date_livraison, statut, client:clients(nom, telephone)')
         .gte('date_livraison', debutSem)
         .lte('date_livraison', finSem)
-        .order('date_livraison'),
-    ])
-    if (t) setTaches(t as unknown as Tache[])
-    if (b) setBls(b as unknown as BL[])
+        .order('date_livraison')
+      if (b) setBls(b as unknown as BL[])
+    } else if (blsCaches) {
+      const filtres = blsCaches.filter(
+        b => b.date_livraison >= debutSem && b.date_livraison <= finSem
+      )
+      setBls(filtres as unknown as BL[])
+    }
     setLoading(false)
   }
 
   async function cocherTache(tacheId: string, dateStr: string, estFaite: boolean) {
     if (estFaite) {
-      await supabase.from('taches_completions').delete()
-        .eq('tache_id', tacheId).eq('date_completion', dateStr)
+      if (!navigator.onLine) {
+        await queueMutation({ table: 'taches_completions', method: 'delete', payload: {}, matchCol: 'tache_id', matchVal: tacheId })
+      } else {
+        await supabase.from('taches_completions').delete()
+          .eq('tache_id', tacheId).eq('date_completion', dateStr)
+      }
     } else {
-      await supabase.from('taches_completions').upsert(
-        { tache_id: tacheId, date_completion: dateStr },
-        { onConflict: 'tache_id,date_completion' }
-      )
+      const payload = { tache_id: tacheId, date_completion: dateStr }
+      if (!navigator.onLine) {
+        await queueMutation({ table: 'taches_completions', method: 'upsert', payload, onConflict: 'tache_id,date_completion' })
+      } else {
+        await supabase.from('taches_completions').upsert(payload, { onConflict: 'tache_id,date_completion' })
+      }
     }
     charger()
   }

@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { fetchWithCache } from '@/lib/offline'
 import { Semis, SemisLigne, Espece } from '@/types'
 import { format, parseISO, differenceInDays } from 'date-fns'
 import { fr } from 'date-fns/locale'
@@ -20,11 +21,14 @@ export default function HistoriquePage() {
   useEffect(() => { charger() }, [])
 
   async function charger() {
-    const { data: s } = await supabase
-      .from('semis')
-      .select('*, semis_lignes(*, espece:especes(*))')
-      .order('date_semis', { ascending: false })
-    if (s) setSemisList(s as SemisComplet[])
+    const { data } = await fetchWithCache('semis_complets', async () => {
+      const { data: s } = await supabase
+        .from('semis')
+        .select('*, semis_lignes(*, espece:especes(*))')
+        .order('date_semis', { ascending: false })
+      return s
+    })
+    if (data.length) setSemisList(data as unknown as SemisComplet[])
     setLoading(false)
   }
 

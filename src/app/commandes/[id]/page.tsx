@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic'
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { loadCache } from '@/lib/offline'
 import { BonLivraison, BLStatut } from '@/types'
 import { format, parseISO } from 'date-fns'
 import { fr } from 'date-fns/locale'
@@ -45,6 +46,16 @@ export default function BLDetailPage() {
   useEffect(() => { charger() }, [id])
 
   async function charger() {
+    if (!navigator.onLine) {
+      const cached = await loadCache<BLComplet[]>('commandes')
+      const found = cached?.find(b => b.id === id)
+      if (found) {
+        if (found.bl_lignes) found.bl_lignes = [...found.bl_lignes].sort((a, b) => a.ordre - b.ordre)
+        setBl(found)
+      }
+      setLoading(false)
+      return
+    }
     const { data } = await supabase
       .from('bons_livraison')
       .select('*, client:clients(*), bl_lignes(*)')

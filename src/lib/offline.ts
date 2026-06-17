@@ -245,16 +245,12 @@ export async function syncPhotos(): Promise<{ synced: number; errors: number }> 
 export async function precacheAll(): Promise<void> {
   if (typeof navigator === 'undefined' || !navigator.onLine) return
 
+  // Tables simples
   const tables = [
-    'especes',
-    'semis',
-    'zones',
-    'clients',
-    'taches_catalogue',
-    'parametres_production',
-    'contenants',
+    'especes', 'semis', 'zones', 'clients',
+    'taches_catalogue', 'parametres_production', 'contenants',
+    'zone_planches', 'zone_taches_catalogue', 'especes_serre',
   ]
-
   await Promise.allSettled(
     tables.map(async (table) => {
       const { data } = await supabase.from(table).select('*').limit(500)
@@ -262,30 +258,47 @@ export async function precacheAll(): Promise<void> {
     })
   )
 
-  // Semis avec lignes (plus lourd, séparément)
-  const { data: semis } = await supabase
-    .from('semis')
-    .select('*, semis_lignes(*, espece:especes(*))')
-    .order('date_semis', { ascending: false })
-    .limit(30)
-  if (semis) await saveCache('semis_complets', semis)
+  await Promise.allSettled([
+    // Semis avec lignes
+    supabase.from('semis')
+      .select('*, semis_lignes(*, espece:especes(*))')
+      .order('date_semis', { ascending: false }).limit(30)
+      .then(({ data }) => data && saveCache('semis_complets', data)),
 
-  // Cahier culture récent
-  const { data: cahier } = await supabase
-    .from('cahier_culture')
-    .select('*, zone:zones(nom), espece:especes(nom)')
-    .order('date_entree', { ascending: false })
-    .limit(100)
-  if (cahier) await saveCache('cahier_culture', cahier)
+    // Tâches complètes (agenda + heures + planning)
+    supabase.from('taches')
+      .select('*, completions:taches_completions(date_completion), temps:taches_temps(id, tache_id, date, auteur, minutes, chrono_debut)')
+      .eq('actif', true).order('priorite', { ascending: false })
+      .then(({ data }) => data && saveCache('taches', data)),
 
-  // Commandes récentes
-  const il_y_a_3_mois = new Date()
-  il_y_a_3_mois.setMonth(il_y_a_3_mois.getMonth() - 3)
-  const { data: commandes } = await supabase
-    .from('bons_livraison')
-    .select('*, client:clients(nom, telephone), bl_lignes(*)')
-    .gte('created_at', il_y_a_3_mois.toISOString())
-    .order('created_at', { ascending: false })
-    .limit(50)
-  if (commandes) await saveCache('commandes', commandes)
+    // Produits traitement
+    supabase.from('produits_traitement').select('*').eq('actif', true).order('type,nom')
+      .then(({ data }) => data && saveCache('produits_traitement', data)),
+
+    // Cahier culture récent
+    supabase.from('cahier_culture')
+      .select('*, zone:zones(nom), espece:especes(nom), produit:produits_traitement(nom), photos:cahier_photos(*)')
+      .order('date_operation', { ascending: false }).order('created_at', { ascending: false }).limit(100)
+      .then(({ data }) => data && saveCache('cahier_culture', data)),
+
+    // Pointages récents (2 mois)
+    supabase.from('pointages').select('*').order('date', { ascending: false }).limit(60)
+      .then(({ data }) => data && saveCache('pointages', data)),
+
+    // Pertes récentes
+    supabase.from('pertes').select('*, espece:especes(nom)')
+      .order('date_perte', { ascending: false }).limit(30)
+      .then(({ data }) => data && saveCache('pertes', data)),
+
+    // Commandes récentes (3 mois) avec lignes + client complet
+    (async () => {
+      const il_y_a_3_mois = new Date()
+      il_y_a_3_mois.setMonth(il_y_a_3_mois.getMonth() - 3)
+      const { data } = await supabase.from('bons_livraison')
+        .select('*, client:clients(*), bl_lignes(*)')
+        .gte('created_at', il_y_a_3_mois.toISOString())
+        .order('created_at', { ascending: false }).limit(80)
+      if (data) await saveCache('commandes', data)
+    })(),
+  ])
 }
