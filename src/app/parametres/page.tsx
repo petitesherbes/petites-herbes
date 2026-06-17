@@ -69,16 +69,16 @@ export default function ParametresPage() {
 
   return (
     <div className="p-4 space-y-4">
-      <h1 className="text-xl font-bold text-green-900">&#x2699;&#xFE0F; Param&egrave;tres</h1>
+      <h1 className="text-xl font-bold text-green-900">⚙️ Param&egrave;tres</h1>
 
       <div className="flex rounded-lg overflow-hidden border border-gray-200 overflow-x-auto">
         {[
-          { val: 'especes',   label: '&#127807; Esp&egrave;ces' },
-          { val: 'templates', label: '&#128203; Templates' },
+          { val: 'especes',   label: '🌿 Esp&egrave;ces' },
+          { val: 'templates', label: '📋 Templates' },
           { val: 'taches',    label: 'T&acirc;ches' },
-          { val: 'nav',       label: '&#128241; Nav' },
-          { val: 'email',     label: '&#128231; Email' },
-          { val: 'export',    label: '&#128190; Export' },
+          { val: 'nav',       label: '📱 Nav' },
+          { val: 'email',     label: '📧 Email' },
+          { val: 'export',    label: '💾 Export' },
         ].map(o => (
           <button key={o.val} onClick={() => setOnglet(o.val as typeof onglet)}
             className={`shrink-0 flex-1 py-2 text-xs font-medium transition-colors
@@ -90,7 +90,7 @@ export default function ParametresPage() {
       <button onClick={() => router.push('/couts')}
         className="w-full flex items-center justify-between p-3 bg-amber-50 border border-amber-200 rounded-xl text-sm">
         <span className="font-medium text-amber-800">Dashboard co&ucirc;ts de production</span>
-        <span className="text-amber-600">&#x203A;</span>
+        <span className="text-amber-600">›</span>
       </button>
 
       {onglet === 'especes' && (
@@ -170,7 +170,7 @@ function NavPanel() {
           </div>
           <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs font-bold
             ${visible.includes(tab.href) ? 'bg-green-600 border-green-600 text-white' : 'border-gray-300 bg-white'}`}>
-            {visible.includes(tab.href) && '&#x2713;'}
+            {visible.includes(tab.href) && '✓'}
           </div>
         </button>
       ))}
@@ -214,11 +214,11 @@ function TemplatesPanel({ templates, especes, onEdit, onNouveauTemplate, onRefre
             <div className="flex gap-2 flex-shrink-0">
               <button onClick={() => onEdit(t)}
                 className="text-xs text-blue-600 px-3 py-1.5 rounded-lg border border-blue-200 font-semibold">
-                &#x270F;&#xFE0F; &Eacute;diter
+                ✏️ &Eacute;diter
               </button>
               <button onClick={() => supprimer(t.id)}
                 className="text-xs text-red-400 px-3 py-1.5 rounded-lg border border-red-200 font-semibold">
-                &#x1F5D1;
+                🗑️
               </button>
             </div>
           </div>
@@ -259,7 +259,6 @@ function TemplateModal({ template, especes, onClose, onSave }: {
   const [ajoutQte, setAjoutQte] = useState(1)
   const [saving, setSaving] = useState(false)
 
-  // GODET et TERREAU puisent dans le même pool d'espèces "avec terreau"
   const especesFiltrees = especes.filter(e => e.actif && (
     ajoutFormat === 'TAPIS'
       ? e.section === 'TAPIS'
@@ -392,7 +391,7 @@ function TemplateModal({ template, especes, onClose, onSave }: {
           </button>
           <button onClick={sauvegarder} disabled={saving || !nom.trim()}
             className="flex-1 py-3 rounded-xl bg-green-700 text-white font-bold disabled:opacity-50 active:scale-95"
-            dangerouslySetInnerHTML={{ __html: saving ? 'Sauvegarde...' : '&#x1F4BE; Sauvegarder' }} />
+            dangerouslySetInnerHTML={{ __html: saving ? 'Sauvegarde...' : '💾 Sauvegarder' }} />
         </div>
       </div>
     </div>
@@ -412,7 +411,6 @@ function EspecesPanel({ especes, onEdit, onRefresh, tapis, setTapis, godets, set
   sauvegarderSeries: () => void
   savingParams: boolean
 }) {
-  // TERREAU absorbe les anciennes GODETS le temps que la migration SQL tourne
   const especesTapis   = especes.filter(e => e.section === 'TAPIS')
   const especesTerreau = especes.filter(e => e.section === 'TERREAU' || e.section === 'GODETS')
 
@@ -451,9 +449,9 @@ function EspecesPanel({ especes, onEdit, onRefresh, tapis, setTapis, godets, set
         </div>
       </div>
 
-      {/* S&eacute;ries de production */}
+      {/* Séries de production */}
       <div className="bg-white rounded-2xl border border-green-200 p-4 space-y-3">
-        <div className="font-bold text-sm text-green-900">&#x1F331; S&eacute;ries de production</div>
+        <div className="font-bold text-sm text-green-900">🌱 S&eacute;ries de production</div>
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-xs text-gray-500 mb-1">Tapis par s&eacute;rie (caisse)</label>
@@ -470,21 +468,19 @@ function EspecesPanel({ especes, onEdit, onRefresh, tapis, setTapis, godets, set
         </div>
         <button onClick={sauvegarderSeries} disabled={savingParams}
           className="w-full bg-green-700 text-white py-2.5 rounded-xl font-semibold text-sm active:scale-95 transition-transform disabled:opacity-50"
-          dangerouslySetInnerHTML={{ __html: savingParams ? 'Sauvegarde...' : '&#x1F4BE; Enregistrer les s&eacute;ries' }} />
+          dangerouslySetInnerHTML={{ __html: savingParams ? 'Sauvegarde...' : '💾 Enregistrer les s&eacute;ries' }} />
       </div>
 
-      {/* TAPIS */}
       <SectionEspeces
-        titre="&#x1F7E9; TAPIS"
+        titre="🟩 TAPIS"
         especes={especesTapis}
         onToggleActif={toggleActif}
         onEdit={onEdit}
         onAjouter={() => ajouterEspece('TAPIS')}
       />
 
-      {/* TERREAU (+ anciennes GODETS) */}
       <SectionEspeces
-        titre="&#x1F7EB; AVEC TERREAU"
+        titre="🟫 AVEC TERREAU"
         especes={especesTerreau}
         onToggleActif={toggleActif}
         onEdit={onEdit}
@@ -504,7 +500,7 @@ function SectionEspeces({ titre, especes, onToggleActif, onEdit, onAjouter }: {
   return (
     <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
       <div className="px-3 py-2 bg-gray-50 font-semibold text-sm border-b border-gray-200 flex justify-between items-center">
-        <span dangerouslySetInnerHTML={{ __html: titre }} />
+        <span>{titre}</span>
         <button onClick={onAjouter}
           className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
           + Ajouter
@@ -556,13 +552,13 @@ function EspeceModal({ espece, onClose, onSave }: { espece: Espece; onClose: () 
   )
   const [form, setForm] = useState({
     nom:            espece.nom,
-    g_tapis:        espece.g_tapis?.toString()       || '',
-    g_godet:        espece.g_godet?.toString()       || '',
-    g_caisse:       espece.g_caisse?.toString()      || '',
+    g_tapis:        espece.g_tapis?.toString()        || '',
+    g_godet:        espece.g_godet?.toString()        || '',
+    g_caisse:       espece.g_caisse?.toString()       || '',
     pct_perte:      espece.pct_perte != null ? (espece.pct_perte * 100).toString() : '10',
-    jours_pousse:   espece.jours_pousse?.toString()  || '',
-    jours_conserv:  espece.jours_conserv?.toString() || '',
-    rendement:      espece.rendement?.toString()     || '',
+    jours_pousse:   espece.jours_pousse?.toString()   || '',
+    jours_conserv:  espece.jours_conserv?.toString()  || '',
+    rendement:      espece.rendement?.toString()      || '',
     prix_graine_kg: espece.prix_graine_kg?.toString() || '',
     stock_actuel_g: espece.stock_actuel_g.toString(),
   })
@@ -604,16 +600,16 @@ function EspeceModal({ espece, onClose, onSave }: { espece: Espece; onClose: () 
   }
 
   const champs = [
-    { key: 'nom',            label: 'Nom',                  type: 'text'   },
-    { key: 'stock_actuel_g', label: 'Stock actuel (g)',     type: 'number' },
-    { key: 'prix_graine_kg', label: 'Prix graine (€/kg)',  type: 'number' },
-    { key: 'g_tapis',        label: 'G/tapis',              type: 'number' },
-    { key: 'g_caisse',       label: 'G/caisse terreau',     type: 'number' },
-    { key: 'g_godet',        label: 'G/godet',              type: 'number' },
-    { key: 'pct_perte',      label: '% perte',              type: 'number' },
-    { key: 'jours_pousse',   label: 'Jours pousse',         type: 'number' },
-    { key: 'jours_conserv',  label: 'Jours conservation',   type: 'number' },
-    { key: 'rendement',      label: 'Rendement',            type: 'number' },
+    { key: 'nom',            label: 'Nom',                 type: 'text'   },
+    { key: 'stock_actuel_g', label: 'Stock actuel (g)',    type: 'number' },
+    { key: 'prix_graine_kg', label: 'Prix graine (€/kg)', type: 'number' },
+    { key: 'g_tapis',        label: 'G/tapis',             type: 'number' },
+    { key: 'g_caisse',       label: 'G/caisse terreau',    type: 'number' },
+    { key: 'g_godet',        label: 'G/godet',             type: 'number' },
+    { key: 'pct_perte',      label: '% perte',             type: 'number' },
+    { key: 'jours_pousse',   label: 'Jours pousse',        type: 'number' },
+    { key: 'jours_conserv',  label: 'Jours conservation',  type: 'number' },
+    { key: 'rendement',      label: 'Rendement',           type: 'number' },
   ]
 
   return (
@@ -632,7 +628,7 @@ function EspeceModal({ espece, onClose, onSave }: { espece: Espece; onClose: () 
             <img src={photoUrl} alt={espece.nom} className="w-full h-full object-cover" />
           ) : (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-gray-400">
-              <span className="text-2xl">&#x1F4F7;</span>
+              <span className="text-2xl">📷</span>
               <span className="text-xs">Ajouter une photo</span>
             </div>
           )}
@@ -658,7 +654,7 @@ function EspeceModal({ espece, onClose, onSave }: { espece: Espece; onClose: () 
                   ${section === s
                     ? s === 'TAPIS' ? 'bg-green-50 border-green-600 text-green-800' : 'bg-stone-50 border-stone-500 text-stone-800'
                     : 'bg-white border-gray-200 text-gray-400'}`}>
-                {s === 'TAPIS' ? '&#x1F7E9; Tapis' : '&#x1F7EB; Avec terreau'}
+                {s === 'TAPIS' ? '🟩 Tapis' : '🟫 Avec terreau'}
               </button>
             ))}
           </div>
@@ -678,7 +674,7 @@ function EspeceModal({ espece, onClose, onSave }: { espece: Espece; onClose: () 
           <button onClick={onClose} className="flex-1 py-3 rounded-lg border border-gray-200 text-gray-600">Annuler</button>
           <button onClick={sauvegarder} disabled={saving || uploading}
             className="flex-1 py-3 rounded-lg bg-green-700 text-white font-semibold disabled:opacity-50"
-            dangerouslySetInnerHTML={{ __html: saving ? 'Sauvegarde...' : '&#x1F4BE; Sauvegarder' }} />
+            dangerouslySetInnerHTML={{ __html: saving ? 'Sauvegarde...' : '💾 Sauvegarder' }} />
         </div>
       </div>
     </div>
@@ -707,7 +703,7 @@ function EmailPanel() {
       </div>
       <button onClick={testerEmail} disabled={testing}
         className="w-full py-3 rounded-lg bg-blue-600 text-white font-semibold disabled:opacity-50"
-        dangerouslySetInnerHTML={{ __html: testing ? 'Envoi...' : '&#x1F4E7; Envoyer un email de test' }} />
+        dangerouslySetInnerHTML={{ __html: testing ? 'Envoi...' : '📧 Envoyer un email de test' }} />
     </div>
   )
 }
@@ -765,29 +761,26 @@ function ExportPanel() {
   }
 
   const exports = [
-    { key: 'clients',        label: 'Clients',         icon: '&#x1F464;', desc: 'Noms, téléphones, liens boutique' },
-    { key: 'bons_livraison', label: 'Commandes (BLs)', icon: '&#x1F4E6;', desc: 'Tous les bons de livraison' },
-    { key: 'semis',          label: 'Semis',           icon: '&#x1F331;', desc: 'Historique des semis' },
-    { key: 'cahier_culture', label: 'Cahier terrain',  icon: '&#x1F4D6;', desc: 'Toutes les entrées terrain' },
-    { key: 'taches',         label: 'Tâches',     icon: '&#x2705;',  desc: 'Agenda et tâches' },
-    { key: 'pertes',         label: 'Pertes',          icon: '&#x1F4C9;', desc: 'Invendus et pertes' },
-    { key: 'especes',        label: 'Espèces',    icon: '&#x1F33F;', desc: 'Catalogue des espèces micropousses' },
+    { key: 'clients',        label: 'Clients',         icon: '👤', desc: 'Noms, téléphones, liens boutique' },
+    { key: 'bons_livraison', label: 'Commandes (BLs)', icon: '📦', desc: 'Tous les bons de livraison' },
+    { key: 'semis',          label: 'Semis',           icon: '🌱', desc: 'Historique des semis' },
+    { key: 'cahier_culture', label: 'Cahier terrain',  icon: '📖', desc: 'Toutes les entrées terrain' },
+    { key: 'taches',         label: 'Tâches',          icon: '✅', desc: 'Agenda et tâches' },
+    { key: 'pertes',         label: 'Pertes',          icon: '📉', desc: 'Invendus et pertes' },
+    { key: 'especes',        label: 'Espèces',         icon: '🌿', desc: 'Catalogue des espèces micropousses' },
   ]
 
   return (
     <div className="space-y-4">
       <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 text-sm text-blue-800">
-        <div className="font-bold mb-1">&#x1F4BE; Export de vos donn&eacute;es</div>
+        <div className="font-bold mb-1">💾 Export de vos donn&eacute;es</div>
         Les fichiers CSV s&apos;ouvrent directement dans Excel ou Google Sheets.
         Faites un export complet 1&times;/semaine pour sauvegarder toutes vos donn&eacute;es.
       </div>
       <button onClick={exporterTout} disabled={!!exporting}
-        className="w-full py-4 rounded-2xl font-bold text-base flex items-center justify-center gap-3 active:scale-95 transition-transform disabled:opacity-60 bg-green-700 text-white shadow-sm"
-        dangerouslySetInnerHTML={{ __html: exporting === 'all'
-          ? '<span class="animate-spin">&#x23F3;</span> Export en cours&hellip;'
-          : done === 'all'
-          ? '&#x2705; T&eacute;l&eacute;charg&eacute; !'
-          : '<span>&#x1F4E6;</span> Export complet (toutes les tables)' }} />
+        className="w-full py-4 rounded-2xl font-bold text-base flex items-center justify-center gap-3 active:scale-95 transition-transform disabled:opacity-60 bg-green-700 text-white shadow-sm">
+        {exporting === 'all' ? '⏳ Export en cours…' : done === 'all' ? '✅ Téléchargé !' : '📦 Export complet (toutes les tables)'}
+      </button>
       <div className="text-xs font-bold text-gray-400 uppercase tracking-wider">Par table</div>
       <div className="space-y-2">
         {exports.map(e => (
@@ -795,7 +788,7 @@ function ExportPanel() {
             onClick={() => exporter(e.key, e.label.toLowerCase().replace(/\s/g, '_'))}
             disabled={!!exporting}
             className="w-full flex items-center gap-3 bg-white border border-gray-100 rounded-2xl px-4 py-3 active:scale-95 transition-transform disabled:opacity-60 shadow-sm text-left">
-            <span className="text-2xl" dangerouslySetInnerHTML={{ __html: e.icon }} />
+            <span className="text-2xl leading-none">{e.icon}</span>
             <div className="flex-1">
               <div className="font-semibold text-sm text-gray-800">{e.label}</div>
               <div className="text-xs text-gray-400">{e.desc}</div>
@@ -803,10 +796,9 @@ function ExportPanel() {
             <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
               exporting === e.key ? 'bg-amber-100 text-amber-700' :
               done === e.key     ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
-            }`} dangerouslySetInnerHTML={{ __html:
-              exporting === e.key ? '&#x23F3; &hellip;' :
-              done === e.key      ? '&#x2705; OK' : '&#x2193; CSV'
-            }} />
+            }`}>
+              {exporting === e.key ? '⏳' : done === e.key ? '✅ OK' : '↓ CSV'}
+            </span>
           </button>
         ))}
       </div>
@@ -861,7 +853,7 @@ function TachesPanel() {
   return (
     <div className="space-y-4">
       <div className="bg-green-50 border border-green-200 rounded-2xl p-4 text-sm text-green-900">
-        <div className="font-bold mb-1">Catalogue de tâches maraîchér</div>
+        <div className="font-bold mb-1">Catalogue de tâches maraîcher</div>
         <div className="text-xs text-green-700">
           {catalogue.length} tâches au total &middot; {activeCount} actives.
           Associez les tâches typiques à chaque zone pour des suggestions personnalisées.
@@ -897,7 +889,7 @@ function TachesPanel() {
                     className={`w-full flex items-center gap-3 px-4 py-3 border-b border-gray-50 last:border-0 text-left active:bg-gray-50 ${!c.active ? 'opacity-40' : ''}`}>
                     <div className={`w-6 h-6 rounded-full border-2 flex-shrink-0 flex items-center justify-center text-xs
                       ${c.active ? 'bg-green-600 border-green-600 text-white' : 'border-gray-300 bg-white'}`}>
-                      {c.active && 'v'}
+                      {c.active && '✓'}
                     </div>
                     <span className="text-sm text-gray-800 flex-1">{c.titre}</span>
                     {saving === c.id && <span className="text-xs text-gray-400 animate-pulse">...</span>}
@@ -930,7 +922,7 @@ function TachesPanel() {
                       className="w-full flex items-center gap-3 px-4 py-3 border-b border-gray-50 last:border-0 text-left active:bg-gray-50">
                       <div className={`w-6 h-6 rounded-full border-2 flex-shrink-0 flex items-center justify-center text-xs
                         ${checked ? 'bg-green-600 border-green-600 text-white' : 'border-gray-300 bg-white'}`}>
-                        {checked && 'v'}
+                        {checked && '✓'}
                       </div>
                       <span className="text-sm text-gray-800 flex-1">{c.titre}</span>
                       {saving === c.id && <span className="text-xs text-gray-400 animate-pulse">...</span>}
