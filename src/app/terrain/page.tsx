@@ -313,10 +313,16 @@ export default function TerrainPage() {
         return data
       }).then(r => r.data),
       fetchWithCache('taches', async () => {
-        const { data } = await supabase.from('taches')
+        // Essai avec la table taches_temps (migration 025)
+        const { data, error } = await supabase.from('taches')
           .select('*, completions:taches_completions(date_completion), temps:taches_temps(id, tache_id, date, auteur, minutes, chrono_debut)')
           .eq('actif', true).order('priorite', { ascending: false })
-        return data
+        if (!error) return data
+        // Fallback si migration 025 pas encore appliquée
+        const { data: d2 } = await supabase.from('taches')
+          .select('*, completions:taches_completions(date_completion)')
+          .eq('actif', true).order('priorite', { ascending: false })
+        return d2
       }).then(r => r.data),
       fetchWithCache('pertes', async () => {
         const { data } = await supabase.from('pertes')
@@ -1228,60 +1234,66 @@ function AgendaTab({ taches, zones, catalogueTaches, zoneTaches, onSaved }: {
               ? Math.max(0, Math.floor((Date.now() - new Date(tt.chrono_debut!).getTime()) / 60000)) + tt.minutes
               : null
             return (
-              <div key={t.id} className={`px-4 py-3 flex items-start gap-3 ${faite ? 'opacity-50' : ''}`}>
-                <button onClick={() => cocher(t)}
-                  className={`mt-0.5 w-7 h-7 rounded-full border-2 flex items-center justify-center flex-shrink-0 active:scale-95 transition-all
-                    ${faite ? 'bg-green-600 border-green-600 text-white' : 'border-gray-300 bg-white'}`}>
-                  {faite && 'v'}
-                </button>
-                <div className="flex-1 min-w-0">
-                  <div className={`text-sm font-semibold ${faite ? 'line-through text-gray-400' : 'text-gray-800'}`}>
-                    {t.titre}
-                  </div>
-                  <div className="text-xs text-gray-400 mt-0.5 flex flex-wrap gap-2">
-                    {zone && <span>{zone.type === 'serre' ? '🪴' : '📍'} {zone.nom}</span>}
-                    <span className={`px-1.5 py-0.5 rounded-full border text-[10px] ${prioriteColor(t.priorite)}`}>
-                      {t.priorite}
-                    </span>
-                    {t.type === 'recurrente' && <span>🔁 {t.frequence}</span>}
-                    {!enChrono && (tt?.minutes ?? 0) > 0 && (
-                      <span className="text-green-700 font-semibold">⏱ {formatDuree(tt!.minutes)}</span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-1.5 mt-1.5">
-                    {enChrono ? (
-                      <>
-                        <span className="text-xs font-bold text-amber-600">⏱ {formatDuree(chronoMin || 0)}</span>
+              <div key={t.id} className={`px-4 py-3 ${faite ? 'opacity-50' : ''}`}>
+                <div className="flex items-start gap-3">
+                  {/* Checkbox */}
+                  <button onClick={() => cocher(t)}
+                    className={`mt-0.5 w-7 h-7 rounded-full border-2 flex items-center justify-center flex-shrink-0 active:scale-95 transition-all
+                      ${faite ? 'bg-green-600 border-green-600 text-white' : 'border-gray-300 bg-white'}`}>
+                    {faite && '✓'}
+                  </button>
+
+                  {/* Titre + badge chrono */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className={`flex-1 text-sm font-semibold leading-snug ${faite ? 'line-through text-gray-400' : 'text-gray-800'}`}>
+                        {t.titre}
+                      </span>
+                      {/* Badge chrono — toujours visible sur la ligne du titre */}
+                      {enChrono ? (
                         <button onClick={() => arreterChrono(t)}
-                          className="text-[11px] px-2.5 py-1 rounded-full bg-red-500 text-white font-semibold active:scale-95 transition-transform">
-                          ⏹ Stop
+                          className="shrink-0 flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-500 text-white text-xs font-bold active:scale-95 transition-transform shadow-sm">
+                          ⏱ {formatDuree(chronoMin || 0)} ⏹
                         </button>
-                      </>
-                    ) : (
-                      <>
-                        <button onClick={() => demarrerChrono(t)}
-                          className="text-[11px] px-2.5 py-1 rounded-full bg-green-600 text-white font-semibold active:scale-95 transition-transform">
-                          ▶️ Chrono
-                        </button>
+                      ) : (tt?.minutes ?? 0) > 0 ? (
                         <button onClick={() => setTempsOuvert(tempsOuvert === t.id ? null : t.id)}
-                          className="text-[11px] px-2.5 py-1 rounded-full border border-gray-200 text-gray-500 font-semibold active:scale-95 transition-transform">
-                          ✏️ +temps
+                          className="shrink-0 flex items-center gap-1 px-2.5 py-1 rounded-full bg-green-100 text-green-800 text-xs font-semibold active:scale-95 transition-transform">
+                          ⏱ {formatDuree(tt!.minutes)}
                         </button>
-                      </>
-                    )}
-                  </div>
-                  {tempsOuvert === t.id && (
-                    <div className="flex gap-1.5 mt-1.5">
-                      {[5, 15, 30, 60].map(m => (
-                        <button key={m} onClick={() => { ajouterTempsManuel(t, m); setTempsOuvert(null) }}
-                          className="text-[11px] px-2.5 py-1 rounded-lg bg-gray-50 border border-gray-200 font-semibold text-gray-600 active:scale-95 transition-transform">
-                          +{m}min
+                      ) : (
+                        <button onClick={() => setTempsOuvert(tempsOuvert === t.id ? null : t.id)}
+                          className="shrink-0 px-2.5 py-1 rounded-full border border-gray-200 text-gray-400 text-xs active:scale-95 transition-transform">
+                          ⏱
                         </button>
-                      ))}
+                      )}
                     </div>
-                  )}
+                    <div className="text-xs text-gray-400 mt-0.5 flex flex-wrap gap-2">
+                      {zone && <span>{zone.type === 'serre' ? '🪴' : '📍'} {zone.nom}</span>}
+                      <span className={`px-1.5 py-0.5 rounded-full border text-[10px] ${prioriteColor(t.priorite)}`}>
+                        {t.priorite}
+                      </span>
+                      {t.type === 'recurrente' && <span>🔁 {t.frequence}</span>}
+                    </div>
+                  </div>
+
+                  <button onClick={() => supprimer(t.id)} className="text-gray-300 active:text-red-400 text-lg leading-none mt-0.5 shrink-0">×</button>
                 </div>
-                <button onClick={() => supprimer(t.id)} className="text-gray-300 active:text-red-400 text-lg leading-none">x</button>
+
+                {/* Panneau temps — s'affiche sous la ligne quand le badge est tappé */}
+                {tempsOuvert === t.id && !enChrono && (
+                  <div className="mt-2 ml-10 flex items-center gap-2 flex-wrap">
+                    <button onClick={() => { demarrerChrono(t); setTempsOuvert(null) }}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-green-600 text-white text-xs font-bold active:scale-95 transition-transform">
+                      ▶️ Démarrer le chrono
+                    </button>
+                    {[5, 15, 30, 60].map(m => (
+                      <button key={m} onClick={() => { ajouterTempsManuel(t, m); setTempsOuvert(null) }}
+                        className="px-3 py-2 rounded-xl bg-gray-100 text-gray-700 text-xs font-semibold active:scale-95 transition-transform">
+                        +{m} min
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             )
           })}

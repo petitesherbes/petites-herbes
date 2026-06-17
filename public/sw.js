@@ -17,7 +17,15 @@ const SHELL = [
 
 self.addEventListener('install', e => {
   e.waitUntil(
-    caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())
+    caches.open(CACHE).then(async c => {
+      // Fichiers garantis statiques — échec bloquant
+      await c.addAll(['/manifest.json', '/favicon.ico'])
+      // Pages SSR : on essaie chacune sans bloquer l'install si erreur
+      await Promise.allSettled(SHELL.filter(u => u !== '/manifest.json' && u !== '/favicon.ico').map(url =>
+        fetch(url, { cache: 'no-cache' }).then(r => { if (r.ok) c.put(url, r) }).catch(() => {})
+      ))
+      return self.skipWaiting()
+    })
   )
 })
 
