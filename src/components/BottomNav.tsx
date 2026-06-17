@@ -4,19 +4,31 @@ import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 
-const tabs = [
-  { href: '/',            icon: '🏠', label: 'Accueil' },
-  { href: '/semis',       icon: '🌱', label: 'Semis' },
-  { href: '/commandes',   icon: '🛒', label: 'Commandes' },
-  { href: '/planning',    icon: '📅', label: 'Planning' },
-  { href: '/terrain',     icon: '🌿', label: 'Terrain' },
-  { href: '/stock',       icon: '🌾', label: 'Stock' },
-  { href: '/parametres',  icon: '⚙️',  label: 'Réglages' },
+export const ALL_NAV_TABS = [
+  { href: '/',            icon: '🏠', label: 'Accueil',   locked: true  },
+  { href: '/semis',       icon: '🌱', label: 'Semis',     locked: false },
+  { href: '/commandes',   icon: '🛒', label: 'Commandes', locked: false },
+  { href: '/planning',    icon: '📅', label: 'Planning',  locked: false },
+  { href: '/terrain',     icon: '🌿', label: 'Terrain',   locked: false },
+  { href: '/stock',       icon: '🌾', label: 'Stock',     locked: false },
+  { href: '/parametres',  icon: '⚙️',  label: 'Réglages',  locked: true  },
 ]
 
 export default function BottomNav() {
   const pathname = usePathname()
   const [nbNouvelles, setNbNouvelles] = useState(0)
+  const [visibleHrefs, setVisibleHrefs] = useState<string[] | null>(null)
+
+  useEffect(() => {
+    const stored = localStorage.getItem('nav_visible_tabs')
+    setVisibleHrefs(stored ? JSON.parse(stored) as string[] : ALL_NAV_TABS.map(t => t.href))
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === 'nav_visible_tabs' && e.newValue)
+        setVisibleHrefs(JSON.parse(e.newValue) as string[])
+    }
+    window.addEventListener('storage', onStorage)
+    return () => window.removeEventListener('storage', onStorage)
+  }, [])
 
   // Pages client (boutique) : pas de navigation admin
   const estBoutique = pathname.startsWith('/commander')
@@ -37,6 +49,10 @@ export default function BottomNav() {
   }, [pathname])
 
   if (estBoutique) return null
+
+  const tabs = visibleHrefs
+    ? ALL_NAV_TABS.filter(t => visibleHrefs.includes(t.href))
+    : ALL_NAV_TABS
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-50 shadow-lg"

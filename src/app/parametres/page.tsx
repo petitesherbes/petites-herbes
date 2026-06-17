@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { Espece, Template } from '@/types'
+import { ALL_NAV_TABS } from '@/components/BottomNav'
 
 type ParamsProduction = {
   id: string
@@ -24,7 +25,7 @@ type TemplateComplet = Template & {
 
 export default function ParametresPage() {
   const router = useRouter()
-  const [onglet, setOnglet] = useState<'especes' | 'templates' | 'email' | 'export' | 'taches'>('especes')
+  const [onglet, setOnglet] = useState<'especes' | 'templates' | 'email' | 'export' | 'taches' | 'nav'>('especes')
   const [especes, setEspeces] = useState<Espece[]>([])
   const [templates, setTemplates] = useState<TemplateComplet[]>([])
   const [params, setParams] = useState<ParamsProduction | null>(null)
@@ -70,16 +71,17 @@ export default function ParametresPage() {
     <div className="p-4 space-y-4">
       <h1 className="text-xl font-bold text-green-900">&#x2699;&#xFE0F; Param&egrave;tres</h1>
 
-      <div className="flex rounded-lg overflow-hidden border border-gray-200">
+      <div className="flex rounded-lg overflow-hidden border border-gray-200 overflow-x-auto">
         {[
           { val: 'especes',   label: '&#127807; Esp&egrave;ces' },
           { val: 'templates', label: '&#128203; Templates' },
           { val: 'taches',    label: 'T&acirc;ches' },
+          { val: 'nav',       label: '&#128241; Nav' },
           { val: 'email',     label: '&#128231; Email' },
           { val: 'export',    label: '&#128190; Export' },
         ].map(o => (
           <button key={o.val} onClick={() => setOnglet(o.val as typeof onglet)}
-            className={`flex-1 py-2 text-xs font-medium transition-colors
+            className={`shrink-0 flex-1 py-2 text-xs font-medium transition-colors
               ${onglet === o.val ? 'bg-green-700 text-white' : 'bg-white text-gray-600'}`}
             dangerouslySetInnerHTML={{ __html: o.label }} />
         ))}
@@ -113,6 +115,7 @@ export default function ParametresPage() {
         />
       )}
       {onglet === 'taches'  && <TachesPanel />}
+      {onglet === 'nav'     && <NavPanel />}
       {onglet === 'email'   && <EmailPanel />}
       {onglet === 'export'  && <ExportPanel />}
 
@@ -130,6 +133,52 @@ export default function ParametresPage() {
     </div>
   )
 }
+
+// ─── Nav panel ────────────────────────────────────────────────────────────────
+
+function NavPanel() {
+  const [visible, setVisible] = useState<string[]>(() => {
+    if (typeof window === 'undefined') return ALL_NAV_TABS.map(t => t.href)
+    const stored = localStorage.getItem('nav_visible_tabs')
+    return stored ? JSON.parse(stored) as string[] : ALL_NAV_TABS.map(t => t.href)
+  })
+
+  function toggle(href: string) {
+    const tab = ALL_NAV_TABS.find(t => t.href === href)
+    if (tab?.locked) return
+    const next = visible.includes(href) ? visible.filter(h => h !== href) : [...visible, href]
+    setVisible(next)
+    localStorage.setItem('nav_visible_tabs', JSON.stringify(next))
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-sm text-blue-800">
+        Choisissez les pages &agrave; afficher dans la barre de navigation du bas.
+        Accueil et R&eacute;glages sont toujours pr&eacute;sents.
+      </div>
+      {ALL_NAV_TABS.map(tab => (
+        <button key={tab.href} onClick={() => toggle(tab.href)}
+          disabled={tab.locked}
+          className={`w-full flex items-center gap-4 p-4 rounded-xl border-2 transition-colors text-left
+            ${visible.includes(tab.href) ? 'border-green-600 bg-green-50' : 'border-gray-200 bg-white'}
+            ${tab.locked ? 'opacity-60 cursor-not-allowed' : 'active:scale-95'}`}>
+          <span className="text-2xl leading-none">{tab.icon}</span>
+          <div className="flex-1">
+            <div className="font-semibold text-sm text-gray-800">{tab.label}</div>
+            {tab.locked && <div className="text-xs text-gray-400">Toujours visible</div>}
+          </div>
+          <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs font-bold
+            ${visible.includes(tab.href) ? 'bg-green-600 border-green-600 text-white' : 'border-gray-300 bg-white'}`}>
+            {visible.includes(tab.href) && '&#x2713;'}
+          </div>
+        </button>
+      ))}
+    </div>
+  )
+}
+
+// ─── Templates panel ──────────────────────────────────────────────────────────
 
 function TemplatesPanel({ templates, especes, onEdit, onNouveauTemplate, onRefresh }: {
   templates: TemplateComplet[]; especes: Espece[]
@@ -196,6 +245,8 @@ function TemplatesPanel({ templates, especes, onEdit, onNouveauTemplate, onRefre
   )
 }
 
+// ─── Template modal ───────────────────────────────────────────────────────────
+
 function TemplateModal({ template, especes, onClose, onSave }: {
   template: TemplateComplet | null; especes: Espece[]
   onClose: () => void; onSave: () => void
@@ -208,10 +259,11 @@ function TemplateModal({ template, especes, onClose, onSave }: {
   const [ajoutQte, setAjoutQte] = useState(1)
   const [saving, setSaving] = useState(false)
 
+  // GODET et TERREAU puisent dans le même pool d'espèces "avec terreau"
   const especesFiltrees = especes.filter(e => e.actif && (
-    ajoutFormat === 'TAPIS'   ? e.section === 'TAPIS'   :
-    ajoutFormat === 'GODET'   ? e.section === 'GODETS'  :
-    e.section === 'TERREAU'
+    ajoutFormat === 'TAPIS'
+      ? e.section === 'TAPIS'
+      : (e.section === 'TERREAU' || e.section === 'GODETS')
   ))
 
   async function sauvegarder() {
@@ -347,6 +399,8 @@ function TemplateModal({ template, especes, onClose, onSave }: {
   )
 }
 
+// ─── Espèces panel ────────────────────────────────────────────────────────────
+
 function EspecesPanel({ especes, onEdit, onRefresh, tapis, setTapis, godets, setGodets, sauvegarderSeries, savingParams }: {
   especes: Espece[]
   onEdit: (e: Espece) => void
@@ -358,15 +412,20 @@ function EspecesPanel({ especes, onEdit, onRefresh, tapis, setTapis, godets, set
   sauvegarderSeries: () => void
   savingParams: boolean
 }) {
-  const sections = ['TAPIS', 'TERREAU', 'GODETS'] as const
-  const secIco = { TAPIS: '&#x1F7E9;', TERREAU: '&#x1F7EB;', GODETS: '&#x1F7E7;' }
+  // TERREAU absorbe les anciennes GODETS le temps que la migration SQL tourne
+  const especesTapis   = especes.filter(e => e.section === 'TAPIS')
+  const especesTerreau = especes.filter(e => e.section === 'TERREAU' || e.section === 'GODETS')
+
+  const totalPoidsG = especes.filter(e => e.actif).reduce((s, e) => s + e.stock_actuel_g, 0)
+  const totalValeur = especes.filter(e => e.actif && e.prix_graine_kg)
+    .reduce((s, e) => s + (e.stock_actuel_g / 1000) * (e.prix_graine_kg || 0), 0)
 
   async function toggleActif(e: Espece) {
     await supabase.from('especes').update({ actif: !e.actif }).eq('id', e.id)
     onRefresh()
   }
 
-  async function ajouterEspece(section: 'TAPIS' | 'TERREAU' | 'GODETS') {
+  async function ajouterEspece(section: 'TAPIS' | 'TERREAU') {
     const nom = prompt(`Nom de la nouvelle espèce (${section}) :`)
     if (!nom) return
     await supabase.from('especes').insert({ nom: nom.toUpperCase(), section, actif: true })
@@ -375,6 +434,24 @@ function EspecesPanel({ especes, onEdit, onRefresh, tapis, setTapis, godets, set
 
   return (
     <div className="space-y-4">
+
+      {/* Total stock */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3">
+          <div className="text-xs text-green-700 font-semibold mb-0.5">Stock total</div>
+          <div className="text-xl font-bold text-green-900">
+            {totalPoidsG >= 1000 ? `${(totalPoidsG / 1000).toFixed(2)} kg` : `${totalPoidsG.toFixed(0)} g`}
+          </div>
+          <div className="text-[10px] text-green-600 mt-0.5">toutes esp&egrave;ces actives</div>
+        </div>
+        <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+          <div className="text-xs text-amber-700 font-semibold mb-0.5">Valeur stock</div>
+          <div className="text-xl font-bold text-amber-900">{totalValeur.toFixed(2)} &euro;</div>
+          <div className="text-[10px] text-amber-600 mt-0.5">esp&egrave;ces avec prix renseign&eacute;</div>
+        </div>
+      </div>
+
+      {/* S&eacute;ries de production */}
       <div className="bg-white rounded-2xl border border-green-200 p-4 space-y-3">
         <div className="font-bold text-sm text-green-900">&#x1F331; S&eacute;ries de production</div>
         <div className="grid grid-cols-2 gap-3">
@@ -396,51 +473,87 @@ function EspecesPanel({ especes, onEdit, onRefresh, tapis, setTapis, godets, set
           dangerouslySetInnerHTML={{ __html: savingParams ? 'Sauvegarde...' : '&#x1F4BE; Enregistrer les s&eacute;ries' }} />
       </div>
 
-      {sections.map(sec => (
-        <div key={sec} className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-          <div className="px-3 py-2 bg-gray-50 font-semibold text-sm border-b border-gray-200 flex justify-between items-center">
-            <span dangerouslySetInnerHTML={{ __html: `${secIco[sec]} ${sec}` }} />
-            <button onClick={() => ajouterEspece(sec)}
-              className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
-              + Ajouter
-            </button>
-          </div>
-          <div className="divide-y divide-gray-50">
-            {especes.filter(e => e.section === sec).map(e => (
-              <div key={e.id} className={`px-3 py-2 flex items-center gap-2 ${!e.actif ? 'opacity-40' : ''}`}>
-                {e.photo_url
-                  ? <img src={e.photo_url} alt={e.nom} className="w-9 h-9 rounded-lg object-cover flex-shrink-0" />
-                  : <div className="w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center text-sm font-bold text-gray-300 flex-shrink-0">{e.nom[0]}</div>
-                }
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium truncate">{e.nom}</div>
-                  <div className="text-xs text-gray-400">
-                    {e.prix_graine_kg ? `${e.prix_graine_kg}€/kg` : 'Prix non renseigné'}
-                    {' · '}
-                    {e.stock_actuel_g}g
-                  </div>
-                </div>
-                <button onClick={() => onEdit(e)}
-                  className="text-xs text-blue-600 px-2 py-1 rounded border border-blue-200 flex-shrink-0">
-                  &Eacute;diter
-                </button>
-                <button onClick={() => toggleActif(e)}
-                  className={`text-xs px-2 py-1 rounded border flex-shrink-0 ${e.actif ? 'text-gray-500 border-gray-200' : 'text-green-600 border-green-200'}`}>
-                  {e.actif ? 'Off' : 'On'}
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      ))}
+      {/* TAPIS */}
+      <SectionEspeces
+        titre="&#x1F7E9; TAPIS"
+        especes={especesTapis}
+        onToggleActif={toggleActif}
+        onEdit={onEdit}
+        onAjouter={() => ajouterEspece('TAPIS')}
+      />
+
+      {/* TERREAU (+ anciennes GODETS) */}
+      <SectionEspeces
+        titre="&#x1F7EB; AVEC TERREAU"
+        especes={especesTerreau}
+        onToggleActif={toggleActif}
+        onEdit={onEdit}
+        onAjouter={() => ajouterEspece('TERREAU')}
+      />
     </div>
   )
 }
+
+function SectionEspeces({ titre, especes, onToggleActif, onEdit, onAjouter }: {
+  titre: string
+  especes: Espece[]
+  onToggleActif: (e: Espece) => void
+  onEdit: (e: Espece) => void
+  onAjouter: () => void
+}) {
+  return (
+    <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+      <div className="px-3 py-2 bg-gray-50 font-semibold text-sm border-b border-gray-200 flex justify-between items-center">
+        <span dangerouslySetInnerHTML={{ __html: titre }} />
+        <button onClick={onAjouter}
+          className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
+          + Ajouter
+        </button>
+      </div>
+      <div className="divide-y divide-gray-50">
+        {especes.length === 0 && (
+          <div className="px-3 py-4 text-sm text-gray-400 text-center">Aucune esp&egrave;ce</div>
+        )}
+        {especes.map(e => (
+          <div key={e.id} className={`px-3 py-2 flex items-center gap-2 ${!e.actif ? 'opacity-40' : ''}`}>
+            {e.photo_url
+              ? <img src={e.photo_url} alt={e.nom} className="w-9 h-9 rounded-lg object-cover flex-shrink-0" />
+              : <div className="w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center text-sm font-bold text-gray-300 flex-shrink-0">{e.nom[0]}</div>
+            }
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-medium truncate">{e.nom}</div>
+              <div className="text-xs text-gray-400">
+                {e.prix_graine_kg ? `${e.prix_graine_kg}€/kg` : 'Prix non renseigné'}
+                {' · '}
+                {e.stock_actuel_g >= 1000
+                  ? `${(e.stock_actuel_g / 1000).toFixed(2)} kg`
+                  : `${e.stock_actuel_g} g`}
+              </div>
+            </div>
+            <button onClick={() => onEdit(e)}
+              className="text-xs text-blue-600 px-2 py-1 rounded border border-blue-200 flex-shrink-0">
+              &Eacute;diter
+            </button>
+            <button onClick={() => onToggleActif(e)}
+              className={`text-xs px-2 py-1 rounded border flex-shrink-0 ${e.actif ? 'text-gray-500 border-gray-200' : 'text-green-600 border-green-200'}`}>
+              {e.actif ? 'Off' : 'On'}
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ─── Espèce modal ─────────────────────────────────────────────────────────────
 
 function EspeceModal({ espece, onClose, onSave }: { espece: Espece; onClose: () => void; onSave: () => void }) {
   const fileRef = useRef<HTMLInputElement>(null)
   const [photoUrl, setPhotoUrl] = useState<string | null>(espece.photo_url)
   const [uploading, setUploading] = useState(false)
+  const [section, setSection] = useState<'TAPIS' | 'TERREAU'>(
+    espece.section === 'TAPIS' ? 'TAPIS' : 'TERREAU'
+  )
   const [form, setForm] = useState({
     nom:            espece.nom,
     g_tapis:        espece.g_tapis?.toString()       || '',
@@ -475,6 +588,7 @@ function EspeceModal({ espece, onClose, onSave }: { espece: Espece; onClose: () 
     setSaving(true)
     await supabase.from('especes').update({
       nom:            form.nom,
+      section,
       g_tapis:        n(form.g_tapis),
       g_godet:        n(form.g_godet),
       g_caisse:       n(form.g_caisse),
@@ -492,7 +606,7 @@ function EspeceModal({ espece, onClose, onSave }: { espece: Espece; onClose: () 
   const champs = [
     { key: 'nom',            label: 'Nom',                  type: 'text'   },
     { key: 'stock_actuel_g', label: 'Stock actuel (g)',     type: 'number' },
-    { key: 'prix_graine_kg', label: 'Prix graine (€/kg)',   type: 'number' },
+    { key: 'prix_graine_kg', label: 'Prix graine (€/kg)',  type: 'number' },
     { key: 'g_tapis',        label: 'G/tapis',              type: 'number' },
     { key: 'g_caisse',       label: 'G/caisse terreau',     type: 'number' },
     { key: 'g_godet',        label: 'G/godet',              type: 'number' },
@@ -534,6 +648,22 @@ function EspeceModal({ espece, onClose, onSave }: { espece: Espece; onClose: () 
           )}
         </button>
 
+        {/* Famille */}
+        <div>
+          <label className="block text-xs text-gray-500 mb-1.5">Famille</label>
+          <div className="grid grid-cols-2 gap-2">
+            {(['TAPIS', 'TERREAU'] as const).map(s => (
+              <button key={s} onClick={() => setSection(s)}
+                className={`py-2.5 rounded-xl border-2 text-sm font-semibold transition-colors
+                  ${section === s
+                    ? s === 'TAPIS' ? 'bg-green-50 border-green-600 text-green-800' : 'bg-stone-50 border-stone-500 text-stone-800'
+                    : 'bg-white border-gray-200 text-gray-400'}`}>
+                {s === 'TAPIS' ? '&#x1F7E9; Tapis' : '&#x1F7EB; Avec terreau'}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className="grid grid-cols-2 gap-3">
           {champs.map(c => (
             <div key={c.key} className={c.key === 'nom' ? 'col-span-2' : ''}>
@@ -554,6 +684,8 @@ function EspeceModal({ espece, onClose, onSave }: { espece: Espece; onClose: () 
     </div>
   )
 }
+
+// ─── Email panel ──────────────────────────────────────────────────────────────
 
 function EmailPanel() {
   const [testing, setTesting] = useState(false)
@@ -579,6 +711,8 @@ function EmailPanel() {
     </div>
   )
 }
+
+// ─── Export panel ─────────────────────────────────────────────────────────────
 
 function ExportPanel() {
   const [exporting, setExporting] = useState<string | null>(null)
@@ -679,6 +813,8 @@ function ExportPanel() {
     </div>
   )
 }
+
+// ─── Tâches panel ─────────────────────────────────────────────────────────────
 
 type CatItem       = { id: string; titre: string; categorie: string; icone: string; active: boolean; ordre: number }
 type ZoneLite      = { id: string; nom: string; type: string }
