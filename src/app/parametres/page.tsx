@@ -612,16 +612,18 @@ function EspeceModal({ espece, onClose, onSave }: { espece: Espece; onClose: () 
   async function handlePhoto(file: File) {
     setUploading(true)
     setUploadError(null)
-    const ext  = file.name.split('.').pop()?.toLowerCase() || 'jpg'
-    const path = `${espece.id}.${ext}`
-    const { error } = await supabase.storage
-      .from('especes-photos')
-      .upload(path, file, { upsert: true, contentType: file.type })
-    if (error) {
-      setUploadError(`Erreur upload : ${error.message}`)
+    const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('bucket', 'especes-photos')
+    formData.append('path', `${espece.id}.${ext}`)
+    const res = await fetch('/api/upload', { method: 'POST', body: formData })
+    if (!res.ok) {
+      const json = await res.json().catch(() => ({}))
+      setUploadError(json.error ?? `Erreur ${res.status}`)
     } else {
-      const { data } = supabase.storage.from('especes-photos').getPublicUrl(path)
-      setPhotoUrl(data.publicUrl + `?t=${Date.now()}`)
+      const { url } = await res.json()
+      setPhotoUrl(url + `?t=${Date.now()}`)
     }
     setUploading(false)
   }
