@@ -25,12 +25,16 @@ export async function POST(req: NextRequest) {
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
 
+  // Créer le bucket s'il n'existe pas encore
+  await supabase.storage.createBucket(bucket, { public: true }).catch(() => {})
+
   const bytes = await file.arrayBuffer()
   const { data, error } = await supabase.storage
     .from(bucket)
     .upload(path, bytes, { contentType: file.type, upsert: true })
 
   if (error) {
+    console.error('[upload] supabase error:', error)
     return Response.json({ error: error.message }, { status: 500 })
   }
 
