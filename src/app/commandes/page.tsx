@@ -918,14 +918,16 @@ function ProduitModal({ produit, onClose, onSave }: {
 
   async function uploadPhoto(file: File) {
     setUploading(true)
-    // Creer le bucket si necessaire
-    await supabase.storage.createBucket('product-photos', { public: true }).catch(() => {})
-    const ext = file.name.split('.').pop()
+    const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
     const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
-    const { data, error } = await supabase.storage.from('product-photos').upload(path, file, { upsert: true })
-    if (!error && data) {
-      const { data: { publicUrl } } = supabase.storage.from('product-photos').getPublicUrl(data.path)
-      setForm(p => ({ ...p, photo_url: publicUrl }))
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('bucket', 'product-photos')
+    formData.append('path', path)
+    const res = await fetch('/api/upload', { method: 'POST', body: formData })
+    if (res.ok) {
+      const { url } = await res.json()
+      setForm(p => ({ ...p, photo_url: url }))
     }
     setUploading(false)
   }
