@@ -41,6 +41,7 @@ export default function NouveauSemisPage() {
   const [contenants, setContenants] = useState<Contenant[]>([])
   const [lignes, setLignes] = useState<LigneAvecId[]>([])
   const [saving, setSaving] = useState(false)
+  const [generatingPdf, setGeneratingPdf] = useState(false)
   const [saveAsTemplate, setSaveAsTemplate] = useState(false)
   const [nouveauTemplateName, setNouveauTemplateName] = useState('')
   const [avertissements, setAvertissements] = useState<string[]>([])
@@ -181,6 +182,39 @@ export default function NouveauSemisPage() {
     const coutC = calculerCoutContenant(l.format, l.quantite, contenants, params)
     return { poids, prod, coutG, coutT, coutC, total: coutG + coutT + coutC }
   }, [params, contenants, especes])
+
+  async function telechargerBonTravail() {
+    setGeneratingPdf(true)
+    try {
+      const body = {
+        lignes: lignes.map(l => ({
+          espece: l.espece?.nom ?? '',
+          format: l.format,
+          quantite: l.quantite,
+          poids: calculerLigne(l).poids,
+        })),
+        dateSemis,
+        templateNom: templateChoisi || undefined,
+        tapisParCaisse: params?.tapis_par_caisse ?? 24,
+        godetsParSerie: params?.godets_par_serie ?? 14,
+      }
+      const res = await fetch('/api/pdf/semis', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (res.ok) {
+        const blob = await res.blob()
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url; a.download = `semis-${dateSemis}.pdf`
+        document.body.appendChild(a); a.click()
+        document.body.removeChild(a); URL.revokeObjectURL(url)
+      }
+    } finally {
+      setGeneratingPdf(false)
+    }
+  }
 
   const recap = recapSemis(lignes)
   const totalPoids = lignes.reduce((s, l) => s + calculerLigne(l).poids, 0)
@@ -512,6 +546,11 @@ export default function NouveauSemisPage() {
       <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 text-sm text-blue-700">
         📧 Un bon de production sera envoyé par email automatiquement.
       </div>
+
+      <button onClick={telechargerBonTravail} disabled={generatingPdf || saving}
+        className="w-full border-2 border-green-600 text-green-700 py-3.5 rounded-xl font-semibold text-sm disabled:opacity-50 active:scale-95 transition-transform flex items-center justify-center gap-2">
+        {generatingPdf ? '⏳ Génération PDF...' : '📄 Télécharger le bon de travail'}
+      </button>
 
       <button onClick={validerSemis} disabled={saving}
         className="w-full bg-green-700 hover:bg-green-800 text-white py-4 rounded-xl font-bold text-base disabled:opacity-50 transition-colors shadow-sm">

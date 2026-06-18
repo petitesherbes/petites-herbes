@@ -69,16 +69,16 @@ export default function ParametresPage() {
 
   return (
     <div className="p-4 space-y-4">
-      <h1 className="text-xl font-bold text-green-900">⚙️ Param&egrave;tres</h1>
+      <h1 className="text-xl font-bold text-green-900">&#x2699;&#xFE0F; Param&egrave;tres</h1>
 
       <div className="flex rounded-lg overflow-hidden border border-gray-200 overflow-x-auto">
         {[
-          { val: 'especes',   label: '🌿 Esp&egrave;ces' },
-          { val: 'templates', label: '📋 Templates' },
+          { val: 'especes',   label: '&#x1F33F; Esp&egrave;ces' },
+          { val: 'templates', label: '&#x1F4CB; Templates' },
           { val: 'taches',    label: 'T&acirc;ches' },
-          { val: 'nav',       label: '📱 Nav' },
-          { val: 'email',     label: '📧 Email' },
-          { val: 'export',    label: '💾 Export' },
+          { val: 'nav',       label: '&#x1F4F1; Nav' },
+          { val: 'email',     label: '&#x1F4E7; Email' },
+          { val: 'export',    label: '&#x1F4BE; Export' },
         ].map(o => (
           <button key={o.val} onClick={() => setOnglet(o.val as typeof onglet)}
             className={`shrink-0 flex-1 py-2 text-xs font-medium transition-colors
@@ -90,13 +90,13 @@ export default function ParametresPage() {
       <div className="grid grid-cols-2 gap-2">
         <button onClick={() => router.push('/couts')}
           className="flex items-center justify-between p-3 bg-amber-50 border border-amber-200 rounded-xl text-sm">
-          <span className="font-medium text-amber-800 text-xs">📊 Co&ucirc;ts production</span>
-          <span className="text-amber-600">›</span>
+          <span className="font-medium text-amber-800 text-xs">&#x1F4CA; Co&ucirc;ts production</span>
+          <span className="text-amber-600">&#x203A;</span>
         </button>
         <button onClick={() => router.push('/stock')}
           className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-xl text-sm">
-          <span className="font-medium text-green-800 text-xs">🌾 Stock &amp; produits</span>
-          <span className="text-green-600">›</span>
+          <span className="font-medium text-green-800 text-xs">&#x1F33E; Stock &amp; produits</span>
+          <span className="text-green-600">&#x203A;</span>
         </button>
       </div>
 
@@ -177,7 +177,7 @@ function NavPanel() {
           </div>
           <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs font-bold
             ${visible.includes(tab.href) ? 'bg-green-600 border-green-600 text-white' : 'border-gray-300 bg-white'}`}>
-            {visible.includes(tab.href) ? '✓' : ''}
+            {visible.includes(tab.href) ? '&#x2713;' : ''}
           </div>
         </button>
       ))}
@@ -221,11 +221,11 @@ function TemplatesPanel({ templates, especes, onEdit, onNouveauTemplate, onRefre
             <div className="flex gap-2 flex-shrink-0">
               <button onClick={() => onEdit(t)}
                 className="text-xs text-blue-600 px-3 py-1.5 rounded-lg border border-blue-200 font-semibold">
-                ✏️ &Eacute;diter
+                &#x270F;&#xFE0F; &Eacute;diter
               </button>
               <button onClick={() => supprimer(t.id)}
                 className="text-xs text-red-400 px-3 py-1.5 rounded-lg border border-red-200 font-semibold">
-                🗑️
+                &#x1F5D1;&#xFE0F;
               </button>
             </div>
           </div>
@@ -261,10 +261,15 @@ function TemplateModal({ template, especes, onClose, onSave }: {
   const [nom, setNom] = useState(template?.nom || '')
   const [description, setDescription] = useState(template?.description || '')
   const [lignes, setLignes] = useState<TemplateLigneComplet[]>(template?.templates_lignes || [])
+  const [editIdx, setEditIdx] = useState<number | null>(null)
   const [ajoutEspId, setAjoutEspId] = useState('')
   const [ajoutFormat, setAjoutFormat] = useState<'TAPIS' | 'GODET' | 'TERREAU'>('TAPIS')
   const [ajoutQte, setAjoutQte] = useState(1)
   const [saving, setSaving] = useState(false)
+
+  function updateLigne(idx: number, patch: Partial<TemplateLigneComplet>) {
+    setLignes(prev => prev.map((l, i) => i === idx ? { ...l, ...patch } : l))
+  }
 
   const especesFiltrees = especes.filter(e => e.actif && (
     ajoutFormat === 'TAPIS'
@@ -340,20 +345,56 @@ function TemplateModal({ template, especes, onClose, onSave }: {
             <div className="text-xs font-bold text-gray-500 uppercase tracking-wider">Lignes</div>
             <div className="bg-gray-50 rounded-xl overflow-hidden divide-y divide-gray-100">
               {lignes.map((l, idx) => (
-                <div key={idx} className="px-3 py-2.5 flex items-center gap-2">
-                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold
-                    ${l.format === 'TAPIS' ? 'bg-green-100 text-green-700' :
-                      l.format === 'GODET' ? 'bg-orange-100 text-orange-700' :
-                      'bg-gray-200 text-gray-600'}`}>
-                    {l.format}
-                  </span>
-                  <span className="flex-1 text-sm font-medium">
-                    {l.espece?.nom || especes.find(e => e.id === l.espece_id)?.nom || '?'}
-                  </span>
-                  <span className="text-sm text-gray-500">&times;{l.quantite}</span>
-                  <button onClick={() => setLignes(prev => prev.filter((_, i) => i !== idx))}
-                    className="text-red-400 text-sm px-1 font-bold">&times;</button>
-                </div>
+                editIdx === idx ? (
+                  /* Mode édition inline */
+                  <div key={idx} className="px-3 py-3 bg-green-50 border-l-2 border-green-500 space-y-2">
+                    <div className="text-xs font-semibold text-green-800 truncate">
+                      {l.espece?.nom || especes.find(e => e.id === l.espece_id)?.nom}
+                    </div>
+                    <div className="flex gap-1">
+                      {(['TAPIS', 'GODET', 'TERREAU'] as const).map(f => (
+                        <button key={f} onClick={() => updateLigne(idx, { format: f })}
+                          className={`flex-1 py-1.5 rounded text-[10px] font-bold border transition-colors
+                            ${l.format === f ? 'bg-green-700 text-white border-green-700' : 'bg-white text-gray-500 border-gray-200'}`}>
+                          {f}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-gray-500">Qté :</span>
+                      <input type="number" min={1} value={l.quantite}
+                        onChange={e => { const v = parseInt(e.target.value); if (!isNaN(v) && v >= 1) updateLigne(idx, { quantite: v }) }}
+                        className="w-16 border border-gray-200 rounded-lg px-2 py-1.5 text-sm font-bold text-center focus:outline-none focus:border-green-400" />
+                      <div className="flex-1" />
+                      <button onClick={() => setEditIdx(null)}
+                        className="text-xs bg-green-700 text-white px-3 py-1.5 rounded-lg font-semibold active:scale-95">
+                        OK
+                      </button>
+                      <button onClick={() => { setLignes(prev => prev.filter((_, i) => i !== idx)); setEditIdx(null) }}
+                        className="text-xs text-red-400 border border-red-200 px-2 py-1.5 rounded-lg font-semibold active:scale-95">
+                        Suppr.
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  /* Mode lecture */
+                  <div key={idx} className="px-3 py-2.5 flex items-center gap-2">
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold flex-shrink-0
+                      ${l.format === 'TAPIS' ? 'bg-green-100 text-green-700' :
+                        l.format === 'GODET' ? 'bg-orange-100 text-orange-700' :
+                        'bg-gray-200 text-gray-600'}`}>
+                      {l.format}
+                    </span>
+                    <span className="flex-1 text-sm font-medium truncate">
+                      {l.espece?.nom || especes.find(e => e.id === l.espece_id)?.nom || '?'}
+                    </span>
+                    <span className="text-sm text-gray-500 flex-shrink-0">&times;{l.quantite}</span>
+                    <button onClick={() => { setEditIdx(idx) }}
+                      className="text-blue-400 text-sm px-1 flex-shrink-0" title="Modifier">&#x270F;&#xFE0F;</button>
+                    <button onClick={() => setLignes(prev => prev.filter((_, i) => i !== idx))}
+                      className="text-red-400 text-sm px-1 font-bold flex-shrink-0">&times;</button>
+                  </div>
+                )
               ))}
             </div>
           </div>
@@ -378,11 +419,9 @@ function TemplateModal({ template, especes, onClose, onSave }: {
           <div className="flex gap-2 items-center">
             <div className="flex items-center gap-2 flex-1">
               <span className="text-xs text-gray-500">Qt&eacute; :</span>
-              <button onClick={() => setAjoutQte(q => Math.max(1, q - 1))}
-                className="w-8 h-8 rounded-lg bg-gray-200 text-gray-700 font-bold active:scale-95">&minus;</button>
-              <span className="text-sm font-bold w-6 text-center">{ajoutQte}</span>
-              <button onClick={() => setAjoutQte(q => q + 1)}
-                className="w-8 h-8 rounded-lg bg-green-700 text-white font-bold active:scale-95">+</button>
+              <input type="number" min={1} value={ajoutQte}
+                onChange={e => { const v = parseInt(e.target.value); if (!isNaN(v) && v >= 1) setAjoutQte(v) }}
+                className="w-16 border border-gray-200 rounded-lg px-2 py-1.5 text-sm font-bold text-center focus:outline-none focus:border-green-400" />
             </div>
             <button onClick={ajouterLigne} disabled={!ajoutEspId}
               className="px-4 py-2 bg-green-700 text-white rounded-lg text-sm font-semibold disabled:opacity-40 active:scale-95">
@@ -398,7 +437,7 @@ function TemplateModal({ template, especes, onClose, onSave }: {
           </button>
           <button onClick={sauvegarder} disabled={saving || !nom.trim()}
             className="flex-1 py-3 rounded-xl bg-green-700 text-white font-bold disabled:opacity-50 active:scale-95"
-            dangerouslySetInnerHTML={{ __html: saving ? 'Sauvegarde...' : '💾 Sauvegarder' }} />
+            dangerouslySetInnerHTML={{ __html: saving ? 'Sauvegarde...' : '&#x1F4BE; Sauvegarder' }} />
         </div>
       </div>
     </div>
@@ -456,7 +495,7 @@ function EspecesPanel({ especes, onEdit, onRefresh, tapis, setTapis, godets, set
       </div>
 
       <div className="bg-white rounded-2xl border border-green-200 p-4 space-y-3">
-        <div className="font-bold text-sm text-green-900">🌱 S&eacute;ries de production</div>
+        <div className="font-bold text-sm text-green-900">&#x1F331; S&eacute;ries de production</div>
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-xs text-gray-500 mb-1">Tapis par s&eacute;rie (caisse)</label>
@@ -473,11 +512,11 @@ function EspecesPanel({ especes, onEdit, onRefresh, tapis, setTapis, godets, set
         </div>
         <button onClick={sauvegarderSeries} disabled={savingParams}
           className="w-full bg-green-700 text-white py-2.5 rounded-xl font-semibold text-sm active:scale-95 transition-transform disabled:opacity-50"
-          dangerouslySetInnerHTML={{ __html: savingParams ? 'Sauvegarde...' : '💾 Enregistrer les s&eacute;ries' }} />
+          dangerouslySetInnerHTML={{ __html: savingParams ? 'Sauvegarde...' : '&#x1F4BE; Enregistrer les s&eacute;ries' }} />
       </div>
 
       <SectionEspeces
-        titre="🟩 TAPIS"
+        titre="&#x1F7E9; TAPIS"
         especes={especesTapis}
         onToggleActif={toggleActif}
         onEdit={onEdit}
@@ -485,7 +524,7 @@ function EspecesPanel({ especes, onEdit, onRefresh, tapis, setTapis, godets, set
       />
 
       <SectionEspeces
-        titre="🟫 AVEC TERREAU"
+        titre="&#x1F7EB; AVEC TERREAU"
         especes={especesTerreau}
         onToggleActif={toggleActif}
         onEdit={onEdit}
@@ -552,6 +591,7 @@ function EspeceModal({ espece, onClose, onSave }: { espece: Espece; onClose: () 
   const fileRef = useRef<HTMLInputElement>(null)
   const [photoUrl, setPhotoUrl] = useState<string | null>(espece.photo_url)
   const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
   const [section, setSection] = useState<'TAPIS' | 'TERREAU'>(
     espece.section === 'TAPIS' ? 'TAPIS' : 'TERREAU'
   )
@@ -571,14 +611,17 @@ function EspeceModal({ espece, onClose, onSave }: { espece: Espece; onClose: () 
 
   async function handlePhoto(file: File) {
     setUploading(true)
-    const ext  = file.name.split('.').pop() || 'jpg'
+    setUploadError(null)
+    const ext  = file.name.split('.').pop()?.toLowerCase() || 'jpg'
     const path = `${espece.id}.${ext}`
     const { error } = await supabase.storage
       .from('especes-photos')
       .upload(path, file, { upsert: true, contentType: file.type })
-    if (!error) {
+    if (error) {
+      setUploadError(`Erreur upload : ${error.message}`)
+    } else {
       const { data } = supabase.storage.from('especes-photos').getPublicUrl(path)
-      setPhotoUrl(data.publicUrl)
+      setPhotoUrl(data.publicUrl + `?t=${Date.now()}`)
     }
     setUploading(false)
   }
@@ -632,13 +675,13 @@ function EspeceModal({ espece, onClose, onSave }: { espece: Espece; onClose: () 
             <img src={photoUrl} alt={espece.nom} className="w-full h-full object-cover" />
           ) : (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-gray-400">
-              <span className="text-2xl">📷</span>
-              <span className="text-xs">Ajouter une photo</span>
+              <span className="text-2xl">&#x1F4F7;</span>
+              <span className="text-xs">Toucher pour ajouter une photo</span>
             </div>
           )}
           {uploading && (
-            <div className="absolute inset-0 bg-white/70 flex items-center justify-center">
-              <span className="text-sm text-gray-600 animate-pulse">Envoi...</span>
+            <div className="absolute inset-0 bg-white/80 flex items-center justify-center">
+              <span className="text-sm text-gray-600 animate-pulse">Envoi en cours...</span>
             </div>
           )}
           {photoUrl && !uploading && (
@@ -647,6 +690,13 @@ function EspeceModal({ espece, onClose, onSave }: { espece: Espece; onClose: () 
             </div>
           )}
         </button>
+
+        {uploadError && (
+          <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-xs text-red-700">
+            {uploadError}
+            <div className="mt-1 text-red-500">V&eacute;rifiez que le bucket &laquo;especes-photos&raquo; existe dans Supabase Storage avec une policy publique.</div>
+          </div>
+        )}
 
         <div>
           <label className="block text-xs text-gray-500 mb-1.5">Famille</label>
@@ -657,7 +707,7 @@ function EspeceModal({ espece, onClose, onSave }: { espece: Espece; onClose: () 
                   ${section === s
                     ? s === 'TAPIS' ? 'bg-green-50 border-green-600 text-green-800' : 'bg-stone-50 border-stone-500 text-stone-800'
                     : 'bg-white border-gray-200 text-gray-400'}`}>
-                {s === 'TAPIS' ? '🟩 Tapis' : '🟫 Avec terreau'}
+                {s === 'TAPIS' ? '&#x1F7E9; Tapis' : '&#x1F7EB; Avec terreau'}
               </button>
             ))}
           </div>
@@ -677,7 +727,7 @@ function EspeceModal({ espece, onClose, onSave }: { espece: Espece; onClose: () 
           <button onClick={onClose} className="flex-1 py-3 rounded-lg border border-gray-200 text-gray-600">Annuler</button>
           <button onClick={sauvegarder} disabled={saving || uploading}
             className="flex-1 py-3 rounded-lg bg-green-700 text-white font-semibold disabled:opacity-50"
-            dangerouslySetInnerHTML={{ __html: saving ? 'Sauvegarde...' : '💾 Sauvegarder' }} />
+            dangerouslySetInnerHTML={{ __html: saving ? 'Sauvegarde...' : '&#x1F4BE; Sauvegarder' }} />
         </div>
       </div>
     </div>
@@ -706,7 +756,7 @@ function EmailPanel() {
       </div>
       <button onClick={testerEmail} disabled={testing}
         className="w-full py-3 rounded-lg bg-blue-600 text-white font-semibold disabled:opacity-50"
-        dangerouslySetInnerHTML={{ __html: testing ? 'Envoi...' : '📧 Envoyer un email de test' }} />
+        dangerouslySetInnerHTML={{ __html: testing ? 'Envoi...' : '&#x1F4E7; Envoyer un email de test' }} />
     </div>
   )
 }
@@ -764,25 +814,25 @@ function ExportPanel() {
   }
 
   const exports = [
-    { key: 'clients',        label: 'Clients',         icon: '👤', desc: 'Noms, téléphones, liens boutique' },
-    { key: 'bons_livraison', label: 'Commandes (BLs)', icon: '📦', desc: 'Tous les bons de livraison' },
-    { key: 'semis',          label: 'Semis',           icon: '🌱', desc: 'Historique des semis' },
-    { key: 'cahier_culture', label: 'Cahier terrain',  icon: '📖', desc: 'Toutes les entrées terrain' },
-    { key: 'taches',         label: 'Tâches',          icon: '✅', desc: 'Agenda et tâches' },
-    { key: 'pertes',         label: 'Pertes',          icon: '📉', desc: 'Invendus et pertes' },
-    { key: 'especes',        label: 'Espèces',         icon: '🌿', desc: 'Catalogue des espèces micropousses' },
+    { key: 'clients',        label: 'Clients',         icon: '&#x1F464;', desc: 'Noms, téléphones, liens boutique' },
+    { key: 'bons_livraison', label: 'Commandes (BLs)', icon: '&#x1F4E6;', desc: 'Tous les bons de livraison' },
+    { key: 'semis',          label: 'Semis',           icon: '&#x1F331;', desc: 'Historique des semis' },
+    { key: 'cahier_culture', label: 'Cahier terrain',  icon: '&#x1F4D6;', desc: 'Toutes les entrées terrain' },
+    { key: 'taches',         label: 'Tâches',          icon: '&#x2705;',  desc: 'Agenda et tâches' },
+    { key: 'pertes',         label: 'Pertes',          icon: '&#x1F4C9;', desc: 'Invendus et pertes' },
+    { key: 'especes',        label: 'Espèces',         icon: '&#x1F33F;', desc: 'Catalogue des espèces micropousses' },
   ]
 
   return (
     <div className="space-y-4">
       <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 text-sm text-blue-800">
-        <div className="font-bold mb-1">💾 Export de vos donn&eacute;es</div>
+        <div className="font-bold mb-1">&#x1F4BE; Export de vos donn&eacute;es</div>
         Les fichiers CSV s&apos;ouvrent directement dans Excel ou Google Sheets.
         Faites un export complet 1&times;/semaine pour sauvegarder toutes vos donn&eacute;es.
       </div>
       <button onClick={exporterTout} disabled={!!exporting}
         className="w-full py-4 rounded-2xl font-bold text-base flex items-center justify-center gap-3 active:scale-95 transition-transform disabled:opacity-60 bg-green-700 text-white shadow-sm">
-        {exporting === 'all' ? '⏳ Export en cours…' : done === 'all' ? '✅ Téléchargé !' : '\u{1F4E6} Export complet (toutes les tables)'}
+        {exporting === 'all' ? '&#x23F3; Export en cours…' : done === 'all' ? '&#x2705; Téléchargé !' : '&#x1F4E6; Export complet (toutes les tables)'}
       </button>
       <div className="text-xs font-bold text-gray-400 uppercase tracking-wider">Par table</div>
       <div className="space-y-2">
@@ -791,7 +841,7 @@ function ExportPanel() {
             onClick={() => exporter(e.key, e.label.toLowerCase().replace(/\s/g, '_'))}
             disabled={!!exporting}
             className="w-full flex items-center gap-3 bg-white border border-gray-100 rounded-2xl px-4 py-3 active:scale-95 transition-transform disabled:opacity-60 shadow-sm text-left">
-            <span className="text-2xl leading-none">{e.icon}</span>
+            <span className="text-2xl leading-none" dangerouslySetInnerHTML={{ __html: e.icon }} />
             <div className="flex-1">
               <div className="font-semibold text-sm text-gray-800">{e.label}</div>
               <div className="text-xs text-gray-400">{e.desc}</div>
@@ -800,7 +850,7 @@ function ExportPanel() {
               exporting === e.key ? 'bg-amber-100 text-amber-700' :
               done === e.key     ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
             }`}>
-              {exporting === e.key ? '⏳' : done === e.key ? '✅ OK' : '↓ CSV'}
+              {exporting === e.key ? '&#x23F3;' : done === e.key ? '&#x2705; OK' : '&#x2193; CSV'}
             </span>
           </button>
         ))}
@@ -892,7 +942,7 @@ function TachesPanel() {
                     className={`w-full flex items-center gap-3 px-4 py-3 border-b border-gray-50 last:border-0 text-left active:bg-gray-50 ${!c.active ? 'opacity-40' : ''}`}>
                     <div className={`w-6 h-6 rounded-full border-2 flex-shrink-0 flex items-center justify-center text-xs
                       ${c.active ? 'bg-green-600 border-green-600 text-white' : 'border-gray-300 bg-white'}`}>
-                      {c.active ? '✓' : ''}
+                      {c.active ? '&#x2713;' : ''}
                     </div>
                     <span className="text-sm text-gray-800 flex-1">{c.titre}</span>
                     {saving === c.id && <span className="text-xs text-gray-400 animate-pulse">...</span>}
@@ -925,7 +975,7 @@ function TachesPanel() {
                       className="w-full flex items-center gap-3 px-4 py-3 border-b border-gray-50 last:border-0 text-left active:bg-gray-50">
                       <div className={`w-6 h-6 rounded-full border-2 flex-shrink-0 flex items-center justify-center text-xs
                         ${checked ? 'bg-green-600 border-green-600 text-white' : 'border-gray-300 bg-white'}`}>
-                        {checked ? '✓' : ''}
+                        {checked ? '&#x2713;' : ''}
                       </div>
                       <span className="text-sm text-gray-800 flex-1">{c.titre}</span>
                       {saving === c.id && <span className="text-xs text-gray-400 animate-pulse">...</span>}
