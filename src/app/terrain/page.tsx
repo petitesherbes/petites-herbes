@@ -2600,12 +2600,13 @@ function CulturesTab({ cultures, zones, onSaved }: {
       espece: espece.trim(), nom: nom.trim() || null, famille,
       zone_id: zoneId || null, quantite: quantite.trim() || null,
       notes: notes.trim() || null, date_semis: dateSemis || null,
-      statut: 'semis' as StatutCulture,
+      statut: 'semis' as StatutCulture, actif: true,
     }
     if (!navigator.onLine) {
       await queueMutation({ table: 'cultures', method: 'insert', payload })
     } else {
-      await supabase.from('cultures').insert(payload)
+      const { error } = await supabase.from('cultures').insert(payload)
+      if (error) { console.error('[cultures insert]', error); setSaving(false); return }
     }
     setSaving(false); setAjout(false)
     setEspece(''); setNom(''); setZoneId(''); setQuantite(''); setNotes('')
