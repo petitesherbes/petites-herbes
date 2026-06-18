@@ -4,6 +4,7 @@ import BottomNav from '@/components/BottomNav'
 import PwaRegister from '@/components/PwaRegister'
 import ApercuChef from '@/components/ApercuChef'
 import OfflineBanner from '@/components/OfflineBanner'
+import TaskPanel from '@/components/TaskPanel'
 
 export const metadata: Metadata = {
   title: 'GAEC Les Petites Herbes',
@@ -39,6 +40,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <main className="flex-1 max-w-2xl mx-auto w-full pb-2">
           {children}
         </main>
+        <TaskPanel />
         <ApercuChef />
         <BottomNav />
       </body>

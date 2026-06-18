@@ -620,22 +620,39 @@ function CahierTab({ zones, especes, especesSerre, produits, entrees, onSaved, o
   const [filtre, setFiltre]         = useState<'tout' | 'traitements'>('tout')
   const [uploadingPhoto, setUploadingPhoto] = useState<string | null>(null)
   const [pendingPhotos, setPendingPhotos] = useState<Record<string, string[]>>({})
+  const [photoErreur, setPhotoErreur] = useState<{ id: string; msg: string } | null>(null)
 
   async function uploadPhoto(entreeId: string, file: File) {
     setUploadingPhoto(entreeId)
+    setPhotoErreur(null)
     if (!navigator.onLine) {
       const localUrl = await queuePhoto(entreeId, file)
       setPendingPhotos(prev => ({ ...prev, [entreeId]: [...(prev[entreeId] || []), localUrl] }))
       setUploadingPhoto(null)
       return
     }
-    const ext  = file.name.split('.').pop() || 'jpg'
+    // Vérifier la taille (max 5 Mo)
+    if (file.size > 5 * 1024 * 1024) {
+      setPhotoErreur({ id: entreeId, msg: 'Photo trop lourde (max 5 Mo)' })
+      setUploadingPhoto(null)
+      return
+    }
+    const ext  = file.name.split('.').pop()?.toLowerCase() || 'jpg'
     const path = `${entreeId}/${Date.now()}.${ext}`
-    const { data: up } = await supabase.storage.from('cahier-photos').upload(path, file, { upsert: false })
-    if (up) {
+    const { data: up, error: upErr } = await supabase.storage.from('cahier-photos').upload(path, file, { upsert: false })
+    if (upErr) {
+      const msg = (upErr.message?.includes('row-level') || upErr.message?.includes('policy') || (upErr as {statusCode?:string}).statusCode === '403')
+        ? 'Accès refusé — vérifie les politiques du bucket "cahier-photos" dans Supabase Storage'
+        : `Erreur upload : ${upErr.message}`
+      setPhotoErreur({ id: entreeId, msg })
+    } else if (up) {
       const { data: urlData } = supabase.storage.from('cahier-photos').getPublicUrl(up.path)
-      await supabase.from('cahier_photos').insert({ entree_id: entreeId, url: urlData.publicUrl })
-      onSaved()
+      const { error: insErr } = await supabase.from('cahier_photos').insert({ entree_id: entreeId, url: urlData.publicUrl })
+      if (insErr) {
+        setPhotoErreur({ id: entreeId, msg: `Photo uploadée mais non enregistrée : ${insErr.message}` })
+      } else {
+        onSaved()
+      }
     }
     setUploadingPhoto(null)
   }
@@ -1015,10 +1032,17 @@ function CahierTab({ zones, especes, especesSerre, produits, entrees, onSaved, o
                           <input type="file" accept="image/*" capture="environment" className="hidden"
                             disabled={uploadingPhoto === e.id}
                             onChange={ev => { const f = ev.target.files?.[0]; if (f) uploadPhoto(e.id, f); ev.target.value = '' }} />
-                          📷
+                          {uploadingPhoto === e.id ? '⏳' : '📷'}
                         </label>
                       </div>
                     </div>
+                    {photoErreur?.id === e.id && (
+                      <div className="mx-2 mt-1 bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-700 flex items-start gap-2">
+                        <span className="shrink-0">⚠️</span>
+                        <span>{photoErreur.msg}</span>
+                        <button onClick={() => setPhotoErreur(null)} className="ml-auto text-red-400 shrink-0">✕</button>
+                      </div>
+                    )}
                     {((e.photos && e.photos.length > 0) || pendingPhotos[e.id]?.length > 0) && (
                       <div className="flex gap-2 flex-wrap pl-8">
                         {e.photos?.map((p: CahierPhoto) => (
