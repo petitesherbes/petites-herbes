@@ -1133,6 +1133,49 @@ function AgendaTab({ taches, zones, catalogueTaches, zoneTaches, onSaved }: {
   const [tempsOuvert, setTempsOuvert] = useState<string | null>(null)
   const [tick, setTick] = useState(0)
 
+  // ─── Edition inline ───────────────────────────────────────────────────────────
+  const [editId,    setEditId]    = useState<string | null>(null)
+  const [editTitre, setEditTitre] = useState('')
+  const [editType,  setEditType]  = useState<'ponctuelle' | 'recurrente'>('ponctuelle')
+  const [editFreq,  setEditFreq]  = useState<string[]>([])
+  const [editEch,   setEditEch]   = useState('')
+  const [editPrio,  setEditPrio]  = useState('normale')
+  const [editSaving, setEditSaving] = useState(false)
+
+  function ouvrirEdit(t: Tache) {
+    setEditId(t.id)
+    setEditTitre(t.titre)
+    setEditType(t.type as 'ponctuelle' | 'recurrente')
+    setEditFreq(t.frequence ? t.frequence.split(',').map(s => s.trim()) : [])
+    setEditEch(t.date_echeance || format(new Date(), 'yyyy-MM-dd'))
+    setEditPrio(t.priorite)
+    setTempsOuvert(null)
+  }
+
+  async function sauvegarderEdit() {
+    if (!editId || !editTitre.trim()) return
+    setEditSaving(true)
+    const payload = {
+      titre: editTitre.trim(),
+      type: editType,
+      frequence: editType === 'recurrente' ? editFreq.join(',') || 'quotidien' : null,
+      date_echeance: editType === 'ponctuelle' ? editEch : null,
+      priorite: editPrio,
+    }
+    if (!navigator.onLine) {
+      await queueMutation({ table: 'taches', method: 'update', payload, matchCol: 'id', matchVal: editId })
+    } else {
+      await supabase.from('taches').update(payload).eq('id', editId)
+    }
+    setEditId(null)
+    setEditSaving(false)
+    onSaved()
+  }
+
+  function toggleEditJour(j: string) {
+    setEditFreq(prev => prev.includes(j) ? prev.filter(x => x !== j) : [...prev, j])
+  }
+
   useEffect(() => {
     const iv = setInterval(() => setTick(t => t + 1), 30000)
     return () => clearInterval(iv)
@@ -1313,8 +1356,64 @@ function AgendaTab({ taches, zones, catalogueTaches, zoneTaches, onSaved }: {
                     </div>
                   </div>
 
+                  <button onClick={() => ouvrirEdit(t)} className="text-gray-300 active:text-blue-400 text-sm leading-none mt-1 shrink-0 px-1">✏️</button>
                   <button onClick={() => supprimer(t.id)} className="text-gray-300 active:text-red-400 text-lg leading-none mt-0.5 shrink-0">×</button>
                 </div>
+
+                {/* Formulaire édition inline */}
+                {editId === t.id && (
+                  <div className="mt-3 ml-10 bg-gray-50 rounded-xl p-3 space-y-3">
+                    <input value={editTitre} onChange={e => setEditTitre(e.target.value)}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm font-semibold focus:outline-none focus:border-green-400 bg-white" />
+                    <div className="flex gap-2">
+                      {(['ponctuelle','recurrente'] as const).map(v => (
+                        <button key={v} onClick={() => setEditType(v)}
+                          className={`flex-1 py-2 rounded-lg text-xs font-semibold border transition-colors
+                            ${editType === v ? 'bg-green-700 text-white border-green-700' : 'bg-white text-gray-500 border-gray-200'}`}>
+                          {v === 'ponctuelle' ? '📅 Ponctuelle' : '🔁 Récurrente'}
+                        </button>
+                      ))}
+                    </div>
+                    {editType === 'ponctuelle' ? (
+                      <input type="date" value={editEch} onChange={e => setEditEch(e.target.value)}
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-400 bg-white" />
+                    ) : (
+                      <div className="grid grid-cols-4 gap-1">
+                        <button onClick={() => setEditFreq(f => f.includes('quotidien') ? [] : ['quotidien'])}
+                          className={`col-span-2 py-2 rounded-lg text-xs font-semibold border transition-colors
+                            ${editFreq.includes('quotidien') ? 'bg-green-700 text-white border-green-700' : 'bg-white text-gray-500 border-gray-200'}`}>
+                          Tous les jours
+                        </button>
+                        {['lundi','mardi','mercredi','jeudi','vendredi','samedi'].map(j => (
+                          <button key={j} onClick={() => toggleEditJour(j)}
+                            className={`py-2 rounded-lg text-xs font-semibold border capitalize transition-colors
+                              ${editFreq.includes(j) ? 'bg-green-700 text-white border-green-700' : 'bg-white text-gray-500 border-gray-200'}`}>
+                            {j.slice(0,3)}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    <div className="flex gap-1.5">
+                      {(['basse','normale','haute'] as const).map(p => (
+                        <button key={p} onClick={() => setEditPrio(p)}
+                          className={`flex-1 py-1.5 rounded-lg text-xs font-semibold border capitalize transition-colors
+                            ${editPrio === p ? 'bg-green-700 text-white border-green-700' : 'bg-white text-gray-500 border-gray-200'}`}>
+                          {p === 'haute' ? '🔴' : p === 'normale' ? '🟡' : '⚪'} {p}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={sauvegarderEdit} disabled={editSaving || !editTitre.trim()}
+                        className="flex-1 py-2.5 bg-green-700 text-white rounded-lg text-sm font-bold disabled:opacity-40">
+                        {editSaving ? '…' : 'Enregistrer'}
+                      </button>
+                      <button onClick={() => setEditId(null)}
+                        className="px-4 py-2.5 bg-white border border-gray-200 text-gray-500 rounded-lg text-sm">
+                        Annuler
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {/* Panneau temps — s'affiche sous la ligne quand le badge est tappé */}
                 {tempsOuvert === t.id && !enChrono && (
@@ -1457,19 +1556,77 @@ function AgendaTab({ taches, zones, catalogueTaches, zoneTaches, onSaved }: {
             {autresTaches.map(t => {
               const zone = zones.find(z => z.id === t.zone_id)
               return (
-                <div key={t.id} className="px-4 py-3 flex items-start justify-between gap-2">
-                  <div>
-                    <div className="text-sm font-semibold text-gray-800">{t.titre}</div>
-                    <div className="text-xs text-gray-400 mt-0.5 flex flex-wrap gap-2">
-                      {t.date_echeance && <span>📅 {labelDate(t.date_echeance)}</span>}
-                      {t.frequence && <span>🔁 {t.frequence}</span>}
-                      {zone && <span>{zone.type === 'serre' ? '🪴' : '📍'} {zone.nom}</span>}
-                      <span className={`px-1.5 py-0.5 rounded-full border text-[10px] ${prioriteColor(t.priorite)}`}>
-                        {t.priorite}
-                      </span>
+                <div key={t.id}>
+                  <div className="px-4 py-3 flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-semibold text-gray-800">{t.titre}</div>
+                      <div className="text-xs text-gray-400 mt-0.5 flex flex-wrap gap-2">
+                        {t.date_echeance && <span>📅 {labelDate(t.date_echeance)}</span>}
+                        {t.frequence && <span>🔁 {t.frequence}</span>}
+                        {zone && <span>{zone.type === 'serre' ? '🪴' : '📍'} {zone.nom}</span>}
+                        <span className={`px-1.5 py-0.5 rounded-full border text-[10px] ${prioriteColor(t.priorite)}`}>
+                          {t.priorite}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button onClick={() => ouvrirEdit(t)} className="text-gray-300 active:text-blue-400 text-sm px-1">✏️</button>
+                      <button onClick={() => supprimer(t.id)} className="text-gray-300 active:text-red-400 text-lg leading-none">×</button>
                     </div>
                   </div>
-                  <button onClick={() => supprimer(t.id)} className="text-gray-300 active:text-red-400 text-lg leading-none mt-0.5">x</button>
+                  {editId === t.id && (
+                    <div className="mx-4 mb-3 bg-gray-50 rounded-xl p-3 space-y-3">
+                      <input value={editTitre} onChange={e => setEditTitre(e.target.value)}
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm font-semibold focus:outline-none focus:border-green-400 bg-white" />
+                      <div className="flex gap-2">
+                        {(['ponctuelle','recurrente'] as const).map(v => (
+                          <button key={v} onClick={() => setEditType(v)}
+                            className={`flex-1 py-2 rounded-lg text-xs font-semibold border transition-colors
+                              ${editType === v ? 'bg-green-700 text-white border-green-700' : 'bg-white text-gray-500 border-gray-200'}`}>
+                            {v === 'ponctuelle' ? '📅 Ponctuelle' : '🔁 Récurrente'}
+                          </button>
+                        ))}
+                      </div>
+                      {editType === 'ponctuelle' ? (
+                        <input type="date" value={editEch} onChange={e => setEditEch(e.target.value)}
+                          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-400 bg-white" />
+                      ) : (
+                        <div className="grid grid-cols-4 gap-1">
+                          <button onClick={() => setEditFreq(f => f.includes('quotidien') ? [] : ['quotidien'])}
+                            className={`col-span-2 py-2 rounded-lg text-xs font-semibold border transition-colors
+                              ${editFreq.includes('quotidien') ? 'bg-green-700 text-white border-green-700' : 'bg-white text-gray-500 border-gray-200'}`}>
+                            Tous les jours
+                          </button>
+                          {['lundi','mardi','mercredi','jeudi','vendredi','samedi'].map(j => (
+                            <button key={j} onClick={() => toggleEditJour(j)}
+                              className={`py-2 rounded-lg text-xs font-semibold border capitalize transition-colors
+                                ${editFreq.includes(j) ? 'bg-green-700 text-white border-green-700' : 'bg-white text-gray-500 border-gray-200'}`}>
+                              {j.slice(0,3)}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      <div className="flex gap-1.5">
+                        {(['basse','normale','haute'] as const).map(p => (
+                          <button key={p} onClick={() => setEditPrio(p)}
+                            className={`flex-1 py-1.5 rounded-lg text-xs font-semibold border capitalize transition-colors
+                              ${editPrio === p ? 'bg-green-700 text-white border-green-700' : 'bg-white text-gray-500 border-gray-200'}`}>
+                            {p === 'haute' ? '🔴' : p === 'normale' ? '🟡' : '⚪'} {p}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={sauvegarderEdit} disabled={editSaving || !editTitre.trim()}
+                          className="flex-1 py-2.5 bg-green-700 text-white rounded-lg text-sm font-bold disabled:opacity-40">
+                          {editSaving ? '…' : 'Enregistrer'}
+                        </button>
+                        <button onClick={() => setEditId(null)}
+                          className="px-4 py-2.5 bg-white border border-gray-200 text-gray-500 rounded-lg text-sm">
+                          Annuler
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )
             })}
@@ -2156,18 +2313,84 @@ function HeuresTab({ taches, entrees, zones, pointages, onSaved }: {
         </div>
       )}
 
-      {/* Tâches du jour */}
+      {/* Mes tâches du jour — sélection par personne */}
+      {(() => {
+        // Toutes les tâches prévues pour cette date
+        const tachesDate = taches.filter(t => {
+          if (t.type === 'ponctuelle') return t.date_echeance === dateVue
+          if (!t.frequence) return false
+          const jourSemaine = ['dimanche','lundi','mardi','mercredi','jeudi','vendredi','samedi'][parseISO(dateVue).getDay()]
+          const freq = t.frequence.toLowerCase()
+          return freq === 'quotidien' || freq.split(',').map((s: string) => s.trim()).includes(jourSemaine)
+        })
+        if (tachesDate.length === 0) return null
+
+        function aTravaillerSur(t: Tache) {
+          return t.temps?.some(tt => tt.date === dateVue && tt.auteur === auteur) ?? false
+        }
+
+        async function toggleTravail(t: Tache) {
+          const deja = aTravaillerSur(t)
+          if (deja) {
+            const entry = t.temps?.find(tt => tt.date === dateVue && tt.auteur === auteur)
+            if (!entry || entry.minutes > 0) return // ne supprime pas si temps enregistré
+            await supabase.from('taches_temps').delete().eq('id', entry.id)
+          } else {
+            const payload = { tache_id: t.id, date: dateVue, auteur, minutes: 0, chrono_debut: null }
+            await supabase.from('taches_temps').upsert(payload, { onConflict: 'tache_id,date,auteur' })
+          }
+          onSaved()
+        }
+
+        return (
+          <div className="rounded-2xl border border-blue-100 overflow-hidden">
+            <div className="px-4 py-3 bg-blue-700 text-white font-bold text-sm flex items-center justify-between">
+              <span>👤 Mes tâches — {auteur}</span>
+              <span className="text-blue-200 text-xs font-normal">{tachesDate.filter(t => aTravaillerSur(t)).length}/{tachesDate.length} sélectionnées</span>
+            </div>
+            <div className="divide-y divide-blue-50">
+              {tachesDate.map(t => {
+                const fait = aTravaillerSur(t)
+                const tt = t.temps?.find(x => x.date === dateVue && x.auteur === auteur)
+                const zone = zones.find(z => z.id === t.zone_id)
+                const avecTemps = (tt?.minutes ?? 0) > 0
+                return (
+                  <button key={t.id} onClick={() => !avecTemps && toggleTravail(t)}
+                    disabled={avecTemps}
+                    className={`w-full text-left px-4 py-3 flex items-center gap-3 active:bg-blue-50 transition-colors ${avecTemps ? 'cursor-default' : ''}`}>
+                    <span className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors
+                      ${fait ? 'bg-blue-600 border-blue-600' : 'border-gray-300 bg-white'}`}>
+                      {fait && <span className="text-white text-[10px] font-bold">✓</span>}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div className={`text-sm font-semibold ${fait ? 'text-blue-800' : 'text-gray-700'}`}>{t.titre}</div>
+                      {zone && <div className="text-xs text-gray-400">{zone.type === 'serre' ? '🪴' : '📍'} {zone.nom}</div>}
+                    </div>
+                    {avecTemps && tt && (
+                      <span className="shrink-0 text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-semibold">
+                        ⏱ {formatDuree(tt.minutes)}
+                      </span>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* Travaux du jour — récapitulatif */}
       {(tachesJour.length > 0 || entreesJour.length > 0) && (
         <div className="rounded-2xl border border-gray-100 overflow-hidden">
           <div className="px-4 py-3 bg-gray-50 border-b border-gray-100 flex items-center justify-between gap-2">
             <div>
-              <div className="font-bold text-sm text-gray-700">Travaux du jour</div>
-              <div className="text-xs text-gray-400">Agenda + Cahier</div>
+              <div className="font-bold text-sm text-gray-700">Récapitulatif équipe</div>
+              <div className="text-xs text-gray-400">Tâches complétées + cahier</div>
             </div>
             {tachesJour.length > 0 && (
               <button onClick={ajouterTachesAuxNotes}
                 className="text-xs font-semibold text-green-700 bg-green-50 px-2.5 py-1.5 rounded-full shrink-0 active:scale-95 transition-transform">
-                📋 Ajouter aux notes
+                📋 Vers mes notes
               </button>
             )}
           </div>
