@@ -220,12 +220,14 @@ export async function syncPhotos(): Promise<{ synced: number; errors: number }> 
     for (const item of items) {
       try {
         const file = new File([item.data], item.fileName, { type: item.mimeType })
-        const { data: up } = await supabase.storage
-          .from('cahier-photos')
-          .upload(`${item.entreeId}/${item.fileName}`, file, { upsert: false })
-        if (!up) throw new Error('Upload échoué')
-        const { data: urlData } = supabase.storage.from('cahier-photos').getPublicUrl(up.path)
-        await supabase.from('cahier_photos').insert({ entree_id: item.entreeId, url: urlData.publicUrl })
+        const formData = new FormData()
+        formData.append('file', file)
+        formData.append('bucket', 'cahier-photos')
+        formData.append('path', `${item.entreeId}/${item.fileName}`)
+        const res = await fetch('/api/upload', { method: 'POST', body: formData })
+        if (!res.ok) throw new Error('Upload échoué')
+        const { url } = await res.json()
+        await supabase.from('cahier_photos').insert({ entree_id: item.entreeId, url })
         await new Promise<void>((resolve) => {
           const tx = db.transaction('photo_queue', 'readwrite')
           tx.objectStore('photo_queue').delete(item.id!)

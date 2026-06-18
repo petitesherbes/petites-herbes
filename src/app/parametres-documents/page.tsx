@@ -83,13 +83,15 @@ export default function ParametresDocumentsPage() {
 
   async function uploadLogo(file: File) {
     setUploading(true)
-    await supabase.storage.createBucket('documents', { public: true }).catch(() => {})
-    const ext = file.name.split('.').pop()
-    const path = `logo-${Date.now()}.${ext}`
-    const { data, error } = await supabase.storage.from('documents').upload(path, file, { upsert: true })
-    if (!error && data) {
-      const { data: { publicUrl } } = supabase.storage.from('documents').getPublicUrl(data.path)
-      setLogoUrl(publicUrl)
+    const ext = file.name.split('.').pop()?.toLowerCase() || 'png'
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('bucket', 'documents')
+    formData.append('path', `logo-${Date.now()}.${ext}`)
+    const res = await fetch('/api/upload', { method: 'POST', body: formData })
+    if (res.ok) {
+      const { url } = await res.json()
+      setLogoUrl(url)
     }
     setUploading(false)
   }
