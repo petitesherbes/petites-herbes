@@ -872,6 +872,16 @@ function TachesPanel() {
   const [vue, setVue]               = useState<string>('global')
   const [saving, setSaving]         = useState<string | null>(null)
 
+  // état édition / ajout
+  const [editingId, setEditingId]     = useState<string | null>(null)
+  const [editingTitre, setEditingTitre] = useState('')
+  const [addingCat, setAddingCat]     = useState<string | null>(null)
+  const [newTaskTitre, setNewTaskTitre] = useState('')
+  const [newCatMode, setNewCatMode]   = useState(false)
+  const [newCatNom, setNewCatNom]     = useState('')
+  const [newCatIcone, setNewCatIcone] = useState('📋')
+  const [savingEdit, setSavingEdit]   = useState(false)
+
   useEffect(() => { chargerTaches() }, [])
 
   async function chargerTaches() {
@@ -884,6 +894,7 @@ function TachesPanel() {
   }
 
   async function toggleGlobal(cat: CatItem) {
+    if (editingId === cat.id) return
     setSaving(cat.id)
     await supabase.from('taches_catalogue').update({ active: !cat.active }).eq('id', cat.id)
     await chargerTaches(); setSaving(null)
@@ -900,6 +911,43 @@ function TachesPanel() {
     await chargerTaches(); setSaving(null)
   }
 
+  async function sauvegarderEdition() {
+    if (!editingId || !editingTitre.trim()) return
+    setSavingEdit(true)
+    await supabase.from('taches_catalogue').update({ titre: editingTitre.trim() }).eq('id', editingId)
+    await chargerTaches()
+    setEditingId(null); setSavingEdit(false)
+  }
+
+  async function supprimerTache(id: string) {
+    if (!confirm('Supprimer cette tâche du catalogue ?')) return
+    await supabase.from('zone_taches_catalogue').delete().eq('catalogue_id', id)
+    await supabase.from('taches_catalogue').delete().eq('id', id)
+    await chargerTaches()
+  }
+
+  async function ajouterDansCategorie(categorie: string, icone: string) {
+    if (!newTaskTitre.trim()) return
+    setSavingEdit(true)
+    const maxOrdre = Math.max(0, ...catalogue.filter(c => c.categorie === categorie).map(c => c.ordre))
+    await supabase.from('taches_catalogue').insert({
+      titre: newTaskTitre.trim(), categorie, icone, active: true, ordre: maxOrdre + 1,
+    })
+    await chargerTaches()
+    setAddingCat(null); setNewTaskTitre(''); setSavingEdit(false)
+  }
+
+  async function ajouterNouvelleCat() {
+    if (!newCatNom.trim() || !newTaskTitre.trim()) return
+    setSavingEdit(true)
+    const maxOrdre = Math.max(0, ...catalogue.map(c => c.ordre))
+    await supabase.from('taches_catalogue').insert({
+      titre: newTaskTitre.trim(), categorie: newCatNom.trim(), icone: newCatIcone, active: true, ordre: maxOrdre + 1,
+    })
+    await chargerTaches()
+    setNewCatMode(false); setNewCatNom(''); setNewTaskTitre(''); setSavingEdit(false)
+  }
+
   const categories  = [...new Set(catalogue.map(c => c.categorie))]
   const activeCount = catalogue.filter(c => c.active).length
 
@@ -908,10 +956,11 @@ function TachesPanel() {
       <div className="bg-green-50 border border-green-200 rounded-2xl p-4 text-sm text-green-900">
         <div className="font-bold mb-1">Catalogue de t&acirc;ches mara&icirc;cher</div>
         <div className="text-xs text-green-700">
-          {catalogue.length} t&acirc;ches au total &middot; {activeCount} actives.
-          Associez les t&acirc;ches typiques &agrave; chaque zone pour des suggestions personnalis&eacute;es.
+          {catalogue.length} t&acirc;ches &middot; {activeCount} actives.
+          Cochez pour activer, ✏️ pour renommer, × pour supprimer.
         </div>
       </div>
+
       <div className="flex gap-1.5 overflow-x-auto pb-1">
         <button onClick={() => setVue('global')}
           className={`px-3 py-2 rounded-xl text-xs font-bold whitespace-nowrap border active:scale-95 flex-shrink-0
@@ -926,37 +975,121 @@ function TachesPanel() {
           </button>
         ))}
       </div>
+
       {vue === 'global' ? (
         <div className="space-y-2">
-          <div className="text-xs text-gray-400">Activez / d&eacute;sactivez les t&acirc;ches du catalogue.</div>
           {categories.map(cat => {
             const items = catalogue.filter(c => c.categorie === cat)
+            const icone = items[0]?.icone || '📋'
             return (
               <div key={cat} className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-                <div className="px-4 py-2.5 bg-gray-50 font-bold text-xs text-gray-600 border-b border-gray-100 flex justify-between">
-                  <span>{items[0]?.icone} {cat}</span>
+                <div className="px-4 py-2.5 bg-gray-50 font-bold text-xs text-gray-600 border-b border-gray-100 flex justify-between items-center">
+                  <span>{icone} {cat}</span>
                   <span className="font-normal text-gray-400">{items.filter(i => i.active).length}/{items.length}</span>
                 </div>
+
                 {items.map(c => (
-                  <button key={c.id} onClick={() => toggleGlobal(c)}
-                    className={`w-full flex items-center gap-3 px-4 py-3 border-b border-gray-50 last:border-0 text-left active:bg-gray-50 ${!c.active ? 'opacity-40' : ''}`}>
-                    <div className={`w-6 h-6 rounded-full border-2 flex-shrink-0 flex items-center justify-center text-xs
-                      ${c.active ? 'bg-green-600 border-green-600 text-white' : 'border-gray-300 bg-white'}`}>
-                      {c.active ? '&#x2713;' : ''}
+                  editingId === c.id ? (
+                    /* Mode édition inline */
+                    <div key={c.id} className="px-3 py-2.5 border-b border-gray-50 bg-green-50 flex items-center gap-2">
+                      <input autoFocus value={editingTitre} onChange={e => setEditingTitre(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') sauvegarderEdition(); if (e.key === 'Escape') setEditingId(null) }}
+                        className="flex-1 border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:border-green-400 bg-white" />
+                      <button onClick={sauvegarderEdition} disabled={savingEdit}
+                        className="text-xs bg-green-700 text-white px-3 py-1.5 rounded-lg font-semibold active:scale-95 disabled:opacity-50">
+                        OK
+                      </button>
+                      <button onClick={() => setEditingId(null)}
+                        className="text-xs text-gray-400 px-2 py-1.5 rounded-lg border border-gray-200">
+                        ✕
+                      </button>
                     </div>
-                    <span className="text-sm text-gray-800 flex-1">{c.titre}</span>
-                    {saving === c.id && <span className="text-xs text-gray-400 animate-pulse">...</span>}
-                  </button>
+                  ) : (
+                    /* Mode normal */
+                    <div key={c.id}
+                      className={`flex items-center gap-2 px-3 py-2.5 border-b border-gray-50 ${!c.active ? 'opacity-40' : ''}`}>
+                      <button onClick={() => toggleGlobal(c)}
+                        className={`w-6 h-6 rounded-full border-2 flex-shrink-0 flex items-center justify-center text-xs transition-colors active:scale-95
+                          ${c.active ? 'bg-green-600 border-green-600 text-white' : 'border-gray-300 bg-white'}`}>
+                        {c.active ? '✓' : ''}
+                      </button>
+                      <span className="text-sm text-gray-800 flex-1 leading-snug">{c.titre}</span>
+                      {saving === c.id
+                        ? <span className="text-xs text-gray-400 animate-pulse">...</span>
+                        : <>
+                          <button onClick={() => { setEditingId(c.id); setEditingTitre(c.titre) }}
+                            className="text-gray-300 hover:text-blue-500 px-1 text-sm active:scale-95 flex-shrink-0"
+                            title="Renommer">✏️</button>
+                          <button onClick={() => supprimerTache(c.id)}
+                            className="text-gray-300 hover:text-red-500 px-1 text-sm font-bold active:scale-95 flex-shrink-0"
+                            title="Supprimer">×</button>
+                        </>
+                      }
+                    </div>
+                  )
                 ))}
+
+                {/* Ajouter dans cette catégorie */}
+                {addingCat === cat ? (
+                  <div className="px-3 py-2.5 bg-green-50 flex items-center gap-2 border-t border-green-100">
+                    <input autoFocus value={newTaskTitre} onChange={e => setNewTaskTitre(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') ajouterDansCategorie(cat, icone); if (e.key === 'Escape') setAddingCat(null) }}
+                      placeholder="Nom de la tâche..."
+                      className="flex-1 border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:border-green-400 bg-white" />
+                    <button onClick={() => ajouterDansCategorie(cat, icone)} disabled={savingEdit || !newTaskTitre.trim()}
+                      className="text-xs bg-green-700 text-white px-3 py-1.5 rounded-lg font-semibold active:scale-95 disabled:opacity-50">
+                      Ajouter
+                    </button>
+                    <button onClick={() => { setAddingCat(null); setNewTaskTitre('') }}
+                      className="text-xs text-gray-400 px-2 py-1.5 rounded-lg border border-gray-200">
+                      ✕
+                    </button>
+                  </div>
+                ) : (
+                  <button onClick={() => { setAddingCat(cat); setNewTaskTitre(''); setEditingId(null) }}
+                    className="w-full text-left px-4 py-2.5 text-xs text-green-600 font-semibold border-t border-gray-50 active:bg-green-50">
+                    + Ajouter une tâche dans {cat.toLowerCase()}
+                  </button>
+                )}
               </div>
             )
           })}
+
+          {/* Nouvelle catégorie */}
+          {newCatMode ? (
+            <div className="bg-white rounded-xl border border-green-200 p-4 space-y-3">
+              <div className="text-xs font-bold text-green-800">Nouvelle catégorie</div>
+              <div className="flex gap-2">
+                <input value={newCatIcone} onChange={e => setNewCatIcone(e.target.value)}
+                  className="w-12 border border-gray-200 rounded-lg px-2 py-2 text-base text-center focus:outline-none" />
+                <input autoFocus value={newCatNom} onChange={e => setNewCatNom(e.target.value)}
+                  placeholder="Nom de la catégorie..."
+                  className="flex-1 border border-gray-200 rounded-lg px-2.5 py-2 text-sm focus:outline-none focus:border-green-400" />
+              </div>
+              <input value={newTaskTitre} onChange={e => setNewTaskTitre(e.target.value)}
+                placeholder="Première tâche dans cette catégorie..."
+                className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm focus:outline-none focus:border-green-400" />
+              <div className="flex gap-2">
+                <button onClick={() => { setNewCatMode(false); setNewCatNom(''); setNewTaskTitre('') }}
+                  className="flex-1 py-2 rounded-lg border border-gray-200 text-gray-500 text-sm">Annuler</button>
+                <button onClick={ajouterNouvelleCat} disabled={savingEdit || !newCatNom.trim() || !newTaskTitre.trim()}
+                  className="flex-1 py-2 rounded-lg bg-green-700 text-white text-sm font-semibold disabled:opacity-40 active:scale-95">
+                  Créer
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button onClick={() => { setNewCatMode(true); setNewCatNom(''); setNewTaskTitre(''); setAddingCat(null) }}
+              className="w-full border-2 border-dashed border-green-300 rounded-xl py-3 text-green-700 font-bold text-sm active:scale-95 transition-transform">
+              + Nouvelle catégorie
+            </button>
+          )}
         </div>
       ) : (
         <div className="space-y-2">
           <div className="text-xs text-gray-400">
             T&acirc;ches typiques de {zones.find(z => z.id === vue)?.nom} &mdash;
-            apparaissent en suggestions lors de l&apos;ajout rapide.
+            cochez pour les associer à cette zone.
           </div>
           {categories.map(cat => {
             const items = catalogue.filter(c => c.active && c.categorie === cat)
@@ -975,7 +1108,7 @@ function TachesPanel() {
                       className="w-full flex items-center gap-3 px-4 py-3 border-b border-gray-50 last:border-0 text-left active:bg-gray-50">
                       <div className={`w-6 h-6 rounded-full border-2 flex-shrink-0 flex items-center justify-center text-xs
                         ${checked ? 'bg-green-600 border-green-600 text-white' : 'border-gray-300 bg-white'}`}>
-                        {checked ? '&#x2713;' : ''}
+                        {checked ? '✓' : ''}
                       </div>
                       <span className="text-sm text-gray-800 flex-1">{c.titre}</span>
                       {saving === c.id && <span className="text-xs text-gray-400 animate-pulse">...</span>}
@@ -986,7 +1119,7 @@ function TachesPanel() {
             )
           })}
           <div className="text-center text-xs text-gray-400 pt-1">
-            Pour voir toutes les t&acirc;ches, activez-les dans Global.
+            Pour modifier les tâches, allez dans l&apos;onglet Global.
           </div>
         </div>
       )}

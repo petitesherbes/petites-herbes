@@ -15,6 +15,8 @@ type Tache = {
   completions?: { date_completion: string }[]
 }
 
+type CatSuggestion = { id: string; titre: string; categorie: string; icone: string }
+
 const PRIORITE_COLOR: Record<string, string> = {
   haute:  'bg-red-100 text-red-700',
   moyenne:'bg-amber-100 text-amber-700',
@@ -23,10 +25,11 @@ const PRIORITE_COLOR: Record<string, string> = {
 
 export default function TaskPanel() {
   const pathname = usePathname()
-  const [ouvert, setOuvert]     = useState(false)
-  const [taches, setTaches]     = useState<Tache[]>([])
-  const [chargé, setChargé]     = useState(false)
-  const [saving, setSaving]     = useState(false)
+  const [ouvert, setOuvert]         = useState(false)
+  const [taches, setTaches]         = useState<Tache[]>([])
+  const [suggestions, setSuggestions] = useState<CatSuggestion[]>([])
+  const [chargé, setChargé]         = useState(false)
+  const [saving, setSaving]         = useState(false)
   const [nbRestantes, setNbRestantes] = useState(0)
 
   // Masquer sur la boutique client
@@ -55,14 +58,18 @@ export default function TaskPanel() {
   const charger = useCallback(async () => {
     if (chargé) return
     setChargé(true)
-    const { data } = await fetchWithCache('taches', async () => {
-      const { data } = await supabase
-        .from('taches')
-        .select('id, titre, description, type, frequence, date_echeance, priorite, actif, completions:taches_completions(date_completion)')
-        .eq('actif', true)
-      return data
-    })
+    const [{ data }, { data: cat }] = await Promise.all([
+      fetchWithCache('taches', async () => {
+        const { data } = await supabase
+          .from('taches')
+          .select('id, titre, description, type, frequence, date_echeance, priorite, actif, completions:taches_completions(date_completion)')
+          .eq('actif', true)
+        return data
+      }),
+      supabase.from('taches_catalogue').select('id,titre,categorie,icone').eq('active', true).order('ordre'),
+    ])
     if (data) setTaches(data as unknown as Tache[])
+    if (cat) setSuggestions(cat as CatSuggestion[])
   }, [chargé])
 
   async function cocher(t: Tache) {
@@ -159,6 +166,30 @@ export default function TaskPanel() {
                   onKeyDown={e => e.key === 'Enter' && ajouterTache()}
                   autoFocus placeholder="Nom de la tâche..."
                   className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-green-400 bg-white" />
+                {suggestions.length > 0 && (() => {
+                  const filtered = suggestions.filter(s =>
+                    !titre || s.titre.toLowerCase().includes(titre.toLowerCase())
+                  ).slice(0, 20)
+                  if (!filtered.length) return null
+                  return (
+                    <div>
+                      <div className="text-[10px] text-gray-400 font-semibold mb-1.5 uppercase tracking-wide">
+                        Suggestions catalogue
+                      </div>
+                      <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto">
+                        {filtered.map(s => (
+                          <button key={s.id} onClick={() => setTitre(s.titre)}
+                            className={`text-xs px-2.5 py-1 border rounded-full shrink-0 transition-colors active:scale-95
+                              ${titre === s.titre
+                                ? 'bg-green-700 text-white border-green-700'
+                                : 'bg-white text-gray-600 border-gray-200 active:bg-green-50 active:border-green-300'}`}>
+                            {s.titre}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })()}
                 <div className="flex gap-2">
                   {(['haute','moyenne','basse'] as const).map(p => (
                     <button key={p} onClick={() => setPriorite(p)}
