@@ -2,7 +2,6 @@ import type { Metadata, Viewport } from 'next'
 import './globals.css'
 import BottomNav from '@/components/BottomNav'
 import PwaRegister from '@/components/PwaRegister'
-import ApercuChef from '@/components/ApercuChef'
 import OfflineBanner from '@/components/OfflineBanner'
 import TaskPanel from '@/components/TaskPanel'
 
@@ -41,7 +40,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           {children}
         </main>
         <TaskPanel />
-        <ApercuChef />
         <BottomNav />
       </body>
     </html>

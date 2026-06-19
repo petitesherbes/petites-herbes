@@ -421,7 +421,7 @@ export default function TerrainPage() {
         supabase.from('taches').insert({
           titre: taskTitre.trim(), type: 'ponctuelle',
           date_echeance: taskDate, priorite: taskPrio,
-          zone_id: zid,
+          zone_id: zid, actif: true,
         })
       ))
     }
@@ -1312,7 +1312,7 @@ function AgendaTab({ taches, zones, catalogueTaches, zoneTaches, onSaved }: {
           titre: titre.trim(), type,
           frequence: type === 'recurrente' ? frequence.join(',') || 'quotidien' : null,
           date_echeance: type === 'ponctuelle' ? echeance : null,
-          zone_id: zid, priorite,
+          zone_id: zid, priorite, actif: true,
         })
       ))
     }
@@ -1701,7 +1701,7 @@ function ZonesTab({ zones, planches, onSaved }: {
     await supabase.from('zones').insert({
       nom: nomZone.trim(), type: typeZone,
       superficie_m2: supZone ? parseFloat(supZone) : null,
-      ordre: zones.length + 1,
+      ordre: zones.length + 1, actif: true,
     })
     setSaving(false); setAjoutZone(false); setNomZone(''); setSupZone(''); onSaved()
   }
@@ -2532,6 +2532,7 @@ function CulturesTab({ cultures, zones, onSaved }: {
   const [dateSemis, setDateSemis] = useState(format(new Date(), 'yyyy-MM-dd'))
   const [editNotes, setEditNotes] = useState<{ id: string; val: string } | null>(null)
   const [editQty,   setEditQty]   = useState<{ id: string; val: string } | null>(null)
+  const [erreurSave, setErreurSave] = useState<string | null>(null)
 
   function changerFamille(f: FamilleCulture) {
     setFamilleVue(f)
@@ -2602,11 +2603,16 @@ function CulturesTab({ cultures, zones, onSaved }: {
       notes: notes.trim() || null, date_semis: dateSemis || null,
       statut: 'semis' as StatutCulture, actif: true,
     }
+    setErreurSave(null)
     if (!navigator.onLine) {
       await queueMutation({ table: 'cultures', method: 'insert', payload })
     } else {
       const { error } = await supabase.from('cultures').insert(payload)
-      if (error) { console.error('[cultures insert]', error); setSaving(false); return }
+      if (error) {
+        setErreurSave(`Erreur : ${error.message}`)
+        setSaving(false)
+        return
+      }
     }
     setSaving(false); setAjout(false)
     setEspece(''); setNom(''); setZoneId(''); setQuantite(''); setNotes('')
@@ -2867,6 +2873,11 @@ function CulturesTab({ cultures, zones, onSaved }: {
                 rows={2}
                 className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-green-400 resize-none" />
             </div>
+            {erreurSave && (
+              <div className="bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl px-3 py-2">
+                {erreurSave}
+              </div>
+            )}
             <button onClick={sauvegarder} disabled={saving || !espece.trim()}
               className={`w-full text-white py-4 rounded-xl font-bold text-base active:scale-95 transition-transform disabled:opacity-50
                 ${famille === 'champs' ? 'bg-amber-600' : 'bg-green-700'}`}>

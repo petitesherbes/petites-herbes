@@ -40,6 +40,8 @@ export default function CommandesPage() {
   const [produits, setProduits] = useState<Produit[]>([])
   const [clients, setClients] = useState<Client[]>([])
   const [loading, setLoading] = useState(true)
+  const [vueChefOuvert, setVueChefOuvert] = useState(false)
+  const [vueChefRecherche, setVueChefRecherche] = useState('')
   const router = useRouter()
 
   useEffect(() => { charger() }, [])
@@ -73,13 +75,47 @@ export default function CommandesPage() {
     <div className="p-4 space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold text-green-900">Commandes / BL</h1>
-        {onglet === 'bls' && (
-          <button onClick={() => router.push('/commandes/nouveau')}
-            className="bg-green-700 text-white px-4 py-2 rounded-xl text-sm font-semibold shadow-sm">
-            + Nouveau BL
+        <div className="flex items-center gap-2">
+          <button onClick={() => setVueChefOuvert(true)}
+            className="flex items-center gap-1.5 border border-gray-200 text-gray-500 px-3 py-2 rounded-xl text-xs font-semibold">
+            👁 Vue chef
           </button>
-        )}
+          {onglet === 'bls' && (
+            <button onClick={() => router.push('/commandes/nouveau')}
+              className="bg-green-700 text-white px-4 py-2 rounded-xl text-sm font-semibold shadow-sm">
+              + Nouveau BL
+            </button>
+          )}
+        </div>
       </div>
+
+      {vueChefOuvert && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end" onClick={() => setVueChefOuvert(false)}>
+          <div className="bg-white w-full max-w-2xl mx-auto rounded-t-2xl p-4 pb-10 space-y-3 max-h-[80vh] overflow-y-auto"
+            onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-bold">👁 Vue chef</h2>
+                <p className="text-xs text-gray-400">Ouvrir la boutique comme un client la voit.</p>
+              </div>
+              <button onClick={() => setVueChefOuvert(false)} className="text-gray-400 text-2xl leading-none">×</button>
+            </div>
+            <input value={vueChefRecherche} onChange={e => setVueChefRecherche(e.target.value)}
+              placeholder="Rechercher un client…"
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-green-400" />
+            <div className="space-y-1.5">
+              {clients.filter(c => c.order_token && c.nom.toLowerCase().includes(vueChefRecherche.toLowerCase())).map(c => (
+                <button key={c.id}
+                  onClick={() => { setVueChefOuvert(false); router.push(`/commander/${c.order_token}?apercu=1`) }}
+                  className="w-full flex items-center justify-between bg-gray-50 rounded-xl px-3 py-3 text-left">
+                  <span className="font-semibold text-sm text-gray-800">{c.nom}</span>
+                  <span className="text-green-700 text-sm font-semibold">Ouvrir →</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="flex rounded-lg overflow-hidden border border-gray-200">
         {[
