@@ -389,7 +389,7 @@ export default function TerrainPage() {
         return data
       }).then(r => r.data),
       fetchWithCache('cultures', async () => {
-        const { data } = await supabase.from('cultures').select('*').eq('actif', true).order('created_at', { ascending: false })
+        const { data } = await supabase.from('cultures').select('*').neq('actif', false).order('created_at', { ascending: false })
         return data
       }).then(r => r.data),
     ])
