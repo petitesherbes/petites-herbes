@@ -950,20 +950,28 @@ function ProduitModal({ produit, onClose, onSave }: {
   })
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [uploadErreur, setUploadErreur] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
   async function uploadPhoto(file: File) {
     setUploading(true)
+    setUploadErreur(null)
     const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
     const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
     const formData = new FormData()
     formData.append('file', file)
     formData.append('bucket', 'product-photos')
     formData.append('path', path)
-    const res = await fetch('/api/upload', { method: 'POST', body: formData })
-    if (res.ok) {
-      const { url } = await res.json()
-      setForm(p => ({ ...p, photo_url: url }))
+    try {
+      const res = await fetch('/api/upload', { method: 'POST', body: formData })
+      const json = await res.json()
+      if (res.ok && json.url) {
+        setForm(p => ({ ...p, photo_url: json.url }))
+      } else {
+        setUploadErreur(json.error || `Erreur ${res.status}`)
+      }
+    } catch (e) {
+      setUploadErreur('Impossible de contacter le serveur')
     }
     setUploading(false)
   }
@@ -1032,6 +1040,11 @@ function ProduitModal({ produit, onClose, onSave }: {
             ref={fileRef} type="file" accept="image/*" className="hidden"
             onChange={e => { const f = e.target.files?.[0]; if (f) uploadPhoto(f) }}
           />
+          {uploadErreur && (
+            <div className="mt-1 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl px-3 py-2">
+              Photo non envoyée : {uploadErreur}
+            </div>
+          )}
         </div>
 
         <div>
