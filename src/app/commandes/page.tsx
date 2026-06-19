@@ -953,16 +953,32 @@ function ProduitModal({ produit, onClose, onSave }: {
   const [uploadErreur, setUploadErreur] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
+  async function compresserImage(file: File, maxPx = 1400, qualite = 0.82): Promise<Blob> {
+    return new Promise((resolve, reject) => {
+      const img = new window.Image()
+      img.onload = () => {
+        const scale = Math.min(1, maxPx / Math.max(img.width, img.height))
+        const canvas = document.createElement('canvas')
+        canvas.width  = Math.round(img.width  * scale)
+        canvas.height = Math.round(img.height * scale)
+        canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height)
+        canvas.toBlob(b => b ? resolve(b) : reject(new Error('Canvas vide')), 'image/jpeg', qualite)
+      }
+      img.onerror = reject
+      img.src = URL.createObjectURL(file)
+    })
+  }
+
   async function uploadPhoto(file: File) {
     setUploading(true)
     setUploadErreur(null)
-    const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
-    const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
-    const formData = new FormData()
-    formData.append('file', file)
-    formData.append('bucket', 'product-photos')
-    formData.append('path', path)
     try {
+      const blob = await compresserImage(file)
+      const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`
+      const formData = new FormData()
+      formData.append('file', blob, path)
+      formData.append('bucket', 'product-photos')
+      formData.append('path', path)
       const res = await fetch('/api/upload', { method: 'POST', body: formData })
       const json = await res.json()
       if (res.ok && json.url) {
@@ -971,7 +987,8 @@ function ProduitModal({ produit, onClose, onSave }: {
         setUploadErreur(json.error || `Erreur ${res.status}`)
       }
     } catch (e) {
-      setUploadErreur('Impossible de contacter le serveur')
+      const msg = e instanceof Error ? e.message : String(e)
+      setUploadErreur(`Échec upload : ${msg}`)
     }
     setUploading(false)
   }
