@@ -14,7 +14,7 @@ import { format, parseISO } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { useRouter } from 'next/navigation'
 
-type LigneAvecId = SemisLigneForm & { _id: number }
+type LigneAvecId = SemisLigneForm & { _id: number; g_par_unite_override?: number | null }
 
 type Zone = { id: string; nom: string; type: string; superficie_m2: number | null; description: string | null; ordre: number; actif: boolean }
 type StatutCulture  = 'semis' | 'pret_planter' | 'en_place' | 'recolte' | 'termine'
@@ -154,13 +154,14 @@ export default function NouveauSemisPage() {
     setLignes(prev => prev.filter(l => l._id !== id))
   }
 
-  function modifierLigne(id: number, champ: 'espece_id' | 'quantite', valeur: string | number) {
+  function modifierLigne(id: number, champ: 'espece_id' | 'quantite' | 'g_par_unite', valeur: string | number | null) {
     setLignes(prev => prev.map(l => {
       if (l._id !== id) return l
       if (champ === 'espece_id') {
         const esp = especes.find(e => e.id === valeur)
         return { ...l, espece_id: valeur as string, espece: esp }
       }
+      if (champ === 'g_par_unite') return { ...l, g_par_unite_override: valeur != null ? Number(valeur) : null }
       return { ...l, quantite: Math.max(1, Number(valeur)) }
     }))
   }
@@ -175,9 +176,12 @@ export default function NouveauSemisPage() {
 
   const calculerLigne = useCallback((l: LigneAvecId) => {
     if (!l.espece || !params) return { poids: 0, prod: 0, coutG: 0, coutT: 0, coutC: 0, total: 0 }
-    const poids = calculerPoidsGraines(l.espece, l.format, l.quantite, params)
-    const prod = calculerProdEstimee(l.espece, poids)
-    const coutG = calculerCoutGraines(poids, l.espece.prix_graine_kg)
+    const especeEff = l.g_par_unite_override != null
+      ? { ...l.espece, g_tapis: l.g_par_unite_override, g_godet: l.g_par_unite_override, g_caisse: l.g_par_unite_override }
+      : l.espece
+    const poids = calculerPoidsGraines(especeEff, l.format, l.quantite, params)
+    const prod = calculerProdEstimee(especeEff, poids)
+    const coutG = calculerCoutGraines(poids, especeEff.prix_graine_kg)
     const coutT = calculerCoutTerreau(l.format, l.quantite, params)
     const coutC = calculerCoutContenant(l.format, l.quantite, contenants, params)
     return { poids, prod, coutG, coutT, coutC, total: coutG + coutT + coutC }
@@ -336,6 +340,38 @@ export default function NouveauSemisPage() {
     }).catch(() => {})
 
     setSaving(false)
+
+    // PDF auto-téléchargé à la validation
+    try {
+      setGeneratingPdf(true)
+      const res = await fetch('/api/pdf/semis', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          lignes: lignes.map(l => ({
+            espece: l.espece?.nom ?? '',
+            format: l.format,
+            quantite: l.quantite,
+            poids: calculerLigne(l).poids,
+          })),
+          dateSemis,
+          templateNom: templateChoisi || undefined,
+          tapisParCaisse: params?.tapis_par_caisse ?? 24,
+          godetsParSerie: params?.godets_par_serie ?? 14,
+        }),
+      })
+      if (res.ok) {
+        const blob = await res.blob()
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url; a.download = `semis-${dateSemis}.pdf`
+        document.body.appendChild(a); a.click()
+        document.body.removeChild(a); URL.revokeObjectURL(url)
+      }
+    } finally {
+      setGeneratingPdf(false)
+    }
+
     router.push('/historique')
   }
 
@@ -544,17 +580,12 @@ export default function NouveauSemisPage() {
       </div>
 
       <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 text-sm text-blue-700">
-        📧 Un bon de production sera envoyé par email automatiquement.
+        📧 Un récapitulatif sera envoyé par email. Le PDF se télécharge automatiquement à la confirmation.
       </div>
 
-      <button onClick={telechargerBonTravail} disabled={generatingPdf || saving}
-        className="w-full border-2 border-green-600 text-green-700 py-3.5 rounded-xl font-semibold text-sm disabled:opacity-50 active:scale-95 transition-transform flex items-center justify-center gap-2">
-        {generatingPdf ? '⏳ Génération PDF...' : '📄 Télécharger le bon de travail'}
-      </button>
-
-      <button onClick={validerSemis} disabled={saving}
-        className="w-full bg-green-700 hover:bg-green-800 text-white py-4 rounded-xl font-bold text-base disabled:opacity-50 transition-colors shadow-sm">
-        {saving ? '⏳ Enregistrement...' : '✅ Confirmer le semis'}
+      <button onClick={validerSemis} disabled={saving || generatingPdf}
+        className="w-full bg-green-700 hover:bg-green-800 text-white py-4 rounded-xl font-bold text-base disabled:opacity-50 transition-colors shadow-sm flex items-center justify-center gap-2">
+        {saving ? '⏳ Enregistrement...' : generatingPdf ? '⏳ Génération PDF...' : '✅ Confirmer le semis + PDF'}
       </button>
     </div>
   )
@@ -960,7 +991,7 @@ function CulturesTab({ cultures, zones, onSaved }: {
 function SectionLignes({ titre, couleur, lignes, especes, format: fmt, onModifier, onSupprimer, onAjouter, calculer }: {
   titre: string; couleur: 'tapis' | 'terreau' | 'godets'
   lignes: LigneAvecId[]; especes: Espece[]; format: Format
-  onModifier: (id: number, champ: 'espece_id' | 'quantite', val: string | number) => void
+  onModifier: (id: number, champ: 'espece_id' | 'quantite' | 'g_par_unite', val: string | number | null) => void
   onSupprimer: (id: number) => void
   onAjouter: () => void
   calculer: (l: LigneAvecId) => { poids: number; total: number; coutG: number }
@@ -970,6 +1001,33 @@ function SectionLignes({ titre, couleur, lignes, especes, format: fmt, onModifie
     terreau: { header: 'bg-stone-700',  light: 'bg-stone-50',  border: 'border-stone-200' },
     godets:  { header: 'bg-orange-700', light: 'bg-orange-50', border: 'border-orange-200' },
   }[couleur]
+
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [editQty, setEditQty] = useState('')
+  const [editGrammage, setEditGrammage] = useState('')
+
+  const unitLabel = fmt === 'TAPIS' ? 'tapis' : fmt === 'GODET' ? 'godet' : 'caisse'
+  const qtyLabel  = fmt === 'TAPIS' ? 'Caisses' : fmt === 'GODET' ? 'Séries' : 'Caisses'
+
+  function ouvrirEdit(l: LigneAvecId) {
+    setEditingId(l._id)
+    setEditQty(String(l.quantite))
+    const defaut = fmt === 'TAPIS' ? (l.espece?.g_tapis ?? 0)
+      : fmt === 'GODET' ? (l.espece?.g_godet ?? 0)
+      : (l.espece?.g_caisse ?? 0)
+    setEditGrammage(String(l.g_par_unite_override ?? defaut))
+  }
+
+  function validerEdit(l: LigneAvecId) {
+    const qty = parseInt(editQty)
+    if (!isNaN(qty) && qty >= 1) onModifier(l._id, 'quantite', qty)
+    const g = parseFloat(editGrammage)
+    const defaut = fmt === 'TAPIS' ? (l.espece?.g_tapis ?? 0)
+      : fmt === 'GODET' ? (l.espece?.g_godet ?? 0)
+      : (l.espece?.g_caisse ?? 0)
+    onModifier(l._id, 'g_par_unite', (!isNaN(g) && g > 0 && g !== defaut) ? g : null)
+    setEditingId(null)
+  }
 
   return (
     <div className={`rounded-xl border ${colors.border} overflow-hidden shadow-sm`}>
@@ -990,8 +1048,15 @@ function SectionLignes({ titre, couleur, lignes, especes, format: fmt, onModifie
             {lignes.map(l => {
               const calc = calculer(l)
               const sansPrix = l.espece && !l.espece.prix_graine_kg
+              const gDefaut = fmt === 'TAPIS' ? (l.espece?.g_tapis ?? 0)
+                : fmt === 'GODET' ? (l.espece?.g_godet ?? 0)
+                : (l.espece?.g_caisse ?? 0)
+              const gEffectif = l.g_par_unite_override ?? gDefaut
+              const isEditing = editingId === l._id
+              const aOverride = l.g_par_unite_override != null
               return (
                 <div key={l._id} className="px-3 py-3 space-y-2">
+                  {/* Ligne principale : espèce + quantité */}
                   <div className="flex gap-2 items-center">
                     <select value={l.espece_id}
                       onChange={e => onModifier(l._id, 'espece_id', e.target.value)}
@@ -1010,13 +1075,63 @@ function SectionLignes({ titre, couleur, lignes, especes, format: fmt, onModifie
                     <button onClick={() => onSupprimer(l._id)}
                       className="w-8 h-8 flex items-center justify-center text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg">✕</button>
                   </div>
-                  <div className="flex gap-3 text-xs text-gray-500 pl-1">
-                    <span>⚖️ {calc.poids.toFixed(1)}g</span>
+
+                  {/* Info poids / coût + crayon */}
+                  <div className="flex items-center gap-2 pl-1">
+                    <span className="text-xs text-gray-500">⚖️ {calc.poids.toFixed(1)}g</span>
                     {sansPrix
-                      ? <span className="text-orange-500">⚠️ Prix manquant</span>
-                      : <span>💶 {calc.total.toFixed(2)}€</span>
+                      ? <span className="text-xs text-orange-500">⚠️ Prix manquant</span>
+                      : <span className="text-xs text-gray-500">💶 {calc.total.toFixed(2)}€</span>
                     }
+                    <button
+                      onClick={() => isEditing ? setEditingId(null) : ouvrirEdit(l)}
+                      className={`ml-auto flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border transition-colors
+                        ${aOverride
+                          ? 'bg-blue-50 border-blue-200 text-blue-600 font-semibold'
+                          : 'bg-white border-gray-200 text-gray-400 hover:border-gray-300'}`}>
+                      ✏️ {gEffectif.toFixed(1)}g/{unitLabel}{aOverride ? ' ✦' : ''}
+                    </button>
                   </div>
+
+                  {/* Panel d'édition inline */}
+                  {isEditing && (
+                    <div className="bg-white border border-gray-200 rounded-xl p-3 space-y-2.5 shadow-sm">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[10px] text-gray-400 block mb-1">{qtyLabel}</label>
+                          <input type="number" min={1} value={editQty}
+                            onChange={e => setEditQty(e.target.value)}
+                            autoFocus
+                            className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm text-center focus:outline-none focus:border-green-400" />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-gray-400 block mb-1">
+                            g / {unitLabel}{aOverride ? <span className="text-blue-500 ml-1">modifié</span> : null}
+                          </label>
+                          <input type="number" min={0.1} step={0.1} value={editGrammage}
+                            onChange={e => setEditGrammage(e.target.value)}
+                            className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm text-center focus:outline-none focus:border-green-400" />
+                        </div>
+                      </div>
+                      {aOverride && (
+                        <button
+                          onClick={() => { onModifier(l._id, 'g_par_unite', null); setEditingId(null) }}
+                          className="text-[11px] text-blue-500 underline block">
+                          Réinitialiser au défaut ({gDefaut.toFixed(1)}g/{unitLabel})
+                        </button>
+                      )}
+                      <div className="flex gap-2">
+                        <button onClick={() => validerEdit(l)}
+                          className="flex-1 bg-green-700 text-white text-sm font-semibold rounded-lg py-2 active:scale-95 transition-transform">
+                          ✓ Appliquer
+                        </button>
+                        <button onClick={() => setEditingId(null)}
+                          className="px-4 bg-gray-100 text-gray-500 text-sm rounded-lg py-2">
+                          Annuler
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )
             })}
