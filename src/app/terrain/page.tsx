@@ -2645,6 +2645,37 @@ function CulturesTab({ cultures, zones, onSaved }: {
   const [editNotes, setEditNotes] = useState<{ id: string; val: string } | null>(null)
   const [editQty,   setEditQty]   = useState<{ id: string; val: string } | null>(null)
   const [erreurSave, setErreurSave] = useState<string | null>(null)
+  const [syncing, setSyncing]       = useState(false)
+  const [syncMsg, setSyncMsg]       = useState<string | null>(null)
+
+  async function syncDepuisSemis() {
+    setSyncing(true); setSyncMsg(null)
+    const today = format(new Date(), 'yyyy-MM-dd')
+    const { data: lignes, error: errL } = await supabase
+      .from('semis_lignes')
+      .select('id, format, quantite, espece:especes(nom)')
+      .in('format', ['TAPIS', 'GODET'])
+      .gt('date_peremption', today)
+    if (errL) { setSyncMsg(`Erreur lecture semis: ${errL.message}`); setSyncing(false); return }
+    if (!lignes?.length) { setSyncMsg('Aucun semis actif trouvé.'); setSyncing(false); return }
+    const payload = (lignes as unknown as {id:string;format:string;quantite:number;espece:{nom:string}|null}[]).map(l => ({
+      espece: l.espece?.nom ?? '',
+      nom: l.format === 'TAPIS' ? `Tapis ×${l.quantite}` : `Godet ×${l.quantite}`,
+      famille: l.format === 'TAPIS' ? 'micro_pousse' : 'champs',
+      statut: 'semis' as StatutCulture,
+      date_semis: today,
+      quantite: String(l.quantite),
+      zone_id: null, notes: null, actif: true,
+    }))
+    const { error } = await supabase.from('cultures').insert(payload)
+    if (error) {
+      setSyncMsg(`Erreur insert: ${error.message} | code: ${error.code}`)
+    } else {
+      setSyncMsg(`✅ ${payload.length} fiche(s) créée(s) !`)
+      onSaved()
+    }
+    setSyncing(false)
+  }
 
   function changerFamille(f: FamilleCulture) {
     setFamilleVue(f)
@@ -2768,6 +2799,20 @@ function CulturesTab({ cultures, zones, onSaved }: {
           ${familleVue === 'champs' ? 'bg-amber-600' : 'bg-green-700'}`}>
         + Nouvelle {familleVue === 'champs' ? 'culture champs' : 'micro-pousse'}
       </button>
+
+      {cultures.filter(c => c.famille === familleVue).length === 0 && (
+        <div className="space-y-2">
+          <button onClick={syncDepuisSemis} disabled={syncing}
+            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm border-2 border-dashed border-green-300 text-green-700 bg-green-50 active:scale-95 transition-transform disabled:opacity-50">
+            {syncing ? '⏳ Synchronisation…' : '🔄 Importer depuis les semis actifs'}
+          </button>
+          {syncMsg && (
+            <div className={`text-xs rounded-xl px-3 py-2 ${syncMsg.startsWith('✅') ? 'bg-green-50 border border-green-200 text-green-700' : 'bg-red-50 border border-red-200 text-red-700'}`}>
+              {syncMsg}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="flex gap-2 overflow-x-auto pb-1">
         <button onClick={() => setFiltreStatut('tout')}
