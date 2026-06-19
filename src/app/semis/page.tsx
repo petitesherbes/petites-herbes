@@ -13,6 +13,7 @@ import {
 import { format, parseISO } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 
 type LigneAvecId = SemisLigneForm & { _id: number; g_par_unite_override?: number | null; zone_id?: string | null }
 
@@ -44,6 +45,9 @@ export default function NouveauSemisPage() {
   const [generatingPdf, setGeneratingPdf] = useState(false)
   const [semisValide, setSemisValide] = useState(false)
   const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null)
+  const [editTemplate, setEditTemplate] = useState<Template | null>(null)
+  const [editTemplateNom, setEditTemplateNom] = useState('')
+  const [savingTemplate, setSavingTemplate] = useState(false)
   const [saveAsTemplate, setSaveAsTemplate] = useState(false)
   const [nouveauTemplateName, setNouveauTemplateName] = useState('')
   const [avertissements, setAvertissements] = useState<string[]>([])
@@ -172,6 +176,31 @@ export default function NouveauSemisPage() {
       if (champ === 'zone_id') return { ...l, zone_id: valeur as string | null }
       return { ...l, quantite: Math.max(1, Number(valeur)) }
     }))
+  }
+
+  async function supprimerLigneTpl(ligneId: string) {
+    await supabase.from('templates_lignes').delete().eq('id', ligneId)
+    setEditTemplate(prev => prev ? { ...prev, templates_lignes: (prev.templates_lignes || []).filter(l => l.id !== ligneId) } : null)
+    setTemplates(prev => prev.map(t => t.id === editTemplate?.id
+      ? { ...t, templates_lignes: (t.templates_lignes || []).filter(l => l.id !== ligneId) }
+      : t))
+  }
+
+  async function renommerTemplate() {
+    if (!editTemplate || !editTemplateNom.trim()) return
+    setSavingTemplate(true)
+    await supabase.from('templates').update({ nom: editTemplateNom.trim() }).eq('id', editTemplate.id)
+    setTemplates(prev => prev.map(t => t.id === editTemplate.id ? { ...t, nom: editTemplateNom.trim() } : t))
+    setSavingTemplate(false)
+    setEditTemplate(prev => prev ? { ...prev, nom: editTemplateNom.trim() } : null)
+  }
+
+  async function supprimerTemplate() {
+    if (!editTemplate || !confirm(`Supprimer "${editTemplate.nom}" ?`)) return
+    await supabase.from('templates_lignes').delete().eq('template_id', editTemplate.id)
+    await supabase.from('templates').delete().eq('id', editTemplate.id)
+    setTemplates(prev => prev.filter(t => t.id !== editTemplate.id))
+    setEditTemplate(null)
   }
 
   function especesPourFormat(fmt: Format) {
@@ -427,14 +456,20 @@ export default function NouveauSemisPage() {
 
   if (etape === 1) return (
     <div className="p-4 space-y-5">
-      <div className="flex gap-2">
-        <button className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-green-700 text-white">
-          🌱 Nouveau semis
-        </button>
-        <button onClick={() => { setVue('cultures'); chargerCultures() }}
-          className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-gray-100 text-gray-600">
-          🌾 Cultures
-        </button>
+      <div className="flex items-center justify-between">
+        <div className="flex gap-2 flex-1">
+          <button className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-green-700 text-white">
+            🌱 Nouveau semis
+          </button>
+          <button onClick={() => { setVue('cultures'); chargerCultures() }}
+            className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-gray-100 text-gray-600">
+            🌾 Cultures
+          </button>
+        </div>
+        <Link href="/historique"
+          className="ml-3 flex items-center gap-1 text-xs text-green-700 font-semibold bg-green-50 px-3 py-2.5 rounded-xl border border-green-200 whitespace-nowrap">
+          📋 Historique
+        </Link>
       </div>
 
       <div>
@@ -447,17 +482,22 @@ export default function NouveauSemisPage() {
         <label className="block text-sm font-semibold text-gray-700 mb-2">Choisir un template</label>
         <div className="space-y-2">
           {templates.map(t => (
-            <button key={t.id} onClick={() => appliquerTemplate(t.id)}
-              className={`w-full text-left p-4 rounded-xl border-2 transition-all
-                ${templateChoisi === t.nom
-                  ? 'border-green-600 bg-green-50 shadow-sm'
-                  : 'border-gray-200 bg-white hover:border-green-300'}`}>
-              <div className="flex items-center justify-between">
+            <div key={t.id} className={`relative rounded-xl border-2 overflow-hidden transition-all
+              ${templateChoisi === t.nom ? 'border-green-600 bg-green-50 shadow-sm' : 'border-gray-200 bg-white'}`}>
+              <button onClick={() => appliquerTemplate(t.id)} className="w-full text-left p-4 pr-12">
                 <div className="font-semibold text-gray-800">{t.nom}</div>
-                {templateChoisi === t.nom && <span className="text-green-600 text-lg">✓</span>}
+                <div className="text-xs text-gray-400 mt-0.5">
+                  {(t.templates_lignes?.length || 0)} espèce{(t.templates_lignes?.length || 0) > 1 ? 's' : ''}
+                </div>
+              </button>
+              <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                {templateChoisi === t.nom && <span className="text-green-600 text-sm">✓</span>}
+                <button onClick={() => { setEditTemplate(t); setEditTemplateNom(t.nom) }}
+                  className="w-8 h-8 flex items-center justify-center text-gray-300 active:text-blue-500 rounded-lg text-sm">
+                  ✏️
+                </button>
               </div>
-              {t.description && <div className="text-sm text-gray-500 mt-0.5">{t.description}</div>}
-            </button>
+            </div>
           ))}
           <button onClick={() => { setTemplateChoisi(''); setLignes([]) }}
             className={`w-full text-left p-4 rounded-xl border-2 transition-all
@@ -472,6 +512,49 @@ export default function NouveauSemisPage() {
           </button>
         </div>
       </div>
+
+      {/* Modal gestion template */}
+      {editTemplate && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end" onClick={() => setEditTemplate(null)}>
+          <div className="bg-white w-full max-w-2xl mx-auto rounded-t-2xl p-5 space-y-4 pb-10 max-h-[85vh] overflow-y-auto"
+            onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h2 className="font-bold text-gray-800">Modifier le template</h2>
+              <button onClick={() => setEditTemplate(null)} className="text-gray-400 text-2xl leading-none">×</button>
+            </div>
+            <div className="flex gap-2">
+              <input value={editTemplateNom} onChange={e => setEditTemplateNom(e.target.value)}
+                className="flex-1 border border-gray-200 rounded-xl px-3 py-2.5 text-sm font-semibold focus:outline-none focus:border-green-400" />
+              <button onClick={renommerTemplate} disabled={savingTemplate || !editTemplateNom.trim() || editTemplateNom === editTemplate.nom}
+                className="px-4 py-2.5 bg-green-700 text-white text-sm font-semibold rounded-xl disabled:opacity-40">
+                {savingTemplate ? '…' : 'Renommer'}
+              </button>
+            </div>
+            <div className="space-y-2">
+              <div className="text-xs font-bold text-gray-400 uppercase tracking-wide">Lignes ({editTemplate.templates_lignes?.length || 0})</div>
+              {(editTemplate.templates_lignes || []).sort((a, b) => a.ordre - b.ordre).map(l => (
+                <div key={l.id} className="flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2.5">
+                  <div className="flex-1 text-sm">
+                    <span className="font-semibold text-gray-800">{l.espece?.nom || l.espece_id}</span>
+                    <span className="text-gray-400 ml-2 text-xs">× {l.quantite} {l.format.toLowerCase()}</span>
+                  </div>
+                  <button onClick={() => supprimerLigneTpl(l.id)}
+                    className="w-7 h-7 flex items-center justify-center text-gray-300 active:text-red-400 text-lg leading-none rounded-lg">
+                    ×
+                  </button>
+                </div>
+              ))}
+              {(editTemplate.templates_lignes || []).length === 0 && (
+                <div className="text-sm text-gray-400 text-center py-4">Template vide — supprimez-le ou revenez pour l&apos;utiliser tel quel</div>
+              )}
+            </div>
+            <button onClick={supprimerTemplate}
+              className="w-full py-2.5 border border-red-100 text-red-400 text-sm rounded-xl active:bg-red-50 transition-colors">
+              Supprimer ce template
+            </button>
+          </div>
+        </div>
+      )}
 
       <button onClick={() => setEtape(2)}
         className="w-full bg-green-700 hover:bg-green-800 text-white py-4 rounded-xl font-bold text-base transition-colors shadow-sm">

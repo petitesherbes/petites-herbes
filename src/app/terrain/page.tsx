@@ -1169,9 +1169,11 @@ function AgendaTab({ taches, zones, catalogueTaches, zoneTaches, onSaved }: {
   const [zoneIds, setZoneIds]   = useState<string[]>([])
   const [priorite, setPrio]     = useState('normale')
   const [saving, setSaving]     = useState(false)
-  const [auteur] = useState(() =>
+  const [auteur, setAuteur] = useState(() =>
     typeof window !== 'undefined' ? localStorage.getItem('terrain_auteur') || 'Antoine' : 'Antoine'
   )
+  const [editAuteur, setEditAuteur] = useState(false)
+  const [auteurDraft, setAuteurDraft] = useState(auteur)
   const [tempsOuvert, setTempsOuvert] = useState<string | null>(null)
   const [tick, setTick] = useState(0)
 
@@ -1224,8 +1226,19 @@ function AgendaTab({ taches, zones, catalogueTaches, zoneTaches, onSaved }: {
   }, [])
   void tick
 
-  const aujTaches    = taches.filter(t => tacheEstAujourdHui(t))
+  const aujTachesRaw = taches.filter(t => tacheEstAujourdHui(t))
+  const aujTaches    = [...aujTachesRaw].sort((a, b) =>
+    (tacheEstCompleteeAujourdHui(a) ? 1 : 0) - (tacheEstCompleteeAujourdHui(b) ? 1 : 0)
+  )
   const autresTaches = taches.filter(t => !tacheEstAujourdHui(t))
+
+  const todayStr = format(new Date(), 'yyyy-MM-dd')
+  const tempsParPersonne: Record<string, number> = {}
+  aujTaches.forEach(t => {
+    (t.temps || []).filter(x => x.date === todayStr).forEach(x => {
+      tempsParPersonne[x.auteur] = (tempsParPersonne[x.auteur] || 0) + x.minutes
+    })
+  })
 
   function tempsAujourdHui(t: Tache): TempsTache | undefined {
     const todayStr = format(new Date(), 'yyyy-MM-dd')
@@ -1338,7 +1351,22 @@ function AgendaTab({ taches, zones, catalogueTaches, zoneTaches, onSaved }: {
     <div className="space-y-4">
       <div className="rounded-2xl border border-green-200 overflow-hidden">
         <div className="px-4 py-3 bg-green-700 text-white font-bold text-sm flex justify-between items-center">
-          <span>Aujourd'hui</span>
+          <div className="flex items-center gap-2">
+            <span>Aujourd'hui</span>
+            {!editAuteur ? (
+              <button onClick={() => { setAuteurDraft(auteur); setEditAuteur(true) }}
+                className="bg-white/20 text-white text-xs px-2 py-0.5 rounded-full flex items-center gap-1">
+                👤 {auteur}
+              </button>
+            ) : (
+              <form onSubmit={e => { e.preventDefault(); const v = auteurDraft.trim(); if (v) { setAuteur(v); localStorage.setItem('terrain_auteur', v) }; setEditAuteur(false) }}
+                className="flex items-center gap-1">
+                <input autoFocus value={auteurDraft} onChange={e => setAuteurDraft(e.target.value)}
+                  className="w-24 text-xs px-2 py-0.5 rounded-full text-gray-800 focus:outline-none" />
+                <button type="submit" className="text-white text-xs">✓</button>
+              </form>
+            )}
+          </div>
           <span className="bg-white/20 text-white text-xs font-bold px-2 py-0.5 rounded-full">
             {aujTaches.filter(t => !tacheEstCompleteeAujourdHui(t)).length} restantes
           </span>
@@ -1396,6 +1424,16 @@ function AgendaTab({ taches, zones, catalogueTaches, zoneTaches, onSaved }: {
                       </span>
                       {t.type === 'recurrente' && <span>🔁 {t.frequence}</span>}
                     </div>
+                    {/* Temps des autres personnes */}
+                    {(t.temps || []).filter(x => x.date === todayStr && x.auteur !== auteur && x.minutes > 0).length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {(t.temps || []).filter(x => x.date === todayStr && x.auteur !== auteur && x.minutes > 0).map(x => (
+                          <span key={x.auteur} className="px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600 text-[10px] font-semibold">
+                            {x.auteur} {formatDuree(x.minutes)}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   <button onClick={() => ouvrirEdit(t)} className="text-gray-300 active:text-blue-400 text-sm leading-none mt-1 shrink-0 px-1">✏️</button>
@@ -1476,6 +1514,18 @@ function AgendaTab({ taches, zones, catalogueTaches, zoneTaches, onSaved }: {
             )
           })}
         </div>
+
+        {/* Résumé temps par personne */}
+        {Object.keys(tempsParPersonne).length > 0 && (
+          <div className="px-4 py-3 bg-green-50 border-t border-green-100 flex flex-wrap gap-3">
+            {Object.entries(tempsParPersonne).sort((a, b) => b[1] - a[1]).map(([nom, min]) => (
+              <div key={nom} className={`flex items-center gap-1.5 text-xs font-semibold ${nom === auteur ? 'text-green-800' : 'text-blue-700'}`}>
+                <span>{nom === auteur ? '👤' : '🧑‍🌾'} {nom}</span>
+                <span className="bg-white px-1.5 py-0.5 rounded-full border border-current">{formatDuree(min)}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <button onClick={() => setAjout(!ajout)}
@@ -1688,12 +1738,18 @@ function ZonesTab({ zones, planches, onSaved }: {
   const [nomZone, setNomZone]           = useState('')
   const [typeZone, setTypeZone]         = useState('plein_champ')
   const [supZone, setSupZone]           = useState('')
-  const [ajoutPlanche, setAjoutPlanche] = useState<string | null>(null)
-  const [nomPlanche, setNomPlanche]     = useState('')
-  const [longueurP, setLongueurP]       = useState('')
-  const [largeurP, setLargeurP]         = useState('')
-  const [plantsPm2P, setPlantsPm2P]     = useState('')
-  const [saving, setSaving]             = useState(false)
+  const [ajoutPlanche, setAjoutPlanche]   = useState<string | null>(null)
+  const [nomPlanche, setNomPlanche]       = useState('')
+  const [longueurP, setLongueurP]         = useState('')
+  const [largeurP, setLargeurP]           = useState('')
+  const [plantsPm2P, setPlantsPm2P]       = useState('')
+  const [saving, setSaving]               = useState(false)
+  const [editPlanche, setEditPlanche]     = useState<string | null>(null)
+  const [editNomP, setEditNomP]           = useState('')
+  const [editLongueurP, setEditLongueurP] = useState('')
+  const [editLargeurP, setEditLargeurP]   = useState('')
+  const [editPlantsPm2P, setEditPlantsPm2P] = useState('')
+  const [savingEdit, setSavingEdit]       = useState(false)
 
   async function ajouterZone() {
     if (!nomZone.trim()) return
@@ -1729,6 +1785,26 @@ function ZonesTab({ zones, planches, onSaved }: {
     await supabase.from('zone_planches').delete().eq('id', id); onSaved()
   }
 
+  async function modifierPlanche(id: string) {
+    setSavingEdit(true)
+    await supabase.from('zone_planches').update({
+      nom:          editNomP.trim()   || undefined,
+      longueur_m:   editLongueurP     ? parseFloat(editLongueurP)  : null,
+      largeur_m:    editLargeurP      ? parseFloat(editLargeurP)   : null,
+      plants_par_m2: editPlantsPm2P   ? parseInt(editPlantsPm2P)   : null,
+    }).eq('id', id)
+    setSavingEdit(false); setEditPlanche(null); onSaved()
+  }
+
+  function ouvrirEditPlanche(p: Planche) {
+    setEditPlanche(p.id)
+    setEditNomP(p.nom)
+    setEditLongueurP(p.longueur_m?.toString() || '')
+    setEditLargeurP(p.largeur_m?.toString() || '')
+    setEditPlantsPm2P(p.plants_par_m2?.toString() || '')
+    setAjoutPlanche(null)
+  }
+
   const zonesChamp = zones.filter(z => z.type !== 'serre')
   const zonesSerre = zones.filter(z => z.type === 'serre')
 
@@ -1754,18 +1830,54 @@ function ZonesTab({ zones, planches, onSaved }: {
               const surface  = p.longueur_m && p.largeur_m ? (p.longueur_m * p.largeur_m).toFixed(1) : null
               const capacite = surface && p.plants_par_m2 ? Math.round(parseFloat(surface) * p.plants_par_m2) : null
               return (
-                <div key={p.id} className="px-4 py-3 flex items-start justify-between text-sm">
-                  <div>
-                    <span className="text-gray-700 font-semibold">{p.nom}</span>
-                    <div className="text-xs text-gray-400 mt-0.5 flex flex-wrap gap-2">
-                      {p.longueur_m && p.largeur_m && (
-                        <span>{p.longueur_m}m x {p.largeur_m}m = {surface} m2</span>
-                      )}
-                      {p.plants_par_m2 && <span>{p.plants_par_m2} plants/m2</span>}
-                      {capacite && <span className="text-green-700 font-semibold">= {capacite} plants</span>}
+                <div key={p.id}>
+                  <div className="px-4 py-3 flex items-start justify-between text-sm">
+                    <div className="flex-1 min-w-0">
+                      <span className="text-gray-700 font-semibold">{p.nom}</span>
+                      <div className="text-xs text-gray-400 mt-0.5 flex flex-wrap gap-2">
+                        {p.longueur_m && p.largeur_m && (
+                          <span>{p.longueur_m}m × {p.largeur_m}m = {surface} m²</span>
+                        )}
+                        {p.plants_par_m2 && <span>{p.plants_par_m2} plants/m²</span>}
+                        {capacite && <span className="text-green-700 font-semibold">= {capacite} plants</span>}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0 mt-0.5">
+                      <button onClick={() => editPlanche === p.id ? setEditPlanche(null) : ouvrirEditPlanche(p)}
+                        className="text-gray-300 active:text-blue-400 text-sm px-1">✏️</button>
+                      <button onClick={() => supprimerPlanche(p.id)} className="text-gray-300 active:text-red-400 text-base">×</button>
                     </div>
                   </div>
-                  <button onClick={() => supprimerPlanche(p.id)} className="text-gray-300 active:text-red-400 text-base mt-0.5">x</button>
+                  {editPlanche === p.id && (
+                    <div className="mx-4 mb-3 bg-gray-50 rounded-xl p-3 space-y-2 border border-gray-200">
+                      <input value={editNomP} onChange={e => setEditNomP(e.target.value)}
+                        placeholder="Nom de la planche"
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-semibold focus:outline-none focus:border-green-400 bg-white" />
+                      <div className="grid grid-cols-3 gap-2">
+                        <input value={editLongueurP} onChange={e => setEditLongueurP(e.target.value)}
+                          placeholder="Long. m" type="number" inputMode="decimal"
+                          className="border border-gray-200 rounded-lg px-2 py-2 text-sm focus:outline-none focus:border-green-400 bg-white" />
+                        <input value={editLargeurP} onChange={e => setEditLargeurP(e.target.value)}
+                          placeholder="Larg. m" type="number" inputMode="decimal"
+                          className="border border-gray-200 rounded-lg px-2 py-2 text-sm focus:outline-none focus:border-green-400 bg-white" />
+                        <input value={editPlantsPm2P} onChange={e => setEditPlantsPm2P(e.target.value)}
+                          placeholder="Plants/m²" type="number" inputMode="numeric"
+                          className="border border-gray-200 rounded-lg px-2 py-2 text-sm focus:outline-none focus:border-green-400 bg-white" />
+                      </div>
+                      {editLongueurP && editLargeurP && editPlantsPm2P && (
+                        <div className="text-xs text-green-700 bg-green-50 px-3 py-1.5 rounded-lg">
+                          {(parseFloat(editLongueurP) * parseFloat(editLargeurP)).toFixed(1)} m² × {editPlantsPm2P} = {Math.round(parseFloat(editLongueurP) * parseFloat(editLargeurP) * parseInt(editPlantsPm2P))} plants
+                        </div>
+                      )}
+                      <div className="flex gap-2">
+                        <button onClick={() => modifierPlanche(p.id)} disabled={savingEdit || !editNomP.trim()}
+                          className="flex-1 bg-green-700 text-white py-2 rounded-lg text-sm font-semibold disabled:opacity-50">
+                          {savingEdit ? '…' : 'Enregistrer'}
+                        </button>
+                        <button onClick={() => setEditPlanche(null)} className="text-gray-400 px-3 py-2 text-sm">Annuler</button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )
             })}
