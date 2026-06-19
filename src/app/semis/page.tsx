@@ -353,7 +353,10 @@ export default function NouveauSemisPage() {
     if (error || !semisData) { setSaving(false); alert('Erreur lors de la création du semis'); return }
 
     await supabase.from('semis_lignes').insert(lignesInsert)
-    if (culturesPayload.length > 0) await supabase.from('cultures').insert(culturesPayload)
+    if (culturesPayload.length > 0) {
+      const { error: cultErr } = await supabase.from('cultures').insert(culturesPayload)
+      if (cultErr) console.error('[semis] cultures insert error:', cultErr.message, cultErr.details)
+    }
 
     // Mouvements stock + mise à jour
     for (const l of lignes) {

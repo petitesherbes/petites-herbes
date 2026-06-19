@@ -11,7 +11,7 @@ import Link from 'next/link'
 import MeteoWidget from '@/components/MeteoWidget'
 
 interface LigneAvecEspece {
-  id: string; espece_id: string; format: string; quantite: number
+  id: string; semis_id: string; espece_id: string; format: string; quantite: number
   date_dispo: string | null; date_peremption: string | null
   prod_estimee: number | null; espece: Espece
 }
@@ -53,6 +53,9 @@ export default function AccueilPage() {
   const [pointagesAuj, setPointagesAuj]   = useState<{auteur:string;heure_arrivee:string|null;heure_depart:string|null;pause_minutes:number}[]>([])
   const [alerteGel, setAlerteGel]         = useState<{date:string;tmin:number}[]>([])
   const [statOuverte, setStatOuverte]     = useState<'ca'|'commandes'|'dispos'|'alertes'|null>(null)
+  const [ligneSheet, setLigneSheet]       = useState<LigneAvecEspece | null>(null)
+  const [ligneAction, setLigneAction]     = useState<'idle'|'saving'|'done'>('idle')
+  const [ligneErreur, setLigneErreur]     = useState<string | null>(null)
 
   // Layout personnalisable
   const [widgetOrder, setWidgetOrder]   = useState<WidgetId[]>(DEFAULT_ORDER)
@@ -130,7 +133,7 @@ export default function AccueilPage() {
     const [lignesData, especesData, semisData, blSemaineData, mvtsData, clientCount, tachesData, ptgData] = await Promise.all([
       fetchWithCache('home_semis_lignes', async () => {
         const { data } = await supabase.from('semis_lignes')
-          .select('id, espece_id, format, quantite, date_dispo, date_peremption, prod_estimee, espece:especes(*)')
+          .select('id, semis_id, espece_id, format, quantite, date_dispo, date_peremption, prod_estimee, espece:especes(*)')
           .not('date_peremption', 'is', null)
         return data
       }).then(r => r.data),
@@ -216,6 +219,37 @@ export default function AccueilPage() {
     const { data: ptg } = await supabase.from('pointages')
       .select('auteur, heure_arrivee, heure_depart, pause_minutes').eq('date', today)
     if (ptg) setPointagesAuj(ptg as {auteur:string;heure_arrivee:string|null;heure_depart:string|null;pause_minutes:number}[])
+  }
+
+  async function marquerRecolte(l: LigneAvecEspece) {
+    setLigneAction('saving')
+    const today = format(new Date(), 'yyyy-MM-dd')
+    await supabase.from('semis_lignes').update({ date_dispo: today }).eq('id', l.id)
+    setLignes(prev => prev.map(x => x.id === l.id ? { ...x, date_dispo: today } : x))
+    setLigneAction('done')
+  }
+
+  async function creerFicheCulture(l: LigneAvecEspece) {
+    setLigneAction('saving')
+    setLigneErreur(null)
+    const payload = {
+      espece: l.espece?.nom ?? '',
+      nom: l.format === 'TAPIS' ? `Tapis ×${l.quantite}` : `Godet ×${l.quantite}`,
+      famille: l.format === 'TAPIS' ? 'micro_pousse' : 'champs',
+      statut: 'semis',
+      date_semis: format(new Date(), 'yyyy-MM-dd'),
+      quantite: String(l.quantite),
+      zone_id: null,
+      notes: null,
+      actif: true,
+    }
+    const { error } = await supabase.from('cultures').insert(payload)
+    if (error) {
+      setLigneErreur(error.message)
+      setLigneAction('idle')
+    } else {
+      setLigneAction('done')
+    }
   }
 
   const aujourd = new Date(); aujourd.setHours(0, 0, 0, 0)
@@ -395,8 +429,8 @@ export default function AccueilPage() {
         if (urgent.length === 0 && disponible.length === 0 && enPousse.length === 0) return null
         return (
           <div key="production" className="px-4 mt-4 space-y-4">
-            {urgent.length > 0 && <SectionProduction titre="Expire bientôt" accent="red" lignes={urgent} aujourd={aujourd} icon="🔴" />}
-            {disponible.length > 0 && <SectionProduction titre="Disponible à récolter" accent="green" lignes={disponible} aujourd={aujourd} icon="✅" />}
+            {urgent.length > 0 && <SectionProduction titre="Expire bientôt" accent="red" lignes={urgent} aujourd={aujourd} icon="🔴" onLigneClick={l => { setLigneSheet(l); setLigneAction('idle') }} />}
+            {disponible.length > 0 && <SectionProduction titre="Disponible à récolter" accent="green" lignes={disponible} aujourd={aujourd} icon="✅" onLigneClick={l => { setLigneSheet(l); setLigneAction('idle') }} />}
             {enPousse.length > 0 && (
               <div className="rounded-2xl border border-blue-200 overflow-hidden">
                 <div className="px-4 py-3 bg-blue-600 text-white font-bold text-sm flex justify-between items-center">
@@ -408,13 +442,17 @@ export default function AccueilPage() {
                     const ico = l.format === 'TAPIS' ? '🟩' : l.format === 'TERREAU' ? '🟫' : '🟧'
                     const jAvant = l.date_dispo ? differenceInDays(parseISO(l.date_dispo), aujourd) : null
                     return (
-                      <div key={l.id} className="px-4 py-2.5 flex justify-between items-center">
+                      <button key={l.id} onClick={() => { setLigneSheet(l); setLigneAction('idle') }}
+                        className="w-full px-4 py-2.5 flex justify-between items-center text-left active:bg-blue-100 transition-colors">
                         <div>
                           <span className="text-sm font-semibold text-blue-900">{ico} {l.espece?.nom}</span>
                           <div className="text-xs text-blue-400 mt-0.5">×{l.quantite} · dispo {l.date_dispo ? format(parseISO(l.date_dispo), 'd MMM', { locale: fr }) : '—'}</div>
                         </div>
-                        {jAvant !== null && <span className="text-xs font-bold text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full">J−{jAvant}</span>}
-                      </div>
+                        <div className="flex items-center gap-2">
+                          {jAvant !== null && <span className="text-xs font-bold text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full">J−{jAvant}</span>}
+                          <span className="text-blue-300 text-xs">›</span>
+                        </div>
+                      </button>
                     )
                   })}
                   {enPousse.length > 8 && <div className="px-4 py-2.5 text-xs text-blue-400">+{enPousse.length - 8} autres lignes</div>}
@@ -537,6 +575,73 @@ export default function AccueilPage() {
           </div>
         </div>
       </div>
+
+      {/* Sheet action ligne production */}
+      {ligneSheet && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end" onClick={() => setLigneSheet(null)}>
+          <div className="bg-white w-full max-w-2xl mx-auto rounded-t-2xl p-5 pb-10 space-y-4"
+            onClick={e => e.stopPropagation()}>
+            <div className="flex items-start justify-between">
+              <div>
+                <div className="text-lg font-bold text-gray-900">
+                  {ligneSheet.format === 'TAPIS' ? '🟩' : ligneSheet.format === 'TERREAU' ? '🟫' : '🟧'} {ligneSheet.espece?.nom}
+                </div>
+                <div className="text-sm text-gray-500 mt-0.5">
+                  ×{ligneSheet.quantite} {ligneSheet.format.toLowerCase()}
+                  {ligneSheet.date_dispo && ` · dispo ${format(parseISO(ligneSheet.date_dispo), 'd MMM', { locale: fr })}`}
+                  {ligneSheet.date_peremption && ` · exp. ${format(parseISO(ligneSheet.date_peremption), 'd MMM', { locale: fr })}`}
+                </div>
+              </div>
+              <button onClick={() => setLigneSheet(null)} className="text-gray-400 text-2xl leading-none">×</button>
+            </div>
+
+            {ligneErreur && (
+              <div className="bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl px-3 py-2">
+                Erreur : {ligneErreur}
+              </div>
+            )}
+            {ligneAction === 'done' ? (
+              <div className="text-center py-4 text-green-700 font-semibold">✅ Fait !</div>
+            ) : (
+              <div className="space-y-2">
+                {/* Marquer disponible (récolter maintenant) */}
+                {ligneSheet.date_dispo && ligneSheet.date_dispo > todayStr && (
+                  <button onClick={() => marquerRecolte(ligneSheet)}
+                    disabled={ligneAction === 'saving'}
+                    className="w-full flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3.5 text-left active:scale-95 transition-transform disabled:opacity-50">
+                    <span className="text-xl">✂️</span>
+                    <div>
+                      <div className="font-bold text-emerald-800 text-sm">Disponible dès aujourd'hui</div>
+                      <div className="text-xs text-emerald-600">Avance la date de récolte à maintenant</div>
+                    </div>
+                  </button>
+                )}
+                {/* Créer fiche culture dans Terrain */}
+                {(ligneSheet.format === 'TAPIS' || ligneSheet.format === 'GODET') && (
+                  <button onClick={() => creerFicheCulture(ligneSheet)}
+                    disabled={ligneAction === 'saving'}
+                    className="w-full flex items-center gap-3 bg-green-50 border border-green-200 rounded-xl px-4 py-3.5 text-left active:scale-95 transition-transform disabled:opacity-50">
+                    <span className="text-xl">🌿</span>
+                    <div>
+                      <div className="font-bold text-green-800 text-sm">Créer fiche dans Terrain</div>
+                      <div className="text-xs text-green-600">Ajoute cette culture dans Terrain → Cultures</div>
+                    </div>
+                  </button>
+                )}
+                {/* Voir le semis */}
+                <Link href="/historique" onClick={() => setLigneSheet(null)}
+                  className="w-full flex items-center gap-3 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3.5 active:scale-95 transition-transform">
+                  <span className="text-xl">📋</span>
+                  <div>
+                    <div className="font-bold text-gray-800 text-sm">Voir dans l'historique</div>
+                    <div className="text-xs text-gray-500">Détail du semis complet</div>
+                  </div>
+                </Link>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Drawer détail stats */}
       {statOuverte && (
@@ -880,9 +985,10 @@ function AgendaSemaine() {
   )
 }
 
-function SectionProduction({ titre, accent, lignes, aujourd, icon }: {
+function SectionProduction({ titre, accent, lignes, aujourd, icon, onLigneClick }: {
   titre: string; accent: 'red' | 'green'; icon: string
   lignes: LigneAvecEspece[]; aujourd: Date
+  onLigneClick?: (l: LigneAvecEspece) => void
 }) {
   const c = {
     red:   { border: 'border-red-200',   bg: 'bg-red-50',    header: 'bg-red-500',    div: 'divide-red-100',   badge: 'bg-red-100 text-red-700',   name: 'text-red-900' },
@@ -899,7 +1005,8 @@ function SectionProduction({ titre, accent, lignes, aujourd, icon }: {
           const joursRest = l.date_peremption ? differenceInDays(parseISO(l.date_peremption), aujourd) : null
           const ico = l.format === 'TAPIS' ? '🟩' : l.format === 'TERREAU' ? '🟫' : '🟧'
           return (
-            <div key={l.id} className="px-4 py-2.5 flex justify-between items-center">
+            <button key={l.id} onClick={() => onLigneClick?.(l)}
+              className={`w-full px-4 py-2.5 flex justify-between items-center text-left transition-colors ${onLigneClick ? 'active:brightness-95 cursor-pointer' : ''}`}>
               <div>
                 <span className={`text-sm font-semibold ${c.name}`}>{ico} {l.espece?.nom}</span>
                 <div className="text-xs text-gray-400 mt-0.5 flex gap-3">
@@ -907,12 +1014,15 @@ function SectionProduction({ titre, accent, lignes, aujourd, icon }: {
                   {l.date_peremption && <span>exp. {format(parseISO(l.date_peremption), 'd MMM', { locale: fr })}</span>}
                 </div>
               </div>
-              {joursRest !== null && (
-                <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${c.badge}`}>
-                  {joursRest === 0 ? 'Auj.' : `${joursRest}j`}
-                </span>
-              )}
-            </div>
+              <div className="flex items-center gap-2">
+                {joursRest !== null && (
+                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${c.badge}`}>
+                    {joursRest === 0 ? 'Auj.' : `${joursRest}j`}
+                  </span>
+                )}
+                {onLigneClick && <span className="text-gray-300 text-xs">›</span>}
+              </div>
+            </button>
           )
         })}
       </div>
