@@ -291,15 +291,21 @@ export default function CommanderPage() {
   const hasHabituelle = recurrentes.length > 0
 
   return (
-    <div className="min-h-screen bg-cream" style={{ paddingBottom: nbArticles > 0 ? '100px' : '32px' }}>
+    <div className="min-h-screen bg-cream" style={{ paddingBottom: nbArticles > 0 ? '100px' : '32px', paddingTop: apercu ? '48px' : undefined }}>
 
       {/* ── Bandeau aperçu chef (visible seulement depuis la gestion) ── */}
       {apercu && (
-        <button onClick={() => router.push('/commandes')}
-          className="fixed top-3 left-3 z-30 bg-white/95 backdrop-blur shadow-lg border border-green-200 rounded-full pl-2.5 pr-3.5 py-2 flex items-center gap-1.5 active:scale-95 transition-transform">
-          <span className="text-base">←</span>
-          <span className="text-xs font-bold text-green-800">Mode gestion</span>
-        </button>
+        <div className="fixed top-0 inset-x-0 z-50 flex items-center justify-between gap-3 bg-amber-50 border-b border-amber-200 px-4 py-2.5"
+          style={{ paddingTop: 'calc(0.625rem + env(safe-area-inset-top))' }}>
+          <div className="flex items-center gap-2">
+            <span className="text-base">👁</span>
+            <span className="text-xs font-bold text-amber-800">Aperçu boutique client</span>
+          </div>
+          <button onClick={() => router.back()}
+            className="flex items-center gap-1.5 bg-amber-700 text-white text-xs font-bold px-3 py-1.5 rounded-full active:scale-95 transition-transform">
+            ← Retour gestion
+          </button>
+        </div>
       )}
 
       {/* ── Hero d'accueil (défile) ── */}
