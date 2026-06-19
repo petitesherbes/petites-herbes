@@ -61,7 +61,7 @@ export default function ApercuChef() {
             <div className="space-y-1.5">
               {filtres.map(c => (
                 <button key={c.id}
-                  onClick={() => { setOuvert(false); router.push(`/commander/${c.order_token}?apercu=1`) }}
+                  onClick={() => { setOuvert(false); window.location.href = `/commander/${c.order_token}?apercu=1` }}
                   className="w-full flex items-center justify-between bg-gray-50 hover:bg-green-50 rounded-xl px-3 py-3 text-left transition-colors">
                   <span className="font-semibold text-sm text-gray-800">{c.nom}</span>
                   <span className="text-green-700 text-sm font-semibold">Ouvrir →</span>

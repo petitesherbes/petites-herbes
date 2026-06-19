@@ -301,7 +301,7 @@ export default function CommanderPage() {
             <span className="text-base">👁</span>
             <span className="text-xs font-bold text-amber-800">Aperçu boutique client</span>
           </div>
-          <button onClick={() => router.back()}
+          <button onClick={() => { window.location.href = '/commandes' }}
             className="flex items-center gap-1.5 bg-amber-700 text-white text-xs font-bold px-3 py-1.5 rounded-full active:scale-95 transition-transform">
             ← Retour gestion
           </button>
