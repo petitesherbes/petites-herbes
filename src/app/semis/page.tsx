@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic'
 import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { fetchWithCache, queueMutation, saveCache } from '@/lib/offline'
-import { Espece, Template, SemisLigneForm, Format, ParametresProduction, Contenant } from '@/types'
+import { Espece, Template, TemplateLigne, SemisLigneForm, Format, ParametresProduction, Contenant } from '@/types'
 import {
   calculerPoidsGraines, calculerProdEstimee, calculerDates,
   calculerCoutGraines, calculerCoutTerreau, calculerCoutContenant, recapSemis,
@@ -183,6 +183,17 @@ export default function NouveauSemisPage() {
     setEditTemplate(prev => prev ? { ...prev, templates_lignes: (prev.templates_lignes || []).filter(l => l.id !== ligneId) } : null)
     setTemplates(prev => prev.map(t => t.id === editTemplate?.id
       ? { ...t, templates_lignes: (t.templates_lignes || []).filter(l => l.id !== ligneId) }
+      : t))
+  }
+
+  async function changerQteTpl(ligneId: string, nouvelleQte: number) {
+    if (nouvelleQte < 1) return
+    await supabase.from('templates_lignes').update({ quantite: nouvelleQte }).eq('id', ligneId)
+    const patch = (lignes: TemplateLigne[]) =>
+      lignes.map(l => l.id === ligneId ? { ...l, quantite: nouvelleQte } : l)
+    setEditTemplate(prev => prev ? { ...prev, templates_lignes: patch(prev.templates_lignes || []) } : null)
+    setTemplates(prev => prev.map(t => t.id === editTemplate?.id
+      ? { ...t, templates_lignes: patch(t.templates_lignes || []) }
       : t))
   }
 
@@ -532,18 +543,32 @@ export default function NouveauSemisPage() {
             </div>
             <div className="space-y-2">
               <div className="text-xs font-bold text-gray-400 uppercase tracking-wide">Lignes ({editTemplate.templates_lignes?.length || 0})</div>
-              {(editTemplate.templates_lignes || []).sort((a, b) => a.ordre - b.ordre).map(l => (
-                <div key={l.id} className="flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2.5">
-                  <div className="flex-1 text-sm">
-                    <span className="font-semibold text-gray-800">{l.espece?.nom || l.espece_id}</span>
-                    <span className="text-gray-400 ml-2 text-xs">× {l.quantite} {l.format.toLowerCase()}</span>
+              {(editTemplate.templates_lignes || []).sort((a, b) => a.ordre - b.ordre).map(l => {
+                const fmtLabel = l.format === 'TAPIS' ? 'caisse' : l.format === 'GODET' ? 'série' : 'caisse'
+                return (
+                  <div key={l.id} className="flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2.5">
+                    <div className="flex-1 min-w-0 text-sm">
+                      <span className="font-semibold text-gray-800">{l.espece?.nom || l.espece_id}</span>
+                      <span className="ml-1.5 text-[10px] text-gray-400 uppercase tracking-wide">{l.format.toLowerCase()}</span>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button onClick={() => changerQteTpl(l.id, l.quantite - 1)} disabled={l.quantite <= 1}
+                        className="w-7 h-7 flex items-center justify-center bg-white border border-gray-200 rounded-lg text-gray-600 text-base active:bg-gray-100 disabled:opacity-30">
+                        −
+                      </button>
+                      <span className="w-8 text-center text-sm font-bold text-gray-800">{l.quantite} <span className="text-[10px] font-normal text-gray-400">{fmtLabel}</span></span>
+                      <button onClick={() => changerQteTpl(l.id, l.quantite + 1)}
+                        className="w-7 h-7 flex items-center justify-center bg-white border border-gray-200 rounded-lg text-gray-600 text-base active:bg-gray-100">
+                        +
+                      </button>
+                    </div>
+                    <button onClick={() => supprimerLigneTpl(l.id)}
+                      className="w-7 h-7 flex items-center justify-center text-gray-300 active:text-red-400 text-lg leading-none rounded-lg shrink-0">
+                      ×
+                    </button>
                   </div>
-                  <button onClick={() => supprimerLigneTpl(l.id)}
-                    className="w-7 h-7 flex items-center justify-center text-gray-300 active:text-red-400 text-lg leading-none rounded-lg">
-                    ×
-                  </button>
-                </div>
-              ))}
+                )
+              })}
               {(editTemplate.templates_lignes || []).length === 0 && (
                 <div className="text-sm text-gray-400 text-center py-4">Template vide — supprimez-le ou revenez pour l&apos;utiliser tel quel</div>
               )}
