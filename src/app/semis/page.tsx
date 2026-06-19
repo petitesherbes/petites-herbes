@@ -14,7 +14,7 @@ import { format, parseISO } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { useRouter } from 'next/navigation'
 
-type LigneAvecId = SemisLigneForm & { _id: number; g_par_unite_override?: number | null }
+type LigneAvecId = SemisLigneForm & { _id: number; g_par_unite_override?: number | null; zone_id?: string | null }
 
 type Zone = { id: string; nom: string; type: string; superficie_m2: number | null; description: string | null; ordre: number; actif: boolean }
 type StatutCulture  = 'semis' | 'pret_planter' | 'en_place' | 'recolte' | 'termine'
@@ -42,6 +42,8 @@ export default function NouveauSemisPage() {
   const [lignes, setLignes] = useState<LigneAvecId[]>([])
   const [saving, setSaving] = useState(false)
   const [generatingPdf, setGeneratingPdf] = useState(false)
+  const [semisValide, setSemisValide] = useState(false)
+  const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null)
   const [saveAsTemplate, setSaveAsTemplate] = useState(false)
   const [nouveauTemplateName, setNouveauTemplateName] = useState('')
   const [avertissements, setAvertissements] = useState<string[]>([])
@@ -55,7 +57,7 @@ export default function NouveauSemisPage() {
   useEffect(() => { chargerDonnees() }, [])
 
   async function chargerDonnees() {
-    const [t, e, pArr, c, rec] = await Promise.all([
+    const [t, e, pArr, c, rec, z] = await Promise.all([
       fetchWithCache('templates', async () => {
         const { data } = await supabase.from('templates').select('*, templates_lignes(*, espece:especes(*))').order('nom')
         return data
@@ -73,11 +75,16 @@ export default function NouveauSemisPage() {
         return data
       }).then(r => r.data),
       supabase.from('commandes_recurrentes').select('designation, quantite, client_id').eq('actif', true).then(r => r.data),
+      fetchWithCache('zones', async () => {
+        const { data } = await supabase.from('zones').select('*').eq('actif', true).order('ordre')
+        return data
+      }).then(r => r.data),
     ])
     if (t?.length) setTemplates(t)
     if (e?.length) setEspeces(e)
     if (pArr?.[0]) setParams(pArr[0])
     if (c?.length) setContenants(c)
+    if (z?.length) setZones(z as unknown as Zone[])
     // Agréger la demande des commandes habituelles par produit
     if (rec && rec.length > 0) {
       const parProduit = new Map<string, { total: number; clients: Set<string> }>()
@@ -154,7 +161,7 @@ export default function NouveauSemisPage() {
     setLignes(prev => prev.filter(l => l._id !== id))
   }
 
-  function modifierLigne(id: number, champ: 'espece_id' | 'quantite' | 'g_par_unite', valeur: string | number | null) {
+  function modifierLigne(id: number, champ: 'espece_id' | 'quantite' | 'g_par_unite' | 'zone_id', valeur: string | number | null) {
     setLignes(prev => prev.map(l => {
       if (l._id !== id) return l
       if (champ === 'espece_id') {
@@ -162,6 +169,7 @@ export default function NouveauSemisPage() {
         return { ...l, espece_id: valeur as string, espece: esp }
       }
       if (champ === 'g_par_unite') return { ...l, g_par_unite_override: valeur != null ? Number(valeur) : null }
+      if (champ === 'zone_id') return { ...l, zone_id: valeur as string | null }
       return { ...l, quantite: Math.max(1, Number(valeur)) }
     }))
   }
@@ -268,6 +276,8 @@ export default function NouveauSemisPage() {
         statut: 'semis',
         date_semis: dateSemis,
         quantite: String(l.quantite),
+        zone_id: l.zone_id || null,
+        actif: true,
       }))
 
     if (!navigator.onLine) {
@@ -340,40 +350,69 @@ export default function NouveauSemisPage() {
     }).catch(() => {})
 
     setSaving(false)
+    setSemisValide(true)
 
-    // PDF auto-téléchargé à la validation
-    try {
-      setGeneratingPdf(true)
-      const res = await fetch('/api/pdf/semis', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          lignes: lignes.map(l => ({
-            espece: l.espece?.nom ?? '',
-            format: l.format,
-            quantite: l.quantite,
-            poids: calculerLigne(l).poids,
-          })),
-          dateSemis,
-          templateNom: templateChoisi || undefined,
-          tapisParCaisse: params?.tapis_par_caisse ?? 24,
-          godetsParSerie: params?.godets_par_serie ?? 14,
-        }),
-      })
+    // Générer PDF en arrière-plan — s'ouvre via bouton (compatible mobile)
+    setGeneratingPdf(true)
+    fetch('/api/pdf/semis', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        lignes: lignes.map(l => ({
+          espece: l.espece?.nom ?? '',
+          format: l.format,
+          quantite: l.quantite,
+          poids: calculerLigne(l).poids,
+        })),
+        dateSemis,
+        templateNom: templateChoisi || undefined,
+        tapisParCaisse: params?.tapis_par_caisse ?? 24,
+        godetsParSerie: params?.godets_par_serie ?? 14,
+      }),
+    }).then(async res => {
       if (res.ok) {
         const blob = await res.blob()
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url; a.download = `semis-${dateSemis}.pdf`
-        document.body.appendChild(a); a.click()
-        document.body.removeChild(a); URL.revokeObjectURL(url)
+        setPdfBlobUrl(URL.createObjectURL(blob))
       }
-    } finally {
-      setGeneratingPdf(false)
-    }
-
-    router.push('/historique')
+    }).finally(() => setGeneratingPdf(false))
   }
+
+  if (semisValide) return (
+    <div className="p-4 space-y-6">
+      <div className="text-center pt-10 pb-4">
+        <div className="text-6xl mb-4">✅</div>
+        <h1 className="text-2xl font-bold text-green-900">Semis enregistré !</h1>
+        <p className="text-gray-500 text-sm mt-2 leading-relaxed">
+          Stock graines mis à jour.{lignes.some(l => l.format === 'TAPIS' || l.format === 'GODET') ? ' Fiches cultures créées dans le terrain.' : ''}
+        </p>
+      </div>
+
+      {generatingPdf ? (
+        <div className="flex items-center justify-center gap-3 py-4 text-gray-400 text-sm">
+          <div className="w-5 h-5 border-2 border-gray-300 border-t-green-600 rounded-full animate-spin" />
+          Génération du PDF en cours...
+        </div>
+      ) : pdfBlobUrl ? (
+        <a href={pdfBlobUrl} target="_blank" rel="noopener noreferrer"
+          className="w-full flex items-center justify-center gap-2 border-2 border-green-600 text-green-700 py-4 rounded-xl font-semibold text-sm active:scale-95 transition-transform">
+          📄 Voir / télécharger le bon de semis
+        </a>
+      ) : null}
+
+      <button onClick={() => router.push('/historique')}
+        className="w-full bg-green-700 hover:bg-green-800 text-white py-4 rounded-xl font-bold text-base transition-colors shadow-sm">
+        Voir l'historique →
+      </button>
+
+      <button onClick={() => {
+        setSemisValide(false); setPdfBlobUrl(null)
+        setEtape(1); setLignes([]); setTemplateChoisi(''); setSaveAsTemplate(false)
+      }}
+        className="w-full text-gray-400 text-sm py-2">
+        + Nouveau semis
+      </button>
+    </div>
+  )
 
   if (vue === 'cultures') return (
     <div className="p-4 pb-24">
@@ -509,7 +548,8 @@ export default function NouveauSemisPage() {
         <SectionLignes titre="🟧 GODETS" couleur="godets" lignes={lignesGodets}
           especes={especesPourFormat('GODET')} format="GODET"
           onModifier={modifierLigne} onSupprimer={supprimerLigne}
-          onAjouter={() => ajouterLigne('GODET')} calculer={calculerLigne} />
+          onAjouter={() => ajouterLigne('GODET')} calculer={calculerLigne}
+          zones={zones} />
 
         <button onClick={passerEtape3} disabled={lignes.length === 0}
           className="w-full bg-green-700 hover:bg-green-800 text-white py-4 rounded-xl font-bold text-base disabled:opacity-40 transition-colors shadow-sm">
@@ -988,13 +1028,14 @@ function CulturesTab({ cultures, zones, onSaved }: {
 
 // ─── SectionLignes ────────────────────────────────────────────────────────────
 
-function SectionLignes({ titre, couleur, lignes, especes, format: fmt, onModifier, onSupprimer, onAjouter, calculer }: {
+function SectionLignes({ titre, couleur, lignes, especes, format: fmt, onModifier, onSupprimer, onAjouter, calculer, zones }: {
   titre: string; couleur: 'tapis' | 'terreau' | 'godets'
   lignes: LigneAvecId[]; especes: Espece[]; format: Format
-  onModifier: (id: number, champ: 'espece_id' | 'quantite' | 'g_par_unite', val: string | number | null) => void
+  onModifier: (id: number, champ: 'espece_id' | 'quantite' | 'g_par_unite' | 'zone_id', val: string | number | null) => void
   onSupprimer: (id: number) => void
   onAjouter: () => void
   calculer: (l: LigneAvecId) => { poids: number; total: number; coutG: number }
+  zones?: Zone[]
 }) {
   const colors = {
     tapis:   { header: 'bg-green-700',  light: 'bg-green-50',  border: 'border-green-200' },
@@ -1005,6 +1046,7 @@ function SectionLignes({ titre, couleur, lignes, especes, format: fmt, onModifie
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editQty, setEditQty] = useState('')
   const [editGrammage, setEditGrammage] = useState('')
+  const [editZone, setEditZone] = useState('')
 
   const unitLabel = fmt === 'TAPIS' ? 'tapis' : fmt === 'GODET' ? 'godet' : 'caisse'
   const qtyLabel  = fmt === 'TAPIS' ? 'Caisses' : fmt === 'GODET' ? 'Séries' : 'Caisses'
@@ -1016,6 +1058,7 @@ function SectionLignes({ titre, couleur, lignes, especes, format: fmt, onModifie
       : fmt === 'GODET' ? (l.espece?.g_godet ?? 0)
       : (l.espece?.g_caisse ?? 0)
     setEditGrammage(String(l.g_par_unite_override ?? defaut))
+    setEditZone(l.zone_id ?? '')
   }
 
   function validerEdit(l: LigneAvecId) {
@@ -1026,6 +1069,7 @@ function SectionLignes({ titre, couleur, lignes, especes, format: fmt, onModifie
       : fmt === 'GODET' ? (l.espece?.g_godet ?? 0)
       : (l.espece?.g_caisse ?? 0)
     onModifier(l._id, 'g_par_unite', (!isNaN(g) && g > 0 && g !== defaut) ? g : null)
+    if (fmt === 'GODET') onModifier(l._id, 'zone_id', editZone || null)
     setEditingId(null)
   }
 
@@ -1077,12 +1121,17 @@ function SectionLignes({ titre, couleur, lignes, especes, format: fmt, onModifie
                   </div>
 
                   {/* Info poids / coût + crayon */}
-                  <div className="flex items-center gap-2 pl-1">
+                  <div className="flex items-center gap-2 pl-1 flex-wrap">
                     <span className="text-xs text-gray-500">⚖️ {calc.poids.toFixed(1)}g</span>
                     {sansPrix
                       ? <span className="text-xs text-orange-500">⚠️ Prix manquant</span>
                       : <span className="text-xs text-gray-500">💶 {calc.total.toFixed(2)}€</span>
                     }
+                    {fmt === 'GODET' && l.zone_id && zones?.find(z => z.id === l.zone_id) && (
+                      <span className="text-xs text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-full">
+                        📍 {zones.find(z => z.id === l.zone_id)!.nom}
+                      </span>
+                    )}
                     <button
                       onClick={() => isEditing ? setEditingId(null) : ouvrirEdit(l)}
                       className={`ml-auto flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border transition-colors
@@ -1113,6 +1162,16 @@ function SectionLignes({ titre, couleur, lignes, especes, format: fmt, onModifie
                             className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm text-center focus:outline-none focus:border-green-400" />
                         </div>
                       </div>
+                      {fmt === 'GODET' && zones && zones.length > 0 && (
+                        <div>
+                          <label className="text-[10px] text-gray-400 block mb-1">Zone de plantation</label>
+                          <select value={editZone} onChange={e => setEditZone(e.target.value)}
+                            className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm focus:outline-none focus:border-green-400 bg-white">
+                            <option value="">— Aucune zone —</option>
+                            {zones.map(z => <option key={z.id} value={z.id}>{z.nom}</option>)}
+                          </select>
+                        </div>
+                      )}
                       {aOverride && (
                         <button
                           onClick={() => { onModifier(l._id, 'g_par_unite', null); setEditingId(null) }}
