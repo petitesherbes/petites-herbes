@@ -879,11 +879,21 @@ function ExportPanel() {
 type CatItem       = { id: string; titre: string; categorie: string; icone: string; active: boolean; ordre: number }
 type ZoneLite      = { id: string; nom: string; type: string }
 type ZoneTacheLite = { zone_id: string; catalogue_id: string }
+type RecurrenteLite = { id: string; titre: string; frequence: string | null }
+
+const FREQ_PRESETS = [
+  { val: 'quotidien',                          label: 'Tous les jours' },
+  { val: 'lundi,mardi,mercredi,jeudi,vendredi', label: 'Lun – Ven' },
+  { val: 'lundi,mercredi,vendredi',             label: 'Lun · Mer · Ven' },
+  { val: 'mardi,jeudi',                         label: 'Mar · Jeu' },
+  { val: 'vendredi',                            label: 'Vendredi' },
+]
 
 function TachesPanel() {
   const [zones, setZones]           = useState<ZoneLite[]>([])
   const [catalogue, setCatalogue]   = useState<CatItem[]>([])
   const [zoneTaches, setZoneTaches] = useState<ZoneTacheLite[]>([])
+  const [recurrentes, setRecurrentes] = useState<RecurrenteLite[]>([])
   const [vue, setVue]               = useState<string>('global')
   const [saving, setSaving]         = useState<string | null>(null)
 
@@ -897,15 +907,61 @@ function TachesPanel() {
   const [newCatIcone, setNewCatIcone] = useState('📋')
   const [savingEdit, setSavingEdit]   = useState(false)
 
+  // état activation récurrente
+  const [activantId,   setActivantId]   = useState<string | null>(null)
+  const [activantFreq, setActivantFreq] = useState('quotidien')
+
+  // état déplacement de catégorie
+  const [deplacantId,   setDeplacantId]   = useState<string | null>(null)
+  const [deplacantVers, setDeplacantVers] = useState('')
+
+  // état renommage catégorie
+  const [renamingCat,    setRenamingCat]    = useState<string | null>(null)
+  const [renamingCatVal, setRenamingCatVal] = useState('')
+
   useEffect(() => { chargerTaches() }, [])
 
   async function chargerTaches() {
-    const [{ data: z }, { data: c }, { data: zt }] = await Promise.all([
+    const [{ data: z }, { data: c }, { data: zt }, { data: r }] = await Promise.all([
       supabase.from('zones').select('id,nom,type').eq('actif', true).order('ordre'),
       supabase.from('taches_catalogue').select('*').order('ordre'),
       supabase.from('zone_taches_catalogue').select('*'),
+      supabase.from('taches').select('id,titre,frequence').eq('type', 'recurrente').eq('actif', true),
     ])
-    if (z) setZones(z); if (c) setCatalogue(c as CatItem[]); if (zt) setZoneTaches(zt)
+    if (z) setZones(z); if (c) setCatalogue(c as CatItem[])
+    if (zt) setZoneTaches(zt); if (r) setRecurrentes(r as RecurrenteLite[])
+  }
+
+  async function activerRecurrente(cat: CatItem) {
+    const existing = recurrentes.find(r => r.titre.toLowerCase() === cat.titre.toLowerCase())
+    if (existing) {
+      await supabase.from('taches').update({ frequence: activantFreq }).eq('id', existing.id)
+    } else {
+      await supabase.from('taches').insert({ titre: cat.titre, type: 'recurrente', frequence: activantFreq, actif: true, priorite: 'normale' })
+    }
+    setActivantId(null)
+    await chargerTaches()
+  }
+
+  async function desactiverRecurrente(cat: CatItem) {
+    const existing = recurrentes.find(r => r.titre.toLowerCase() === cat.titre.toLowerCase())
+    if (!existing) return
+    if (!confirm(`Désactiver la tâche récurrente "${cat.titre}" ?`)) return
+    await supabase.from('taches').update({ actif: false }).eq('id', existing.id)
+    await chargerTaches()
+  }
+
+  async function deplacerTache(catId: string, nouvelleCategorie: string) {
+    await supabase.from('taches_catalogue').update({ categorie: nouvelleCategorie }).eq('id', catId)
+    setDeplacantId(null); setDeplacantVers('')
+    await chargerTaches()
+  }
+
+  async function renommerCategorie(ancienNom: string, nouveauNom: string) {
+    if (!nouveauNom.trim() || nouveauNom === ancienNom) { setRenamingCat(null); return }
+    await supabase.from('taches_catalogue').update({ categorie: nouveauNom.trim() }).eq('categorie', ancienNom)
+    setRenamingCat(null)
+    await chargerTaches()
   }
 
   async function toggleGlobal(cat: CatItem) {
@@ -996,53 +1052,124 @@ function TachesPanel() {
           {categories.map(cat => {
             const items = catalogue.filter(c => c.categorie === cat)
             const icone = items[0]?.icone || '📋'
+            const autresCats = categories.filter(c2 => c2 !== cat)
             return (
               <div key={cat} className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-                <div className="px-4 py-2.5 bg-gray-50 font-bold text-xs text-gray-600 border-b border-gray-100 flex justify-between items-center">
-                  <span>{icone} {cat}</span>
-                  <span className="font-normal text-gray-400">{items.filter(i => i.active).length}/{items.length}</span>
+                {/* En-tête catégorie — cliquable pour renommer */}
+                <div className="px-3 py-2.5 bg-gray-50 border-b border-gray-100 flex items-center gap-2">
+                  {renamingCat === cat ? (
+                    <form className="flex-1 flex gap-2" onSubmit={e => { e.preventDefault(); renommerCategorie(cat, renamingCatVal) }}>
+                      <input autoFocus value={renamingCatVal} onChange={e => setRenamingCatVal(e.target.value)}
+                        className="flex-1 border border-green-300 rounded-lg px-2 py-1 text-xs font-bold focus:outline-none bg-white" />
+                      <button type="submit" className="text-xs bg-green-700 text-white px-2.5 py-1 rounded-lg font-semibold">OK</button>
+                      <button type="button" onClick={() => setRenamingCat(null)} className="text-xs text-gray-400 px-2 py-1 rounded-lg border border-gray-200">✕</button>
+                    </form>
+                  ) : (
+                    <>
+                      <span className="font-bold text-xs text-gray-600 flex-1">{icone} {cat}</span>
+                      <button onClick={() => { setRenamingCat(cat); setRenamingCatVal(cat) }}
+                        className="text-gray-300 hover:text-blue-500 text-xs px-1" title="Renommer cette catégorie">✏️</button>
+                      <span className="font-normal text-gray-400 text-xs">{items.filter(i => i.active).length}/{items.length}</span>
+                    </>
+                  )}
                 </div>
 
-                {items.map(c => (
-                  editingId === c.id ? (
-                    /* Mode édition inline */
-                    <div key={c.id} className="px-3 py-2.5 border-b border-gray-50 bg-green-50 flex items-center gap-2">
+                {items.map(c => {
+                  const recurrente = recurrentes.find(r => r.titre.toLowerCase() === c.titre.toLowerCase())
+                  return (
+                  <div key={c.id}>
+                  {editingId === c.id ? (
+                    <div className="px-3 py-2.5 border-b border-gray-50 bg-green-50 flex items-center gap-2">
                       <input autoFocus value={editingTitre} onChange={e => setEditingTitre(e.target.value)}
                         onKeyDown={e => { if (e.key === 'Enter') sauvegarderEdition(); if (e.key === 'Escape') setEditingId(null) }}
                         className="flex-1 border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:border-green-400 bg-white" />
                       <button onClick={sauvegarderEdition} disabled={savingEdit}
-                        className="text-xs bg-green-700 text-white px-3 py-1.5 rounded-lg font-semibold active:scale-95 disabled:opacity-50">
-                        OK
-                      </button>
+                        className="text-xs bg-green-700 text-white px-3 py-1.5 rounded-lg font-semibold active:scale-95 disabled:opacity-50">OK</button>
                       <button onClick={() => setEditingId(null)}
-                        className="text-xs text-gray-400 px-2 py-1.5 rounded-lg border border-gray-200">
-                        ✕
-                      </button>
+                        className="text-xs text-gray-400 px-2 py-1.5 rounded-lg border border-gray-200">✕</button>
                     </div>
                   ) : (
-                    /* Mode normal */
-                    <div key={c.id}
-                      className={`flex items-center gap-2 px-3 py-2.5 border-b border-gray-50 ${!c.active ? 'opacity-40' : ''}`}>
+                    <div className={`flex items-center gap-1.5 px-3 py-2.5 border-b border-gray-50 ${!c.active ? 'opacity-40' : ''}`}>
                       <button onClick={() => toggleGlobal(c)}
                         className={`w-6 h-6 rounded-full border-2 flex-shrink-0 flex items-center justify-center text-xs transition-colors active:scale-95
                           ${c.active ? 'bg-green-600 border-green-600 text-white' : 'border-gray-300 bg-white'}`}>
                         {c.active ? '✓' : ''}
                       </button>
                       <span className="text-sm text-gray-800 flex-1 leading-snug">{c.titre}</span>
-                      {saving === c.id
-                        ? <span className="text-xs text-gray-400 animate-pulse">...</span>
-                        : <>
-                          <button onClick={() => { setEditingId(c.id); setEditingTitre(c.titre) }}
-                            className="text-gray-300 hover:text-blue-500 px-1 text-sm active:scale-95 flex-shrink-0"
-                            title="Renommer">✏️</button>
-                          <button onClick={() => supprimerTache(c.id)}
-                            className="text-gray-300 hover:text-red-500 px-1 text-sm font-bold active:scale-95 flex-shrink-0"
-                            title="Supprimer">×</button>
-                        </>
-                      }
+                      {saving === c.id ? <span className="text-xs text-gray-400 animate-pulse">...</span> : <>
+                        {/* Badge récurrente ou bouton d'activation */}
+                        {recurrente ? (
+                          <button onClick={() => { setActivantId(c.id); setActivantFreq(recurrente.frequence || 'quotidien') }}
+                            title="Tâche récurrente active — cliquer pour modifier"
+                            className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 border border-green-300 flex-shrink-0">
+                            ⟳ {recurrente.frequence === 'quotidien' ? 'tous les jours' : recurrente.frequence?.split(',').map(j => j.slice(0,3)).join('·') || ''}
+                          </button>
+                        ) : (
+                          <button onClick={() => { setActivantId(activantId === c.id ? null : c.id); setActivantFreq('quotidien') }}
+                            title="Activer comme tâche récurrente"
+                            className="text-gray-300 hover:text-green-600 text-base px-1 flex-shrink-0">⟳</button>
+                        )}
+                        {/* Déplacer entre catégories */}
+                        <button onClick={() => { setDeplacantId(deplacantId === c.id ? null : c.id); setDeplacantVers('') }}
+                          title="Déplacer vers une autre catégorie"
+                          className="text-gray-300 hover:text-purple-500 text-xs px-1 flex-shrink-0">↕</button>
+                        <button onClick={() => { setEditingId(c.id); setEditingTitre(c.titre) }}
+                          className="text-gray-300 hover:text-blue-500 px-1 text-sm active:scale-95 flex-shrink-0" title="Renommer">✏️</button>
+                        <button onClick={() => supprimerTache(c.id)}
+                          className="text-gray-300 hover:text-red-500 px-1 text-sm font-bold active:scale-95 flex-shrink-0" title="Supprimer">×</button>
+                      </>}
                     </div>
+                  )}
+
+                  {/* Panneau activation récurrente */}
+                  {activantId === c.id && (
+                    <div className="mx-3 mb-2 mt-1 bg-green-50 rounded-xl p-3 border border-green-200 space-y-2">
+                      <div className="text-xs font-bold text-green-800">
+                        {recurrente ? `Modifier la fréquence — "${c.titre}"` : `Activer "${c.titre}" comme récurrente`}
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {FREQ_PRESETS.map(f => (
+                          <button key={f.val} onClick={() => setActivantFreq(f.val)}
+                            className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition-colors
+                              ${activantFreq === f.val ? 'bg-green-700 text-white border-green-700' : 'bg-white text-gray-600 border-gray-200'}`}>
+                            {f.label}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={() => activerRecurrente(c)}
+                          className="flex-1 py-2 bg-green-700 text-white rounded-lg text-xs font-bold active:scale-95">
+                          ✓ {recurrente ? 'Mettre à jour' : 'Activer'}
+                        </button>
+                        {recurrente && (
+                          <button onClick={() => desactiverRecurrente(c)}
+                            className="px-3 py-2 bg-red-50 text-red-600 border border-red-200 rounded-lg text-xs font-semibold">
+                            Désactiver
+                          </button>
+                        )}
+                        <button onClick={() => setActivantId(null)}
+                          className="px-3 py-2 border border-gray-200 rounded-lg text-xs text-gray-500">✕</button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Panneau déplacement catégorie */}
+                  {deplacantId === c.id && (
+                    <div className="mx-3 mb-2 mt-1 bg-purple-50 rounded-xl p-3 border border-purple-200 flex gap-2 items-center">
+                      <select value={deplacantVers} onChange={e => setDeplacantVers(e.target.value)}
+                        className="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none bg-white">
+                        <option value="">Déplacer vers...</option>
+                        {autresCats.map(c2 => <option key={c2} value={c2}>{c2}</option>)}
+                      </select>
+                      <button onClick={() => deplacerTache(c.id, deplacantVers)} disabled={!deplacantVers}
+                        className="px-3 py-1.5 bg-purple-600 text-white rounded-lg text-xs font-bold disabled:opacity-40 active:scale-95">↕ OK</button>
+                      <button onClick={() => setDeplacantId(null)}
+                        className="px-2 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-500">✕</button>
+                    </div>
+                  )}
+                  </div>
                   )
-                ))}
+                })}
 
                 {/* Ajouter dans cette catégorie */}
                 {addingCat === cat ? (
