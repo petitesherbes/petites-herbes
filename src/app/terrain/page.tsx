@@ -1,7 +1,7 @@
 'use client'
 export const dynamic = 'force-dynamic'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
 import { fetchWithCache, queueMutation, saveCache, queuePhoto } from '@/lib/offline'
 import { format, parseISO, isToday, isTomorrow, addDays } from 'date-fns'
@@ -38,8 +38,10 @@ type Tache = {
   id: string; titre: string; description: string | null; type: string
   frequence: string | null; date_echeance: string | null
   zone_id: string | null; priorite: string; actif: boolean
+  espece_id: string | null; atelier: string | null
   completions?: { date_completion: string }[]
   temps?: TempsTache[]
+  espece?: { nom: string } | null
 }
 type Perte = {
   id: string; date_perte: string; designation: string
@@ -297,7 +299,7 @@ function ListeAvecAjout<T extends { id: string; nom: string }>({ items, valeur, 
 
 // ─── Page principale ───────────────────────────────────────────────────────────
 
-type Tab = 'cahier' | 'agenda' | 'cultures' | 'zones' | 'pertes' | 'heures'
+type Tab = 'cahier' | 'agenda' | 'cultures' | 'zones' | 'pertes' | 'heures' | 'bilan'
 
 export default function TerrainPage() {
   const [onglet, setOnglet]             = useState<Tab>(() => {
@@ -347,12 +349,10 @@ export default function TerrainPage() {
         return data
       }).then(r => r.data),
       fetchWithCache('taches', async () => {
-        // Essai avec la table taches_temps (migration 025)
         const { data, error } = await supabase.from('taches')
-          .select('*, completions:taches_completions(date_completion), temps:taches_temps(id, tache_id, date, auteur, minutes, chrono_debut)')
+          .select('*, espece:especes(nom), completions:taches_completions(date_completion), temps:taches_temps(id, tache_id, date, auteur, minutes, chrono_debut)')
           .eq('actif', true).order('priorite', { ascending: false })
         if (!error) return data
-        // Fallback si migration 025 pas encore appliquée
         const { data: d2 } = await supabase.from('taches')
           .select('*, completions:taches_completions(date_completion)')
           .eq('actif', true).order('priorite', { ascending: false })
@@ -455,6 +455,7 @@ export default function TerrainPage() {
     { id: 'zones',    icon: '🗺️', label: 'Zones' },
     { id: 'pertes',   icon: '📉',  label: 'Pertes' },
     { id: 'heures',   icon: '⏱️', label: 'Heures' },
+    { id: 'bilan',    icon: '📊',  label: 'Bilan' },
   ]
 
   return (
@@ -625,7 +626,7 @@ export default function TerrainPage() {
           />
         )}
         {onglet === 'agenda' && (
-          <AgendaTab taches={taches} zones={zones}
+          <AgendaTab taches={taches} zones={zones} especes={especes}
             catalogueTaches={catalogueTaches} zoneTaches={zoneTaches}
             onSaved={charger} />
         )}
@@ -635,6 +636,7 @@ export default function TerrainPage() {
         {onglet === 'heures' && (
           <HeuresTab taches={taches} entrees={entrees} zones={zones} pointages={pointages} onSaved={charger} />
         )}
+        {onglet === 'bilan' && <BilanTab taches={taches} />}
       </div>
     </div>
   )
@@ -1156,8 +1158,8 @@ function CahierTab({ zones, especes, especesSerre, produits, entrees, onSaved, o
 
 // ─── Tab : Agenda ──────────────────────────────────────────────────────────────
 
-function AgendaTab({ taches, zones, catalogueTaches, zoneTaches, onSaved }: {
-  taches: Tache[]; zones: Zone[]
+function AgendaTab({ taches, zones, especes, catalogueTaches, zoneTaches, onSaved }: {
+  taches: Tache[]; zones: Zone[]; especes: { id: string; nom: string }[]
   catalogueTaches: TacheCatalogue[]; zoneTaches: ZoneTacheCat[]
   onSaved: () => void
 }) {
@@ -1179,12 +1181,14 @@ function AgendaTab({ taches, zones, catalogueTaches, zoneTaches, onSaved }: {
 
   // ─── Edition inline ───────────────────────────────────────────────────────────
   const [editId,    setEditId]    = useState<string | null>(null)
-  const [editTitre, setEditTitre] = useState('')
-  const [editType,  setEditType]  = useState<'ponctuelle' | 'recurrente'>('ponctuelle')
-  const [editFreq,  setEditFreq]  = useState<string[]>([])
-  const [editEch,   setEditEch]   = useState('')
-  const [editPrio,  setEditPrio]  = useState('normale')
-  const [editSaving, setEditSaving] = useState(false)
+  const [editTitre, setEditTitre]     = useState('')
+  const [editType,  setEditType]      = useState<'ponctuelle' | 'recurrente'>('ponctuelle')
+  const [editFreq,  setEditFreq]      = useState<string[]>([])
+  const [editEch,   setEditEch]       = useState('')
+  const [editPrio,  setEditPrio]      = useState('normale')
+  const [editEspeceId, setEditEspeceId] = useState<string | null>(null)
+  const [editAtelier,  setEditAtelier]  = useState<string | null>(null)
+  const [editSaving, setEditSaving]   = useState(false)
 
   function ouvrirEdit(t: Tache) {
     setEditId(t.id)
@@ -1193,6 +1197,8 @@ function AgendaTab({ taches, zones, catalogueTaches, zoneTaches, onSaved }: {
     setEditFreq(t.frequence ? t.frequence.split(',').map(s => s.trim()) : [])
     setEditEch(t.date_echeance || format(new Date(), 'yyyy-MM-dd'))
     setEditPrio(t.priorite)
+    setEditEspeceId(t.espece_id)
+    setEditAtelier(t.atelier)
     setTempsOuvert(null)
   }
 
@@ -1205,6 +1211,8 @@ function AgendaTab({ taches, zones, catalogueTaches, zoneTaches, onSaved }: {
       frequence: editType === 'recurrente' ? editFreq.join(',') || 'quotidien' : null,
       date_echeance: editType === 'ponctuelle' ? editEch : null,
       priorite: editPrio,
+      espece_id: editEspeceId || null,
+      atelier: editEspeceId ? null : (editAtelier || null),
     }
     if (!navigator.onLine) {
       await queueMutation({ table: 'taches', method: 'update', payload, matchCol: 'id', matchVal: editId })
@@ -1482,6 +1490,29 @@ function AgendaTab({ taches, zones, catalogueTaches, zoneTaches, onSaved }: {
                         </button>
                       ))}
                     </div>
+                    <div>
+                      <div className="text-[10px] text-gray-400 mb-1 font-semibold uppercase tracking-wide">Concerne</div>
+                      <div className="flex flex-wrap gap-1.5">
+                        <button onClick={() => { setEditEspeceId(null); setEditAtelier(null) }}
+                          className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition-colors ${!editEspeceId && !editAtelier ? 'bg-gray-700 text-white border-gray-700' : 'bg-white text-gray-500 border-gray-200'}`}>
+                          Général
+                        </button>
+                        <button onClick={() => { setEditEspeceId(null); setEditAtelier('serre') }}
+                          className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition-colors ${editAtelier === 'serre' ? 'bg-green-700 text-white border-green-700' : 'bg-white text-gray-500 border-gray-200'}`}>
+                          🌱 Serre / Micro-pousses
+                        </button>
+                        <button onClick={() => { setEditEspeceId(null); setEditAtelier('champs') }}
+                          className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition-colors ${editAtelier === 'champs' ? 'bg-amber-600 text-white border-amber-600' : 'bg-white text-gray-500 border-gray-200'}`}>
+                          🌾 Champs global
+                        </button>
+                        {especes.map(e => (
+                          <button key={e.id} onClick={() => { setEditEspeceId(e.id); setEditAtelier(null) }}
+                            className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition-colors ${editEspeceId === e.id ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-500 border-gray-200'}`}>
+                            {e.nom}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                     <div className="flex gap-2">
                       <button onClick={sauvegarderEdit} disabled={editSaving || !editTitre.trim()}
                         className="flex-1 py-2.5 bg-green-700 text-white rounded-lg text-sm font-bold disabled:opacity-40">
@@ -1656,6 +1687,9 @@ function AgendaTab({ taches, zones, catalogueTaches, zoneTaches, onSaved }: {
                         {t.date_echeance && <span>📅 {labelDate(t.date_echeance)}</span>}
                         {t.frequence && <span>🔁 {t.frequence}</span>}
                         {zone && <span>{zone.type === 'serre' ? '🪴' : '📍'} {zone.nom}</span>}
+                        {t.espece && <span className="text-blue-500">🌿 {t.espece.nom}</span>}
+                        {!t.espece && t.atelier === 'serre' && <span className="text-green-600">🌱 Serre</span>}
+                        {!t.espece && t.atelier === 'champs' && <span className="text-amber-600">🌾 Champs</span>}
                         <span className={`px-1.5 py-0.5 rounded-full border text-[10px] ${prioriteColor(t.priorite)}`}>
                           {t.priorite}
                         </span>
@@ -1706,6 +1740,29 @@ function AgendaTab({ taches, zones, catalogueTaches, zoneTaches, onSaved }: {
                             {p === 'haute' ? '🔴' : p === 'normale' ? '🟡' : '⚪'} {p}
                           </button>
                         ))}
+                      </div>
+                      <div>
+                        <div className="text-[10px] text-gray-400 mb-1 font-semibold uppercase tracking-wide">Concerne</div>
+                        <div className="flex flex-wrap gap-1.5">
+                          <button onClick={() => { setEditEspeceId(null); setEditAtelier(null) }}
+                            className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition-colors ${!editEspeceId && !editAtelier ? 'bg-gray-700 text-white border-gray-700' : 'bg-white text-gray-500 border-gray-200'}`}>
+                            Général
+                          </button>
+                          <button onClick={() => { setEditEspeceId(null); setEditAtelier('serre') }}
+                            className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition-colors ${editAtelier === 'serre' ? 'bg-green-700 text-white border-green-700' : 'bg-white text-gray-500 border-gray-200'}`}>
+                            🌱 Serre / Micro-pousses
+                          </button>
+                          <button onClick={() => { setEditEspeceId(null); setEditAtelier('champs') }}
+                            className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition-colors ${editAtelier === 'champs' ? 'bg-amber-600 text-white border-amber-600' : 'bg-white text-gray-500 border-gray-200'}`}>
+                            🌾 Champs global
+                          </button>
+                          {especes.map(e => (
+                            <button key={e.id} onClick={() => { setEditEspeceId(e.id); setEditAtelier(null) }}
+                              className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition-colors ${editEspeceId === e.id ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-500 border-gray-200'}`}>
+                              {e.nom}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                       <div className="flex gap-2">
                         <button onClick={sauvegarderEdit} disabled={editSaving || !editTitre.trim()}
@@ -3077,6 +3134,99 @@ function CulturesTab({ cultures, zones, especes, onSaved }: {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// ─── Tab : Bilan ateliers ──────────────────────────────────────────────────────
+
+function BilanTab({ taches }: { taches: Tache[] }) {
+  const [periode, setPeriode] = useState<'7j' | '30j' | 'annee'>('30j')
+
+  const debut = useMemo(() => {
+    const d = new Date()
+    if (periode === '7j')   d.setDate(d.getDate() - 7)
+    if (periode === '30j')  d.setDate(d.getDate() - 30)
+    if (periode === 'annee') d.setFullYear(d.getFullYear() - 1)
+    return d.toISOString().slice(0, 10)
+  }, [periode])
+
+  const { parAtelier, parPersonne, totalMin } = useMemo(() => {
+    const ateliers: Record<string, number> = {}
+    const personnes: Record<string, number> = {}
+    let total = 0
+    for (const t of taches) {
+      const label = t.espece?.nom ?? (t.atelier === 'serre' ? '🌱 Serre / Micro-pousses' : t.atelier === 'champs' ? '🌾 Champs (global)' : '— Général')
+      for (const tp of (t.temps ?? [])) {
+        if (!tp.minutes || tp.date < debut) continue
+        ateliers[label] = (ateliers[label] ?? 0) + tp.minutes
+        const auteur = tp.auteur || 'Inconnu'
+        personnes[auteur] = (personnes[auteur] ?? 0) + tp.minutes
+        total += tp.minutes
+      }
+    }
+    const parAtelier = Object.entries(ateliers).sort((a, b) => b[1] - a[1])
+    const parPersonne = Object.entries(personnes).sort((a, b) => b[1] - a[1])
+    return { parAtelier, parPersonne, totalMin: total }
+  }, [taches, debut])
+
+  function fmt(min: number) {
+    const h = Math.floor(min / 60)
+    const m = min % 60
+    return h > 0 ? `${h}h${m > 0 ? String(m).padStart(2,'0') : ''}` : `${m}min`
+  }
+
+  return (
+    <div className="px-4 py-4 space-y-5">
+      <div className="flex gap-2">
+        {(['7j','30j','annee'] as const).map(p => (
+          <button key={p} onClick={() => setPeriode(p)}
+            className={`flex-1 py-2.5 rounded-xl text-sm font-semibold border transition-colors
+              ${periode === p ? 'bg-green-700 text-white border-green-700' : 'bg-white text-gray-500 border-gray-200'}`}>
+            {p === '7j' ? '7 jours' : p === '30j' ? '30 jours' : '12 mois'}
+          </button>
+        ))}
+      </div>
+
+      <div className="text-center text-xs text-gray-400">
+        Total sur la période : <span className="font-bold text-gray-700">{fmt(totalMin)}</span>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+        <div className="px-4 py-3 border-b border-gray-100">
+          <div className="text-sm font-bold text-gray-800">Par atelier / plante</div>
+        </div>
+        {parAtelier.length === 0 && (
+          <div className="px-4 py-6 text-center text-sm text-gray-400">Aucun temps enregistré sur cette période</div>
+        )}
+        {parAtelier.map(([label, min]) => (
+          <div key={label} className="px-4 py-3 border-b border-gray-50 last:border-0">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-sm text-gray-700 flex-1 truncate">{label}</span>
+              <span className="text-sm font-bold text-green-700 shrink-0">{fmt(min)}</span>
+            </div>
+            <div className="mt-1.5 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+              <div className="h-full bg-green-400 rounded-full" style={{ width: `${totalMin > 0 ? Math.round(min / totalMin * 100) : 0}%` }} />
+            </div>
+            <div className="text-[10px] text-gray-400 mt-0.5">{totalMin > 0 ? Math.round(min / totalMin * 100) : 0}%</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+        <div className="px-4 py-3 border-b border-gray-100">
+          <div className="text-sm font-bold text-gray-800">Par personne</div>
+        </div>
+        {parPersonne.length === 0 && (
+          <div className="px-4 py-6 text-center text-sm text-gray-400">Aucun pointage sur cette période</div>
+        )}
+        {parPersonne.map(([nom, min]) => (
+          <div key={nom} className="px-4 py-3 border-b border-gray-50 last:border-0 flex items-center justify-between">
+            <span className="text-sm text-gray-700">{nom}</span>
+            <span className="text-sm font-bold text-blue-600">{fmt(min)}</span>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
