@@ -49,6 +49,7 @@ type Perte = {
   espece?: { nom: string } | null
 }
 type Espece            = { id: string; nom: string; en_taches: boolean }
+type EspeceOperation   = { id: string; espece_id: string; titre: string }
 type EspeceSerre       = { id: string; nom: string; categorie: string }
 type ProduitTraitement = { id: string; nom: string; type: string }
 type TacheCatalogue    = { id: string; titre: string; categorie: string; icone: string; active: boolean; ordre: number }
@@ -1197,6 +1198,47 @@ function AgendaTab({ taches, zones, especes, catalogueTaches, zoneTaches, onSave
   // ─── Vue équipe ──────────────────────────────────────────────────────────────
   const [equipeOuverte, setEquipeOuverte] = useState(false)
 
+  // ─── Opérations de culture ───────────────────────────────────────────────────
+  const [opsOuverte,  setOpsOuverte]  = useState<string | null>(null)
+  const [especeOps,   setEspeceOps]   = useState<Record<string, EspeceOperation[]>>({})
+  const [doneOps,     setDoneOps]     = useState<Set<string>>(new Set())
+  const [newOpInput,  setNewOpInput]  = useState('')
+  const [addingOpId,  setAddingOpId]  = useState<string | null>(null)
+
+  async function ouvrirOps(t: Tache) {
+    const next = opsOuverte === t.id ? null : t.id
+    setOpsOuverte(next)
+    if (!next || !t.espece_id) return
+    if (!especeOps[t.espece_id]) {
+      const { data } = await supabase.from('espece_operations')
+        .select('id,espece_id,titre').eq('espece_id', t.espece_id).eq('actif', true).order('ordre')
+      if (data) setEspeceOps(prev => ({ ...prev, [t.espece_id!]: data as EspeceOperation[] }))
+    }
+    const { data: done } = await supabase.from('cahier_culture')
+      .select('type_operation').eq('espece_id', t.espece_id).eq('date_operation', todayStr)
+    if (done) setDoneOps(new Set(done.map(d => `${t.espece_id}:${d.type_operation}`)))
+  }
+
+  async function logOperation(t: Tache, opTitre: string) {
+    const key = `${t.espece_id}:${opTitre}`
+    if (doneOps.has(key)) return
+    await supabase.from('cahier_culture').insert({
+      date_operation: todayStr, type_operation: opTitre,
+      espece_id: t.espece_id, auteur, zone_id: t.zone_id ?? null,
+    })
+    setDoneOps(prev => new Set([...prev, key]))
+  }
+
+  async function ajouterNouvelleOp(t: Tache) {
+    if (!newOpInput.trim() || !t.espece_id) return
+    const ops = especeOps[t.espece_id] || []
+    const { data } = await supabase.from('espece_operations')
+      .insert({ espece_id: t.espece_id, titre: newOpInput.trim(), ordre: ops.length + 1, actif: true })
+      .select()
+    if (data?.[0]) setEspeceOps(prev => ({ ...prev, [t.espece_id!]: [...(prev[t.espece_id!] || []), data[0] as EspeceOperation] }))
+    setNewOpInput(''); setAddingOpId(null)
+  }
+
   function ouvrirEdit(t: Tache) {
     setEditId(t.id)
     setEditTitre(t.titre)
@@ -1536,7 +1578,7 @@ function AgendaTab({ taches, zones, especes, catalogueTaches, zoneTaches, onSave
                   </div>
                 )}
 
-                {/* Panneau temps — s'affiche sous la ligne quand le badge est tappé */}
+                {/* Panneau temps */}
                 {tempsOuvert === t.id && !enChrono && (
                   <div className="mt-2 ml-10 flex items-center gap-2 flex-wrap">
                     <button onClick={() => { demarrerChrono(t); setTempsOuvert(null) }}
@@ -1549,6 +1591,63 @@ function AgendaTab({ taches, zones, especes, catalogueTaches, zoneTaches, onSave
                         +{m} min
                       </button>
                     ))}
+                  </div>
+                )}
+
+                {/* Panneau opérations — visible si la tâche est liée à une espèce */}
+                {t.espece_id && (
+                  <div className="mt-2 ml-10">
+                    <button onClick={() => ouvrirOps(t)}
+                      className="flex items-center gap-1.5 text-xs text-blue-600 font-semibold py-1">
+                      📋 Opérations {t.espece?.nom}
+                      <span className="text-gray-400 text-[10px]">{opsOuverte === t.id ? '▲' : '▼'}</span>
+                    </button>
+
+                    {opsOuverte === t.id && (
+                      <div className="mt-1.5 space-y-1.5">
+                        {(especeOps[t.espece_id] || []).length === 0 && addingOpId !== t.id && (
+                          <div className="text-xs text-gray-400 italic px-1">
+                            Aucune opération — ajoute-en dans Réglages &gt; Espèces ou ici.
+                          </div>
+                        )}
+                        {(especeOps[t.espece_id] || []).map(op => {
+                          const done = doneOps.has(`${t.espece_id}:${op.titre}`)
+                          return (
+                            <button key={op.id} onClick={() => logOperation(t, op.titre)}
+                              disabled={done}
+                              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs border text-left transition-colors
+                                ${done
+                                  ? 'bg-green-50 border-green-200 text-green-700 cursor-default'
+                                  : 'bg-white border-gray-200 text-gray-700 active:bg-blue-50 active:border-blue-300'}`}>
+                              <span className={`w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center text-[10px] font-bold
+                                ${done ? 'bg-green-600 border-green-600 text-white' : 'border-gray-300 bg-white'}`}>
+                                {done ? '✓' : ''}
+                              </span>
+                              <span className={`flex-1 ${done ? 'line-through opacity-60' : 'font-semibold'}`}>{op.titre}</span>
+                              {done && <span className="text-green-500 text-[10px] shrink-0">✓ fait aujourd'hui</span>}
+                            </button>
+                          )
+                        })}
+
+                        {addingOpId === t.id ? (
+                          <div className="flex gap-2 mt-1">
+                            <input autoFocus value={newOpInput} onChange={e => setNewOpInput(e.target.value)}
+                              onKeyDown={e => { if (e.key === 'Enter') ajouterNouvelleOp(t); if (e.key === 'Escape') { setAddingOpId(null); setNewOpInput('') } }}
+                              placeholder="Nouvelle opération..."
+                              className="flex-1 border border-blue-300 rounded-lg px-2.5 py-2 text-xs focus:outline-none bg-white" />
+                            <button onClick={() => ajouterNouvelleOp(t)}
+                              className="px-3 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold">OK</button>
+                            <button onClick={() => { setAddingOpId(null); setNewOpInput('') }}
+                              className="px-2 py-2 border border-gray-200 rounded-lg text-xs text-gray-500">✕</button>
+                          </div>
+                        ) : (
+                          <button onClick={() => { setAddingOpId(t.id); setNewOpInput('') }}
+                            className="w-full text-left px-3 py-1.5 text-xs text-blue-600 font-semibold border border-dashed border-blue-200 rounded-lg active:bg-blue-50">
+                            + Ajouter une opération
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

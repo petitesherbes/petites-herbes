@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { Espece, Template } from '@/types'
 import { ALL_NAV_TABS } from '@/components/BottomNav'
+import { loadFormatColors, saveFormatColors, FORMAT_COLORS_DEFAULT, type FormatKey } from '@/lib/formatColors'
 
 type ParamsProduction = {
   id: string
@@ -25,7 +26,7 @@ type TemplateComplet = Template & {
 
 export default function ParametresPage() {
   const router = useRouter()
-  const [onglet, setOnglet] = useState<'especes' | 'templates' | 'email' | 'export' | 'taches' | 'nav'>('especes')
+  const [onglet, setOnglet] = useState<'especes' | 'templates' | 'email' | 'export' | 'taches' | 'nav' | 'couleurs'>('especes')
   const [especes, setEspeces] = useState<Espece[]>([])
   const [templates, setTemplates] = useState<TemplateComplet[]>([])
   const [params, setParams] = useState<ParamsProduction | null>(null)
@@ -76,6 +77,7 @@ export default function ParametresPage() {
           { val: 'especes',   label: '&#x1F33F; Esp&egrave;ces' },
           { val: 'templates', label: '&#x1F4CB; Templates' },
           { val: 'taches',    label: 'T&acirc;ches' },
+          { val: 'couleurs',  label: '&#x1F3A8; Couleurs' },
           { val: 'nav',       label: '&#x1F4F1; Nav' },
           { val: 'email',     label: '&#x1F4E7; Email' },
           { val: 'export',    label: '&#x1F4BE; Export' },
@@ -121,8 +123,9 @@ export default function ParametresPage() {
           onRefresh={charger}
         />
       )}
-      {onglet === 'taches'  && <TachesPanel />}
-      {onglet === 'nav'     && <NavPanel />}
+      {onglet === 'taches'    && <TachesPanel />}
+      {onglet === 'couleurs'  && <CouleurPanel />}
+      {onglet === 'nav'       && <NavPanel />}
       {onglet === 'email'   && <EmailPanel />}
       {onglet === 'export'  && <ExportPanel />}
 
@@ -137,6 +140,63 @@ export default function ParametresPage() {
           onSave={() => { setEditTemplate(null); setNouveauTemplate(false); charger() }}
         />
       )}
+    </div>
+  )
+}
+
+// ─── Couleurs panel ───────────────────────────────────────────────────────────
+
+function CouleurPanel() {
+  const [colors, setColors] = useState(loadFormatColors)
+
+  function handleChange(fk: FormatKey, prop: 'header' | 'light' | 'border', val: string) {
+    const next = { ...colors, [fk]: { ...colors[fk], [prop]: val } }
+    setColors(next)
+    saveFormatColors(next)
+  }
+
+  function reinitialiser() {
+    setColors(FORMAT_COLORS_DEFAULT)
+    saveFormatColors(FORMAT_COLORS_DEFAULT)
+  }
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-gray-500">
+        Ces couleurs s&apos;appliquent dans la fiche semis et lors de la saisie d&apos;un semis.
+      </p>
+      {(Object.entries(FORMAT_COLORS_DEFAULT) as [FormatKey, typeof FORMAT_COLORS_DEFAULT.tapis][]).map(([fk]) => {
+        const c = colors[fk]
+        const def = FORMAT_COLORS_DEFAULT[fk]
+        return (
+          <div key={fk} className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
+            <div className="font-semibold text-sm" style={{ color: c.header }}>
+              {def.emoji} {c.label}
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              {([
+                { prop: 'header' as const, label: 'En-tête' },
+                { prop: 'light'  as const, label: 'Fond' },
+                { prop: 'border' as const, label: 'Bordure' },
+              ]).map(({ prop, label }) => (
+                <div key={prop} className="flex flex-col gap-1.5">
+                  <label className="text-xs text-gray-500">{label}</label>
+                  <div className="flex items-center gap-2">
+                    <input type="color" value={c[prop]}
+                      onChange={e => handleChange(fk, prop, e.target.value)}
+                      className="w-9 h-9 rounded-lg cursor-pointer border border-gray-200 p-0.5" />
+                    <span className="text-[10px] text-gray-400 font-mono">{c[prop]}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )
+      })}
+      <button onClick={reinitialiser}
+        className="w-full py-2.5 text-sm text-gray-500 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors">
+        R&eacute;initialiser les couleurs par d&eacute;faut
+      </button>
     </div>
   )
 }
@@ -608,6 +668,32 @@ function EspeceModal({ espece, onClose, onSave }: { espece: Espece; onClose: () 
   const [section, setSection] = useState<'TAPIS' | 'TERREAU'>(
     espece.section === 'TAPIS' ? 'TAPIS' : 'TERREAU'
   )
+
+  // ─── Opérations de culture ─────────────────────────────────────────────────
+  const [operations, setOperations] = useState<{ id: string; titre: string; ordre: number }[]>([])
+  const [newOp, setNewOp]           = useState('')
+  const [addingOp, setAddingOp]     = useState(false)
+
+  useEffect(() => {
+    supabase.from('espece_operations')
+      .select('id,titre,ordre').eq('espece_id', espece.id).eq('actif', true).order('ordre')
+      .then(({ data }) => { if (data) setOperations(data) })
+  }, [espece.id])
+
+  async function ajouterOp() {
+    if (!newOp.trim()) return
+    const ordre = operations.length > 0 ? Math.max(...operations.map(o => o.ordre)) + 1 : 1
+    const { data } = await supabase.from('espece_operations')
+      .insert({ espece_id: espece.id, titre: newOp.trim(), ordre, actif: true }).select()
+    if (data?.[0]) setOperations(prev => [...prev, data[0]])
+    setNewOp(''); setAddingOp(false)
+  }
+
+  async function supprimerOp(id: string) {
+    await supabase.from('espece_operations').update({ actif: false }).eq('id', id)
+    setOperations(prev => prev.filter(o => o.id !== id))
+  }
+
   const [form, setForm] = useState({
     nom:            espece.nom,
     g_tapis:        espece.g_tapis?.toString()        || '',
@@ -738,6 +824,40 @@ function EspeceModal({ espece, onClose, onSave }: { espece: Espece; onClose: () 
             </div>
           ))}
         </div>
+        {/* ── Opérations de culture ── */}
+        <div className="border-t border-gray-100 pt-3 space-y-2">
+          <div className="text-xs font-bold text-gray-600 uppercase tracking-wide">🌿 Opérations de culture</div>
+          <div className="text-[11px] text-gray-400">Ces opérations apparaîtront dans les tâches liées à cette espèce.</div>
+          <div className="space-y-1.5">
+            {operations.map(op => (
+              <div key={op.id} className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2 border border-gray-100">
+                <span className="text-sm flex-1 text-gray-700">{op.titre}</span>
+                <button onClick={() => supprimerOp(op.id)}
+                  className="text-gray-300 hover:text-red-400 text-lg leading-none flex-shrink-0">×</button>
+              </div>
+            ))}
+            {operations.length === 0 && !addingOp && (
+              <div className="text-xs text-gray-400 italic px-1">Aucune opération définie</div>
+            )}
+            {addingOp ? (
+              <div className="flex gap-2">
+                <input autoFocus value={newOp} onChange={e => setNewOp(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') ajouterOp(); if (e.key === 'Escape') { setAddingOp(false); setNewOp('') } }}
+                  placeholder="Ex : Égourmander, Tuteurer..."
+                  className="flex-1 border border-green-300 rounded-lg px-2.5 py-2 text-sm focus:outline-none bg-white" />
+                <button onClick={ajouterOp} className="px-3 py-2 bg-green-700 text-white rounded-lg text-xs font-bold">OK</button>
+                <button onClick={() => { setAddingOp(false); setNewOp('') }}
+                  className="px-2 py-2 border border-gray-200 rounded-lg text-xs text-gray-500">✕</button>
+              </div>
+            ) : (
+              <button onClick={() => setAddingOp(true)}
+                className="w-full text-left px-3 py-2 text-xs text-green-700 font-semibold border border-dashed border-green-200 rounded-lg active:bg-green-50">
+                + Ajouter une opération
+              </button>
+            )}
+          </div>
+        </div>
+
         <div className="flex gap-2 pt-2">
           <button onClick={onClose} className="flex-1 py-3 rounded-lg border border-gray-200 text-gray-600">Annuler</button>
           <button onClick={sauvegarder} disabled={saving || uploading}
