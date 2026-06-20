@@ -45,6 +45,9 @@ export default function FicheSemisPage() {
   const [colsActives, setColsActives] = useState<string[]>(initCols)
   const [showSection, setShowSection] = useState(false)
   const [configOpen, setConfigOpen]   = useState(false)
+  const [editCell, setEditCell]       = useState<{ id: string; key: keyof Espece } | null>(null)
+  const [editVal, setEditVal]         = useState('')
+  const [saving, setSaving]           = useState(false)
 
   useEffect(() => {
     Promise.all([
@@ -67,6 +70,16 @@ export default function FicheSemisPage() {
     const nb = Math.max(1, parseInt(nbVal) || 26)
     await supabase.from('parametres_production').update({ nb_tapis_serie: nb }).eq('id', paramsId)
     setNbSerie(nb); setEditNb(false); setSavingNb(false)
+  }
+
+  async function sauvegarder() {
+    if (!editCell) return
+    setSaving(true)
+    const num = editVal.trim() === '' ? null : parseFloat(editVal.replace(',', '.'))
+    await supabase.from('especes').update({ [editCell.key]: num }).eq('id', editCell.id)
+    setEspeces(prev => prev.map(e => e.id === editCell.id ? { ...e, [editCell.key]: num } : e))
+    setEditCell(null)
+    setSaving(false)
   }
 
   function toggleCol(key: string) {
@@ -191,9 +204,32 @@ export default function FicheSemisPage() {
                   )}
                   {visibles.map(c => {
                     const val = c.value(e, nbSerie)
+                    if (c.calc) {
+                      return (
+                        <td key={c.key} className="px-3 py-2.5 text-center text-blue-700 font-semibold">
+                          {val !== null ? val : <span className="text-gray-200">—</span>}
+                        </td>
+                      )
+                    }
+                    const rawVal = e[c.key as keyof Espece] as number | null
+                    const isEditing = editCell?.id === e.id && editCell?.key === c.key
                     return (
-                      <td key={c.key} className={`px-3 py-2.5 text-center ${c.calc ? 'text-blue-700 font-semibold' : 'text-gray-700'}`}>
-                        {val !== null ? val : <span className="text-gray-200">—</span>}
+                      <td key={c.key} className="px-1 py-1 text-center text-gray-700">
+                        {isEditing ? (
+                          <input autoFocus value={editVal}
+                            onChange={ev => setEditVal(ev.target.value)}
+                            onBlur={sauvegarder}
+                            onKeyDown={ev => { if (ev.key === 'Enter') sauvegarder(); if (ev.key === 'Escape') setEditCell(null) }}
+                            disabled={saving}
+                            className="w-16 text-center text-xs border border-green-400 rounded px-1 py-0.5 focus:outline-none bg-green-50" />
+                        ) : (
+                          <button
+                            onClick={() => { setEditCell({ id: e.id, key: c.key as keyof Espece }); setEditVal(rawVal !== null ? String(rawVal) : '') }}
+                            className={`w-full min-h-[28px] rounded px-1 py-0.5 print:pointer-events-none transition-colors
+                              ${rawVal !== null ? 'text-gray-800 font-medium hover:bg-green-50 hover:text-green-700' : 'text-gray-200 hover:bg-gray-50 hover:text-gray-400'}`}>
+                            {rawVal !== null ? rawVal : <span className="text-[9px]">—</span>}
+                          </button>
+                        )}
                       </td>
                     )
                   })}
