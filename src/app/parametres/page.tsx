@@ -529,10 +529,6 @@ function EspecesPanel({ especes, onEdit, onRefresh, tapis, setTapis, godets, set
     onRefresh()
   }
 
-  async function toggleTaches(e: Espece) {
-    await supabase.from('especes').update({ en_taches: !e.en_taches }).eq('id', e.id)
-    onRefresh()
-  }
 
   async function ajouterEspece(section: 'TAPIS' | 'TERREAU') {
     const nom = prompt(`Nom de la nouvelle espèce (${section}) :`)
@@ -584,7 +580,6 @@ function EspecesPanel({ especes, onEdit, onRefresh, tapis, setTapis, godets, set
         titre="&#x1F7E9; TAPIS"
         especes={especesTapis}
         onToggleActif={toggleActif}
-        onToggleTaches={toggleTaches}
         onEdit={onEdit}
         onAjouter={() => ajouterEspece('TAPIS')}
       />
@@ -593,7 +588,6 @@ function EspecesPanel({ especes, onEdit, onRefresh, tapis, setTapis, godets, set
         titre="&#x1F7EB; AVEC TERREAU"
         especes={especesTerreau}
         onToggleActif={toggleActif}
-        onToggleTaches={toggleTaches}
         onEdit={onEdit}
         onAjouter={() => ajouterEspece('TERREAU')}
       />
@@ -601,11 +595,10 @@ function EspecesPanel({ especes, onEdit, onRefresh, tapis, setTapis, godets, set
   )
 }
 
-function SectionEspeces({ titre, especes, onToggleActif, onToggleTaches, onEdit, onAjouter }: {
+function SectionEspeces({ titre, especes, onToggleActif, onEdit, onAjouter }: {
   titre: string
   especes: Espece[]
   onToggleActif: (e: Espece) => void
-  onToggleTaches: (e: Espece) => void
   onEdit: (e: Espece) => void
   onAjouter: () => void
 }) {
@@ -642,11 +635,7 @@ function SectionEspeces({ titre, especes, onToggleActif, onToggleTaches, onEdit,
               className="text-xs text-blue-600 px-2 py-1 rounded border border-blue-200 flex-shrink-0">
               &Eacute;diter
             </button>
-            <button onClick={() => onToggleTaches(e)}
-              title="Apparaît dans les tâches"
-              className={`text-xs px-2 py-1 rounded border flex-shrink-0 ${e.en_taches ? 'text-blue-700 border-blue-300 bg-blue-50' : 'text-gray-400 border-gray-200'}`}>
-              🌿
-            </button>
+
             <button onClick={() => onToggleActif(e)}
               className={`text-xs px-2 py-1 rounded border flex-shrink-0 ${e.actif ? 'text-gray-500 border-gray-200' : 'text-green-600 border-green-200'}`}>
               {e.actif ? 'Off' : 'On'}
