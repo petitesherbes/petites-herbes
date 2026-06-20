@@ -322,11 +322,13 @@ export default function FicheSemisPage() {
                   {visibles.map(c => {
                     const val = c.value(e, tapisParCaisse, godetsParSerie)
                     const isEditing = editCell?.id === e.id && editCell?.key === c.key
+                    const fk = colFormatKey(c.key)
+                    const cellBg = fk ? fmtColors[fk].light : undefined
 
                     if (c.calc) {
                       return (
-                        <td key={c.key} className="px-3 py-2.5 text-center text-blue-700 font-semibold">
-                          {val !== null ? val : <span className="text-gray-200">—</span>}
+                        <td key={c.key} className="px-3 py-2.5 text-center font-semibold" style={{ backgroundColor: cellBg, color: fk ? fmtColors[fk].header : '#1d4ed8' }}>
+                          {val !== null ? val : <span className="opacity-20">—</span>}
                         </td>
                       )
                     }
@@ -358,19 +360,19 @@ export default function FicheSemisPage() {
 
                     const rawVal = e[c.key as keyof Espece] as number | null
                     return (
-                      <td key={c.key} className="px-1 py-1 text-center text-gray-700">
+                      <td key={c.key} className="px-1 py-1 text-center" style={{ backgroundColor: cellBg }}>
                         {isEditing ? (
                           <input autoFocus value={editVal}
                             onChange={ev => setEditVal(ev.target.value)}
                             onBlur={sauvegarder}
                             onKeyDown={ev => { if (ev.key === 'Enter') sauvegarder(); if (ev.key === 'Escape') setEditCell(null) }}
                             disabled={saving}
-                            className="w-16 text-center text-xs border border-green-400 rounded px-1 py-0.5 focus:outline-none bg-green-50" />
+                            className="w-16 text-center text-xs border border-green-400 rounded px-1 py-0.5 focus:outline-none bg-white" />
                         ) : (
                           <button
                             onClick={() => { setEditCell({ id: e.id, key: c.key as keyof Espece }); setEditVal(rawVal !== null ? String(rawVal) : '') }}
                             className={`w-full min-h-[28px] rounded px-1 py-0.5 print:pointer-events-none transition-colors
-                              ${rawVal !== null ? 'text-gray-800 font-medium hover:bg-green-50 hover:text-green-700' : 'text-gray-200 hover:bg-gray-50 hover:text-gray-400'}`}>
+                              ${rawVal !== null ? 'text-gray-800 font-medium' : 'text-gray-200'}`}>
                             {rawVal !== null ? Math.round(rawVal * 10) / 10 : <span className="text-[9px]">—</span>}
                           </button>
                         )}
