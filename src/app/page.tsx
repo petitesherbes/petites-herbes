@@ -56,6 +56,12 @@ export default function AccueilPage() {
   const [ligneSheet, setLigneSheet]       = useState<LigneAvecEspece | null>(null)
   const [ligneAction, setLigneAction]     = useState<'idle'|'saving'|'done'>('idle')
   const [ligneErreur, setLigneErreur]     = useState<string | null>(null)
+  const [editActions, setEditActions]     = useState(false)
+  const [actionsActives, setActionsActives] = useState<string[]>(() => {
+    if (typeof window === 'undefined') return ['recolte', 'fiche_culture', 'historique']
+    const saved = localStorage.getItem('home_actions_rapides')
+    return saved ? JSON.parse(saved) : ['recolte', 'fiche_culture', 'historique']
+  })
 
   // Layout personnalisable
   const [widgetOrder, setWidgetOrder]   = useState<WidgetId[]>(DEFAULT_ORDER)
@@ -611,71 +617,116 @@ export default function AccueilPage() {
       </div>
 
       {/* Sheet action ligne production */}
-      {ligneSheet && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-end" onClick={() => setLigneSheet(null)}>
-          <div className="bg-white w-full max-w-2xl mx-auto rounded-t-2xl p-5 pb-10 space-y-4"
-            onClick={e => e.stopPropagation()}>
-            <div className="flex items-start justify-between">
-              <div>
-                <div className="text-lg font-bold text-gray-900">
-                  {ligneSheet.format === 'TAPIS' ? '🟩' : ligneSheet.format === 'TERREAU' ? '🟫' : '🟧'} {ligneSheet.espece?.nom}
-                </div>
-                <div className="text-sm text-gray-500 mt-0.5">
-                  ×{ligneSheet.quantite} {ligneSheet.format.toLowerCase()}
-                  {ligneSheet.date_dispo && ` · dispo ${format(parseISO(ligneSheet.date_dispo), 'd MMM', { locale: fr })}`}
-                  {ligneSheet.date_peremption && ` · exp. ${format(parseISO(ligneSheet.date_peremption), 'd MMM', { locale: fr })}`}
-                </div>
-              </div>
-              <button onClick={() => setLigneSheet(null)} className="text-gray-400 text-2xl leading-none">×</button>
-            </div>
-
-            {ligneErreur && (
-              <div className="bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl px-3 py-2">
-                Erreur : {ligneErreur}
-              </div>
-            )}
-            {ligneAction === 'done' ? (
-              <div className="text-center py-4 text-green-700 font-semibold">✅ Fait !</div>
-            ) : (
-              <div className="space-y-2">
-                {/* Marquer disponible (récolter maintenant) */}
-                {ligneSheet.date_dispo && ligneSheet.date_dispo > todayStr && (
-                  <button onClick={() => marquerRecolte(ligneSheet)}
-                    disabled={ligneAction === 'saving'}
-                    className="w-full flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3.5 text-left active:scale-95 transition-transform disabled:opacity-50">
-                    <span className="text-xl">✂️</span>
-                    <div>
-                      <div className="font-bold text-emerald-800 text-sm">Disponible dès aujourd'hui</div>
-                      <div className="text-xs text-emerald-600">Avance la date de récolte à maintenant</div>
-                    </div>
-                  </button>
-                )}
-                {/* Créer fiche culture dans Terrain */}
-                {(ligneSheet.format === 'TAPIS' || ligneSheet.format === 'GODET') && (
-                  <button onClick={() => creerFicheCulture(ligneSheet)}
-                    disabled={ligneAction === 'saving'}
-                    className="w-full flex items-center gap-3 bg-green-50 border border-green-200 rounded-xl px-4 py-3.5 text-left active:scale-95 transition-transform disabled:opacity-50">
-                    <span className="text-xl">🌿</span>
-                    <div>
-                      <div className="font-bold text-green-800 text-sm">Créer fiche dans Terrain</div>
-                      <div className="text-xs text-green-600">Ajoute cette culture dans Terrain → Cultures</div>
-                    </div>
-                  </button>
-                )}
-                {/* Voir le semis */}
-                <Link href="/historique" onClick={() => setLigneSheet(null)}
-                  className="w-full flex items-center gap-3 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3.5 active:scale-95 transition-transform">
-                  <span className="text-xl">📋</span>
-                  <div>
-                    <div className="font-bold text-gray-800 text-sm">Voir dans l'historique</div>
-                    <div className="text-xs text-gray-500">Détail du semis complet</div>
+      {ligneSheet && (() => {
+        const TOUTES_ACTIONS = [
+          { id: 'recolte',       icon: '✂️', label: 'Disponible dès aujourd\'hui', desc: 'Avance la date de récolte à maintenant',     color: 'bg-emerald-50 border-emerald-200' },
+          { id: 'fiche_culture', icon: '🌿', label: 'Créer fiche Terrain',          desc: 'Ajoute cette culture dans Terrain → Cultures', color: 'bg-green-50 border-green-200' },
+          { id: 'voir_suivi',    icon: '🌱', label: 'Aller dans Suivi cultures',    desc: 'Ouvre l\'onglet Cultures directement',         color: 'bg-teal-50 border-teal-200' },
+          { id: 'historique',    icon: '📋', label: 'Voir l\'historique',           desc: 'Détail du semis complet',                     color: 'bg-gray-50 border-gray-200' },
+        ]
+        const toggleAction = (id: string) => {
+          const next = actionsActives.includes(id) ? actionsActives.filter(a => a !== id) : [...actionsActives, id]
+          setActionsActives(next)
+          localStorage.setItem('home_actions_rapides', JSON.stringify(next))
+        }
+        return (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-end" onClick={() => { setLigneSheet(null); setEditActions(false) }}>
+            <div className="bg-white w-full max-w-2xl mx-auto rounded-t-2xl p-5 pb-10 space-y-4"
+              onClick={e => e.stopPropagation()}>
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="text-lg font-bold text-gray-900">
+                    {ligneSheet.format === 'TAPIS' ? '🟩' : ligneSheet.format === 'TERREAU' ? '🟫' : '🟧'} {ligneSheet.espece?.nom}
                   </div>
-                </Link>
+                  <div className="text-sm text-gray-500 mt-0.5">
+                    ×{ligneSheet.quantite} {ligneSheet.format.toLowerCase()}
+                    {ligneSheet.date_dispo && ` · dispo ${format(parseISO(ligneSheet.date_dispo), 'd MMM', { locale: fr })}`}
+                    {ligneSheet.date_peremption && ` · exp. ${format(parseISO(ligneSheet.date_peremption), 'd MMM', { locale: fr })}`}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setEditActions(v => !v)} className={`text-lg px-2 py-1 rounded-lg transition-colors ${editActions ? 'bg-blue-100 text-blue-600' : 'text-gray-400 hover:text-gray-600'}`} title="Personnaliser les actions">⚙️</button>
+                  <button onClick={() => { setLigneSheet(null); setEditActions(false) }} className="text-gray-400 text-2xl leading-none">×</button>
+                </div>
               </div>
-            )}
+
+              {editActions ? (
+                <div className="space-y-2">
+                  <div className="text-xs text-gray-500 font-semibold uppercase tracking-wide">Actions visibles</div>
+                  {TOUTES_ACTIONS.map(a => (
+                    <button key={a.id} onClick={() => toggleAction(a.id)}
+                      className={`w-full flex items-center gap-3 rounded-xl px-4 py-3 text-left border transition-colors ${actionsActives.includes(a.id) ? 'bg-green-50 border-green-300' : 'bg-gray-50 border-gray-200 opacity-50'}`}>
+                      <span className="text-xl">{a.icon}</span>
+                      <div className="flex-1">
+                        <div className="font-semibold text-gray-800 text-sm">{a.label}</div>
+                        <div className="text-xs text-gray-500">{a.desc}</div>
+                      </div>
+                      <span className={`text-lg ${actionsActives.includes(a.id) ? 'text-green-600' : 'text-gray-300'}`}>
+                        {actionsActives.includes(a.id) ? '✓' : '○'}
+                      </span>
+                    </button>
+                  ))}
+                  <button onClick={() => setEditActions(false)} className="w-full py-2.5 rounded-xl bg-green-700 text-white text-sm font-semibold">Terminé</button>
+                </div>
+              ) : (
+                <>
+                  {ligneErreur && (
+                    <div className="bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl px-3 py-2">
+                      Erreur : {ligneErreur}
+                    </div>
+                  )}
+                  {ligneAction === 'done' ? (
+                    <div className="text-center py-4 text-green-700 font-semibold">✅ Fait !</div>
+                  ) : (
+                    <div className="space-y-2">
+                      {actionsActives.includes('recolte') && ligneSheet.date_dispo && ligneSheet.date_dispo > todayStr && (
+                        <button onClick={() => marquerRecolte(ligneSheet)} disabled={ligneAction === 'saving'}
+                          className="w-full flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3.5 text-left active:scale-95 transition-transform disabled:opacity-50">
+                          <span className="text-xl">✂️</span>
+                          <div>
+                            <div className="font-bold text-emerald-800 text-sm">Disponible dès aujourd'hui</div>
+                            <div className="text-xs text-emerald-600">Avance la date de récolte à maintenant</div>
+                          </div>
+                        </button>
+                      )}
+                      {actionsActives.includes('fiche_culture') && (ligneSheet.format === 'TAPIS' || ligneSheet.format === 'GODET') && (
+                        <button onClick={() => creerFicheCulture(ligneSheet)} disabled={ligneAction === 'saving'}
+                          className="w-full flex items-center gap-3 bg-green-50 border border-green-200 rounded-xl px-4 py-3.5 text-left active:scale-95 transition-transform disabled:opacity-50">
+                          <span className="text-xl">🌿</span>
+                          <div>
+                            <div className="font-bold text-green-800 text-sm">Créer fiche dans Terrain</div>
+                            <div className="text-xs text-green-600">Ajoute cette culture dans Terrain → Cultures</div>
+                          </div>
+                        </button>
+                      )}
+                      {actionsActives.includes('voir_suivi') && (
+                        <Link href="/terrain" onClick={() => { setLigneSheet(null); localStorage.setItem('terrain_init_tab','cultures'); localStorage.setItem('terrain_init_famille', ligneSheet.format === 'TAPIS' || ligneSheet.format === 'GODET' ? 'micro_pousse' : 'champs') }}
+                          className="w-full flex items-center gap-3 bg-teal-50 border border-teal-200 rounded-xl px-4 py-3.5 active:scale-95 transition-transform">
+                          <span className="text-xl">🌱</span>
+                          <div>
+                            <div className="font-bold text-teal-800 text-sm">Aller dans Suivi cultures</div>
+                            <div className="text-xs text-teal-600">Ouvre l&apos;onglet Cultures directement</div>
+                          </div>
+                        </Link>
+                      )}
+                      {actionsActives.includes('historique') && (
+                        <Link href="/historique" onClick={() => setLigneSheet(null)}
+                          className="w-full flex items-center gap-3 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3.5 active:scale-95 transition-transform">
+                          <span className="text-xl">📋</span>
+                          <div>
+                            <div className="font-bold text-gray-800 text-sm">Voir dans l'historique</div>
+                            <div className="text-xs text-gray-500">Détail du semis complet</div>
+                          </div>
+                        </Link>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       {/* Drawer détail stats */}
       {statOuverte && (
