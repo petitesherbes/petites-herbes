@@ -54,6 +54,8 @@ export default function FicheSemisPage() {
   const [printOpen, setPrintOpen]     = useState(false)
   const [orientation, setOrientation] = useState<'landscape' | 'portrait'>('landscape')
   const [fontSize, setFontSize]       = useState<'small' | 'normal' | 'large'>('normal')
+  const [varietesOpen, setVarietesOpen] = useState(false)
+  const [especesExclues, setEspecesExclues] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     Promise.all([
@@ -136,7 +138,12 @@ export default function FicheSemisPage() {
         <div className="flex items-center justify-between gap-3">
           <div className="text-base font-bold text-gray-900">Fiche semis</div>
           <div className="flex items-center gap-2">
-            <button onClick={() => setConfigOpen(o => !o)}
+            <button onClick={() => { setVarietesOpen(o => !o); setConfigOpen(false); setPrintOpen(false) }}
+              className={`px-3 py-2 rounded-xl text-sm font-semibold border transition-colors
+                ${varietesOpen ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-600 border-gray-200'}`}>
+              🌿 Variétés{especesExclues.size > 0 ? ` (−${especesExclues.size})` : ''}
+            </button>
+            <button onClick={() => { setConfigOpen(o => !o); setVarietesOpen(false); setPrintOpen(false) }}
               className={`px-3 py-2 rounded-xl text-sm font-semibold border transition-colors
                 ${configOpen ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-600 border-gray-200'}`}>
               ⚙️ Colonnes
@@ -188,6 +195,38 @@ export default function FicheSemisPage() {
               className="w-full bg-green-700 text-white py-3 rounded-xl text-sm font-bold active:scale-95 transition-transform">
               🖨️ Lancer l&apos;impression
             </button>
+          </div>
+        )}
+
+        {/* ── Panneau variétés ─────────────────────────────────────────── */}
+        {varietesOpen && (
+          <div className="mt-2 pt-3 border-t border-gray-100 space-y-2">
+            <div className="flex justify-between items-center">
+              <div className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">Variétés à afficher</div>
+              <div className="flex gap-3 text-xs">
+                <button onClick={() => setEspecesExclues(new Set())} className="text-green-700 underline">Tout inclure</button>
+                <button onClick={() => setEspecesExclues(new Set(especes.map(e => e.id)))} className="text-red-500 underline">Tout masquer</button>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto">
+              {especes.map(e => {
+                const exclue = especesExclues.has(e.id)
+                return (
+                  <button key={e.id}
+                    onClick={() => setEspecesExclues(prev => {
+                      const next = new Set(prev)
+                      exclue ? next.delete(e.id) : next.add(e.id)
+                      return next
+                    })}
+                    className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition-colors
+                      ${exclue
+                        ? 'bg-white text-gray-300 border-gray-200 line-through'
+                        : 'bg-green-700 text-white border-green-700'}`}>
+                    {e.nom}
+                  </button>
+                )
+              })}
+            </div>
           </div>
         )}
 
@@ -252,7 +291,7 @@ export default function FicheSemisPage() {
               </tr>
             </thead>
             <tbody>
-              {especes.map((e, i) => (
+              {especes.filter(e => !especesExclues.has(e.id)).map((e, i) => (
                 <tr key={e.id} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
                   <td className={`px-3 py-2.5 font-semibold text-gray-800 sticky left-0 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
                     {e.nom}
