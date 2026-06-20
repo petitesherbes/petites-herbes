@@ -401,9 +401,12 @@ export default function FicheSemisPage() {
           th.pcol-tapis   { background: ${fmtColors.tapis.header}!important; color: white!important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           th.pcol-godets  { background: ${fmtColors.godets.header}!important; color: white!important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           th.pcol-terreau { background: ${fmtColors.terreau.header}!important; color: white!important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          td.pcol-tapis   { background: ${fmtColors.tapis.light}!important; color: ${fmtColors.tapis.header}!important; font-weight: 600; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          td.pcol-godets  { background: ${fmtColors.godets.light}!important; color: ${fmtColors.godets.header}!important; font-weight: 600; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          td.pcol-terreau { background: ${fmtColors.terreau.light}!important; color: ${fmtColors.terreau.header}!important; font-weight: 600; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          tr td.pcol-tapis   { background: ${fmtColors.tapis.light}!important; color: ${fmtColors.tapis.header}!important; font-weight: 600; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          tr td.pcol-godets  { background: ${fmtColors.godets.light}!important; color: ${fmtColors.godets.header}!important; font-weight: 600; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          tr td.pcol-terreau { background: ${fmtColors.terreau.light}!important; color: ${fmtColors.terreau.header}!important; font-weight: 600; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          tr:nth-child(even) td.pcol-tapis   { background: ${fmtColors.tapis.light}!important; }
+          tr:nth-child(even) td.pcol-godets  { background: ${fmtColors.godets.light}!important; }
+          tr:nth-child(even) td.pcol-terreau { background: ${fmtColors.terreau.light}!important; }
           @page { size: ${orientation}; margin: 10mm; }
         }
       `}</style>
