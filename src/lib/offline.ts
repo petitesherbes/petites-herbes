@@ -176,13 +176,13 @@ export async function fetchWithCache<T>(
 
   try {
     const data = await fetcher()
-    if (data && data.length > 0) {
+    if (data !== null && data !== undefined) {
       await saveCache(key, data)
       return { data, fromCache: false }
     }
-    // Réseau OK mais aucune donnée → tenter cache
+    // Réseau OK mais null → tenter cache
     const cached = await loadCache<T[]>(key)
-    return { data: cached ?? data ?? [], fromCache: false }
+    return { data: cached ?? [], fromCache: false }
   } catch {
     const cached = await loadCache<T[]>(key)
     return { data: cached ?? [], fromCache: true }
