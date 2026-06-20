@@ -10,7 +10,6 @@ export interface Espece {
   g_tapis: number | null
   g_godet: number | null
   g_caisse: number | null
-  nb_tapis_serie: number | null
   pct_perte: number | null
   jours_noir: number | null
   jours_pousse: number | null
@@ -51,6 +50,7 @@ export interface ParametresProduction {
   cout_achat_godets: number | null
   caisses_par_sac_terreau: number | null
   cout_sac_terreau: number | null
+  nb_tapis_serie: number | null
   updated_at: string
 }
 
