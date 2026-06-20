@@ -20,6 +20,7 @@ export interface Espece {
   notes: string | null
   photo_url: string | null
   actif: boolean
+  en_taches: boolean
   created_at: string
 }
 

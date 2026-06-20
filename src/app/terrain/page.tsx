@@ -48,7 +48,7 @@ type Perte = {
   quantite: number; unite: string; raison: string; notes: string | null
   espece?: { nom: string } | null
 }
-type Espece            = { id: string; nom: string }
+type Espece            = { id: string; nom: string; en_taches: boolean }
 type EspeceSerre       = { id: string; nom: string; categorie: string }
 type ProduitTraitement = { id: string; nom: string; type: string }
 type TacheCatalogue    = { id: string; titre: string; categorie: string; icone: string; active: boolean; ordre: number }
@@ -365,7 +365,7 @@ export default function TerrainPage() {
         return data
       }).then(r => r.data),
       fetchWithCache('especes_noms', async () => {
-        const { data } = await supabase.from('especes').select('id, nom, jours_noir, jours_pousse, jours_conserv, g_tapis, g_godet, rendement').eq('actif', true).order('nom')
+        const { data } = await supabase.from('especes').select('id, nom, en_taches, jours_noir, jours_pousse, jours_conserv, g_tapis, g_godet, rendement').eq('actif', true).order('nom')
         return data
       }).then(r => r.data),
       fetchWithCache('especes_serre', async () => {
@@ -1159,7 +1159,7 @@ function CahierTab({ zones, especes, especesSerre, produits, entrees, onSaved, o
 // ─── Tab : Agenda ──────────────────────────────────────────────────────────────
 
 function AgendaTab({ taches, zones, especes, catalogueTaches, zoneTaches, onSaved }: {
-  taches: Tache[]; zones: Zone[]; especes: { id: string; nom: string }[]
+  taches: Tache[]; zones: Zone[]; especes: Espece[]
   catalogueTaches: TacheCatalogue[]; zoneTaches: ZoneTacheCat[]
   onSaved: () => void
 }) {
@@ -1515,7 +1515,7 @@ function AgendaTab({ taches, zones, especes, catalogueTaches, zoneTaches, onSave
                           className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition-colors ${editAtelier === 'champs' ? 'bg-amber-600 text-white border-amber-600' : 'bg-white text-gray-500 border-gray-200'}`}>
                           🌾 Champs global
                         </button>
-                        {especes.map(e => (
+                        {especes.filter(e => e.en_taches).map(e => (
                           <button key={e.id} onClick={() => { setEditEspeceId(e.id); setEditAtelier(null) }}
                             className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition-colors ${editEspeceId === e.id ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-500 border-gray-200'}`}>
                             {e.nom}
@@ -1681,9 +1681,21 @@ function AgendaTab({ taches, zones, especes, catalogueTaches, zoneTaches, onSave
           {/* Zone multi-select */}
           <div className="space-y-1.5">
             <div className="text-xs font-semibold text-gray-500">
-              Zone(s) — {zoneIds.length === 0 ? 'aucune' : `${zoneIds.length} selectionnee${zoneIds.length > 1 ? 's' : ''}`}
+              Zone(s) — {zoneIds.length === 0 ? 'aucune' : `${zoneIds.length} sélectionnée${zoneIds.length > 1 ? 's' : ''}`}
             </div>
             <div className="flex flex-wrap gap-1.5">
+              {/* Raccourci Tous les jardins */}
+              {zones.filter(z => z.type !== 'serre').length > 1 && (() => {
+                const jardinsIds = zones.filter(z => z.type !== 'serre').map(z => z.id)
+                const tousCoches = jardinsIds.every(id => zoneIds.includes(id))
+                return (
+                  <button onClick={() => setZoneIds(tousCoches ? zoneIds.filter(id => !jardinsIds.includes(id)) : [...new Set([...zoneIds, ...jardinsIds])])}
+                    className={`px-3 py-1.5 rounded-full text-xs font-semibold border active:scale-95 transition-transform
+                      ${tousCoches ? 'bg-amber-700 text-white border-amber-700' : 'bg-amber-50 text-amber-800 border-amber-300'}`}>
+                    🌄 Tous les jardins
+                  </button>
+                )
+              })()}
               {zones.filter(z => z.type !== 'serre').map(z => (
                 <button key={z.id} onClick={() => toggleZoneAgenda(z.id)}
                   className={`px-3 py-1.5 rounded-full text-xs font-semibold border active:scale-95 transition-transform
@@ -1701,7 +1713,7 @@ function AgendaTab({ taches, zones, especes, catalogueTaches, zoneTaches, onSave
             </div>
             {zoneIds.length > 1 && (
               <div className="text-xs text-green-700 bg-green-50 px-3 py-1.5 rounded-lg">
-                {zoneIds.length} taches seront creees, une par zone
+                {zoneIds.length} tâches seront créées, une par zone
               </div>
             )}
           </div>
@@ -1731,7 +1743,7 @@ function AgendaTab({ taches, zones, especes, catalogueTaches, zoneTaches, onSave
                 className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition-colors ${createAtelier === 'champs' ? 'bg-amber-600 text-white border-amber-600' : 'bg-white text-gray-500 border-gray-200'}`}>
                 🌾 Champs global
               </button>
-              {especes.map(e => (
+              {especes.filter(e => e.en_taches).map(e => (
                 <button key={e.id} onClick={() => { setCreateEspeceId(e.id); setCreateAtelier(null) }}
                   className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition-colors ${createEspeceId === e.id ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-500 border-gray-200'}`}>
                   {e.nom}
