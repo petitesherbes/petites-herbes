@@ -39,7 +39,7 @@ type Tache = {
   frequence: string | null; date_echeance: string | null
   zone_id: string | null; priorite: string; actif: boolean
   espece_id: string | null; atelier: string | null
-  completions?: { date_completion: string }[]
+  completions?: { date_completion: string; note?: string | null }[]
   temps?: TempsTache[]
   espece?: { nom: string } | null
 }
@@ -351,11 +351,11 @@ export default function TerrainPage() {
       }).then(r => r.data),
       fetchWithCache('taches', async () => {
         const { data, error } = await supabase.from('taches')
-          .select('*, espece:especes(nom), completions:taches_completions(date_completion), temps:taches_temps(id, tache_id, date, auteur, minutes, chrono_debut)')
+          .select('*, espece:especes(nom), completions:taches_completions(date_completion,note), temps:taches_temps(id, tache_id, date, auteur, minutes, chrono_debut)')
           .eq('actif', true).order('priorite', { ascending: false })
         if (!error) return data
         const { data: d2 } = await supabase.from('taches')
-          .select('*, completions:taches_completions(date_completion)')
+          .select('*, completions:taches_completions(date_completion,note)')
           .eq('actif', true).order('priorite', { ascending: false })
         return d2
       }).then(r => r.data),
@@ -1349,7 +1349,13 @@ function AgendaTab({ taches, zones, especes, catalogueTaches, zoneTaches, onSave
           .eq('tache_id', t.id).eq('date_completion', todayStr)
       }
     } else {
-      const payload = { tache_id: t.id, date_completion: todayStr }
+      let note: string | null = null
+      if (t.titre === 'Entretien du terrain') {
+        const saisie = window.prompt('Que faites-vous ? (ex: débroussaillage, taille haie, fauchage…)')
+        if (saisie === null) return
+        note = saisie.trim() || null
+      }
+      const payload = { tache_id: t.id, date_completion: todayStr, ...(note !== null ? { note } : {}) }
       if (!navigator.onLine) {
         await queueMutation({ table: 'taches_completions', method: 'upsert', payload, onConflict: 'tache_id,date_completion' })
       } else {
@@ -1456,9 +1462,15 @@ function AgendaTab({ taches, zones, especes, catalogueTaches, zoneTaches, onSave
                   {/* Titre + badge chrono */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className={`flex-1 text-sm font-semibold leading-snug ${faite ? 'line-through text-gray-400' : 'text-gray-800'}`}>
-                        {t.titre}
-                      </span>
+                      <div className="flex-1">
+                        <span className={`text-sm font-semibold leading-snug ${faite ? 'line-through text-gray-400' : 'text-gray-800'}`}>
+                          {t.titre}
+                        </span>
+                        {faite && (() => {
+                          const note = t.completions?.find(c => c.date_completion === todayStr)?.note
+                          return note ? <div className="text-xs text-green-700 italic leading-tight">{note}</div> : null
+                        })()}
+                      </div>
                       {/* Badge chrono — toujours visible sur la ligne du titre */}
                       {enChrono ? (
                         <button onClick={() => arreterChrono(t)}
