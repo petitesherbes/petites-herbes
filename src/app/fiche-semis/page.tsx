@@ -299,7 +299,7 @@ export default function FicheSemisPage() {
                   const fk = colFormatKey(c.key)
                   return (
                     <th key={c.key}
-                      className="px-3 py-2.5 text-center whitespace-nowrap min-w-[70px]"
+                      className={`px-3 py-2.5 text-center whitespace-nowrap min-w-[70px]${fk ? ` pcol-${fk}` : ''}`}
                       style={fk ? { backgroundColor: fmtColors[fk].header } : undefined}>
                       {c.label}
                       {c.unit && <div className="text-[8px] font-normal opacity-50 leading-tight">{c.unit}</div>}
@@ -327,8 +327,8 @@ export default function FicheSemisPage() {
 
                     if (c.calc) {
                       return (
-                        <td key={c.key} className="px-3 py-2.5 text-center font-semibold" style={{ backgroundColor: cellBg, color: fk ? fmtColors[fk].header : '#1d4ed8' }}>
-                          {val !== null ? val : <span className="opacity-20">—</span>}
+                        <td key={c.key} className={`px-3 py-2.5 text-center text-blue-700 font-semibold${fk ? ` pcol-${fk}` : ''}`}>
+                          {val !== null ? val : <span className="text-gray-200">—</span>}
                         </td>
                       )
                     }
@@ -360,19 +360,19 @@ export default function FicheSemisPage() {
 
                     const rawVal = e[c.key as keyof Espece] as number | null
                     return (
-                      <td key={c.key} className="px-1 py-1 text-center" style={{ backgroundColor: cellBg }}>
+                      <td key={c.key} className={`px-1 py-1 text-center${fk ? ` pcol-${fk}` : ''}`}>
                         {isEditing ? (
                           <input autoFocus value={editVal}
                             onChange={ev => setEditVal(ev.target.value)}
                             onBlur={sauvegarder}
                             onKeyDown={ev => { if (ev.key === 'Enter') sauvegarder(); if (ev.key === 'Escape') setEditCell(null) }}
                             disabled={saving}
-                            className="w-16 text-center text-xs border border-green-400 rounded px-1 py-0.5 focus:outline-none bg-white" />
+                            className="w-16 text-center text-xs border border-green-400 rounded px-1 py-0.5 focus:outline-none bg-green-50" />
                         ) : (
                           <button
                             onClick={() => { setEditCell({ id: e.id, key: c.key as keyof Espece }); setEditVal(rawVal !== null ? String(rawVal) : '') }}
-                            className="w-full min-h-[28px] rounded px-1 py-0.5 print:pointer-events-none transition-colors font-medium"
-                            style={{ color: rawVal !== null ? (fk ? fmtColors[fk].header : '#1f2937') : '#e5e7eb' }}>
+                            className={`w-full min-h-[28px] rounded px-1 py-0.5 print:pointer-events-none transition-colors
+                              ${rawVal !== null ? 'text-gray-800 font-medium hover:bg-green-50 hover:text-green-700' : 'text-gray-200 hover:bg-gray-50 hover:text-gray-400'}`}>
                             {rawVal !== null ? Math.round(rawVal * 10) / 10 : <span className="text-[9px]">—</span>}
                           </button>
                         )}
@@ -398,6 +398,12 @@ export default function FicheSemisPage() {
           th, td { border: 1px solid #e5e7eb; padding: ${fontSize === 'small' ? '2px 5px' : fontSize === 'large' ? '6px 10px' : '4px 8px'}; }
           th { background: #1f2937!important; color: white!important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           tr:nth-child(even) td { background: #f9fafb!important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          th.pcol-tapis   { background: ${fmtColors.tapis.header}!important; color: white!important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          th.pcol-godets  { background: ${fmtColors.godets.header}!important; color: white!important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          th.pcol-terreau { background: ${fmtColors.terreau.header}!important; color: white!important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          td.pcol-tapis   { background: ${fmtColors.tapis.light}!important; color: ${fmtColors.tapis.header}!important; font-weight: 600; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          td.pcol-godets  { background: ${fmtColors.godets.light}!important; color: ${fmtColors.godets.header}!important; font-weight: 600; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          td.pcol-terreau { background: ${fmtColors.terreau.light}!important; color: ${fmtColors.terreau.header}!important; font-weight: 600; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           @page { size: ${orientation}; margin: 10mm; }
         }
       `}</style>
