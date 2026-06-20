@@ -2812,23 +2812,29 @@ function CulturesTab({ cultures, zones, especes, onSaved }: {
         </button>
       </div>
 
-      <button onClick={() => ouvrirAjout(familleVue)}
-        className={`w-full flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm active:scale-95 transition-transform text-white
-          ${familleVue === 'champs' ? 'bg-amber-600' : 'bg-green-700'}`}>
-        + Nouvelle {familleVue === 'champs' ? 'culture champs' : 'micro-pousse'}
-      </button>
+      <div className="flex gap-2">
+        <button onClick={() => ouvrirAjout(familleVue)}
+          className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm active:scale-95 transition-transform text-white
+            ${familleVue === 'champs' ? 'bg-amber-600' : 'bg-green-700'}`}>
+          + Nouvelle {familleVue === 'champs' ? 'culture' : 'micro-pousse'}
+        </button>
+        <button onClick={syncDepuisSemis} disabled={syncing}
+          title="Importer tous les semis actifs"
+          className={`px-4 py-3 rounded-xl font-semibold text-sm active:scale-95 transition-transform border-2 border-dashed disabled:opacity-50
+            ${familleVue === 'champs' ? 'border-amber-300 text-amber-700 bg-amber-50' : 'border-green-300 text-green-700 bg-green-50'}`}>
+          {syncing ? '⏳' : '🔄'}
+        </button>
+      </div>
+
+      {syncMsg && (
+        <div className={`text-xs rounded-xl px-3 py-2 ${syncMsg.startsWith('✅') ? 'bg-green-50 border border-green-200 text-green-700' : 'bg-red-50 border border-red-200 text-red-700'}`}>
+          {syncMsg}
+        </div>
+      )}
 
       {cultures.filter(c => c.famille === familleVue).length === 0 && (
-        <div className="space-y-2">
-          <button onClick={syncDepuisSemis} disabled={syncing}
-            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm border-2 border-dashed border-green-300 text-green-700 bg-green-50 active:scale-95 transition-transform disabled:opacity-50">
-            {syncing ? '⏳ Synchronisation…' : '🔄 Importer depuis les semis actifs'}
-          </button>
-          {syncMsg && (
-            <div className={`text-xs rounded-xl px-3 py-2 ${syncMsg.startsWith('✅') ? 'bg-green-50 border border-green-200 text-green-700' : 'bg-red-50 border border-red-200 text-red-700'}`}>
-              {syncMsg}
-            </div>
-          )}
+        <div className="text-center py-4 text-gray-400 text-xs">
+          Aucune culture — appuie sur 🔄 pour importer les semis actifs
         </div>
       )}
 
