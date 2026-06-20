@@ -2,6 +2,7 @@
 export const dynamic = 'force-dynamic'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import type { Espece } from '@/types'
 
@@ -140,7 +141,12 @@ export default function FicheSemisPage() {
       {/* ── Header ──────────────────────────────────────────────────────── */}
       <div className="print:hidden sticky top-0 z-20 bg-white border-b border-gray-200 px-4 py-3 space-y-2">
         <div className="flex items-center justify-between gap-3">
-          <div className="text-base font-bold text-gray-900">Fiche semis</div>
+          <div className="flex items-center gap-2">
+            <div className="text-base font-bold text-gray-900">Fiche semis</div>
+            <Link href="/parametres" className="text-xs text-green-700 bg-green-50 border border-green-200 px-2.5 py-1 rounded-lg font-semibold hover:bg-green-100 transition-colors">
+              + Espèce
+            </Link>
+          </div>
           <div className="flex items-center gap-2">
             <button onClick={() => { setConfigOpen(o => !o); setPrintOpen(false) }}
               className={`px-3 py-2 rounded-xl text-sm font-semibold border transition-colors
@@ -262,11 +268,13 @@ export default function FicheSemisPage() {
       </div>
 
       {/* ── En-tête impression ──────────────────────────────────────────── */}
-      <div className="hidden print:block text-center py-3">
-        <div className="text-lg font-bold">Fiche semis — Les Petites Herbes</div>
-        <div className="text-[8pt] text-gray-500 mt-0.5">
-          {new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
-          {' · '}{tapisParCaisse} tapis/caisse · {godetsParSerie} godets/série
+      <div className="hidden print:block text-center py-3 border-b border-gray-200 mb-2">
+        <div className="text-xl font-bold">Les Petites Herbes</div>
+        <div className="text-sm font-semibold text-gray-600 mt-0.5">
+          {new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+        </div>
+        <div className="text-[8pt] text-gray-400 mt-0.5">
+          {tapisParCaisse} tapis/caisse · {godetsParSerie} godets/série
         </div>
       </div>
 
@@ -366,7 +374,8 @@ export default function FicheSemisPage() {
       <style jsx global>{`
         @media print {
           body { background: white; }
-          nav, .print\\:hidden { display: none !important; }
+          nav, .print\\:hidden, aside, dialog, [data-fixed], [class*="fixed"], [class*="z-50"] { display: none !important; }
+          td button { display: inline !important; background: none !important; border: none !important; padding: 0 !important; cursor: default; }
           table {
             font-size: ${fontSize === 'small' ? '7.5pt' : fontSize === 'large' ? '11pt' : '9pt'};
             border-collapse: collapse; width: 100%;
