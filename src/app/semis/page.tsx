@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 
 import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+import { loadFormatColors } from '@/lib/formatColors'
 import { fetchWithCache, queueMutation, saveCache } from '@/lib/offline'
 import { Espece, Template, TemplateLigne, SemisLigneForm, Format, ParametresProduction, Contenant } from '@/types'
 import {
@@ -1176,10 +1177,11 @@ function SectionLignes({ titre, couleur, lignes, especes, format: fmt, onModifie
   zones?: Zone[]
   nbParSerie?: number
 }) {
+  const _fmt = loadFormatColors()
   const colors = {
-    tapis:   { header: 'bg-green-700',  light: 'bg-green-50',  border: 'border-green-200' },
-    terreau: { header: 'bg-stone-700',  light: 'bg-stone-50',  border: 'border-stone-200' },
-    godets:  { header: 'bg-orange-700', light: 'bg-orange-50', border: 'border-orange-200' },
+    tapis:   { header: _fmt.tapis.header,   light: _fmt.tapis.light,   border: _fmt.tapis.border },
+    terreau: { header: _fmt.terreau.header, light: _fmt.terreau.light, border: _fmt.terreau.border },
+    godets:  { header: _fmt.godets.header,  light: _fmt.godets.light,  border: _fmt.godets.border },
   }[couleur]
 
   const [editingId, setEditingId] = useState<number | null>(null)
@@ -1213,15 +1215,15 @@ function SectionLignes({ titre, couleur, lignes, especes, format: fmt, onModifie
   }
 
   return (
-    <div className={`rounded-xl border ${colors.border} overflow-hidden shadow-sm`}>
-      <div className={`${colors.header} text-white px-3 py-2.5 font-bold text-sm flex justify-between items-center`}>
+    <div className="rounded-xl border overflow-hidden shadow-sm" style={{ borderColor: colors.border }}>
+      <div className="text-white px-3 py-2.5 font-bold text-sm flex justify-between items-center" style={{ backgroundColor: colors.header }}>
         <span>{titre} <span className="font-normal opacity-80">({lignes.length})</span></span>
         <button onClick={onAjouter}
           className="bg-white/20 hover:bg-white/30 rounded-lg px-3 py-1 text-sm font-semibold transition-colors">
           + Ajouter
         </button>
       </div>
-      <div className={`${colors.light}`}>
+      <div style={{ backgroundColor: colors.light }}>
         {lignes.length === 0 ? (
           <div className="px-3 py-5 text-sm text-gray-400 text-center">
             Appuyez sur + Ajouter pour commencer

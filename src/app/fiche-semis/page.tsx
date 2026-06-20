@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import type { Espece } from '@/types'
+import { loadFormatColors, colFormatKey, type FormatColors } from '@/lib/formatColors'
 
 type Col = {
   key: string
@@ -58,6 +59,13 @@ export default function FicheSemisPage() {
   const [orientation, setOrientation] = useState<'landscape' | 'portrait'>('landscape')
   const [fontSize, setFontSize]       = useState<'small' | 'normal' | 'large'>('normal')
   const [especesExclues, setEspecesExclues] = useState<Set<string>>(new Set())
+  const [fmtColors, setFmtColors] = useState<FormatColors>(loadFormatColors)
+
+  useEffect(() => {
+    const handler = () => setFmtColors(loadFormatColors())
+    window.addEventListener('format-colors-changed', handler)
+    return () => window.removeEventListener('format-colors-changed', handler)
+  }, [])
 
   useEffect(() => {
     Promise.all([
@@ -287,14 +295,19 @@ export default function FicheSemisPage() {
               <tr className="bg-gray-800 text-white">
                 <th className="text-left px-3 py-2.5 sticky left-0 bg-gray-800 min-w-[130px]">Espèce</th>
                 {showSection && <th className="px-3 py-2.5 text-center min-w-[70px]">Section</th>}
-                {visibles.map(c => (
-                  <th key={c.key} className={`px-3 py-2.5 text-center whitespace-nowrap min-w-[70px] ${c.calc ? 'text-blue-200' : ''}`}>
-                    {c.label}
-                    {c.unit && <div className="text-[8px] font-normal opacity-50 leading-tight">{c.unit}</div>}
-                    {c.key === 'g_serie_tapis'  && <div className="text-[8px] font-normal text-blue-300 leading-tight">×{tapisParCaisse}</div>}
-                    {c.key === 'g_serie_godets' && <div className="text-[8px] font-normal text-blue-300 leading-tight">×{godetsParSerie}</div>}
-                  </th>
-                ))}
+                {visibles.map(c => {
+                  const fk = colFormatKey(c.key)
+                  return (
+                    <th key={c.key}
+                      className="px-3 py-2.5 text-center whitespace-nowrap min-w-[70px]"
+                      style={fk ? { backgroundColor: fmtColors[fk].header } : undefined}>
+                      {c.label}
+                      {c.unit && <div className="text-[8px] font-normal opacity-50 leading-tight">{c.unit}</div>}
+                      {c.key === 'g_serie_tapis'  && <div className="text-[8px] font-normal opacity-60 leading-tight">×{tapisParCaisse}</div>}
+                      {c.key === 'g_serie_godets' && <div className="text-[8px] font-normal opacity-60 leading-tight">×{godetsParSerie}</div>}
+                    </th>
+                  )
+                })}
               </tr>
             </thead>
             <tbody>
