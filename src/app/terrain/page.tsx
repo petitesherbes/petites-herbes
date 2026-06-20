@@ -629,7 +629,7 @@ export default function TerrainPage() {
             catalogueTaches={catalogueTaches} zoneTaches={zoneTaches}
             onSaved={charger} />
         )}
-        {onglet === 'cultures' && <CulturesTab cultures={cultures} zones={zones} onSaved={charger} />}
+        {onglet === 'cultures' && <CulturesTab cultures={cultures} zones={zones} especes={especes} onSaved={charger} />}
         {onglet === 'zones'  && <ZonesTab zones={zones} planches={planches} onSaved={charger} />}
         {onglet === 'pertes' && <PertesTab pertes={pertes} especes={especes} onSaved={charger} />}
         {onglet === 'heures' && (
@@ -2626,8 +2626,8 @@ function HeuresTab({ taches, entrees, zones, pointages, onSaved }: {
 
 // ─── Tab : Cultures ───────────────────────────────────────────────────────────
 
-function CulturesTab({ cultures, zones, onSaved }: {
-  cultures: Culture[]; zones: Zone[]; onSaved: () => void
+function CulturesTab({ cultures, zones, especes, onSaved }: {
+  cultures: Culture[]; zones: Zone[]; especes: { id: string; nom: string }[]; onSaved: () => void
 }) {
   const [familleVue, setFamilleVue]     = useState<FamilleCulture>('champs')
   const [filtreStatut, setFiltreStatut] = useState<StatutCulture | 'tout'>('tout')
@@ -2653,13 +2653,13 @@ function CulturesTab({ cultures, zones, onSaved }: {
     const today = format(new Date(), 'yyyy-MM-dd')
     const { data: lignes, error: errL } = await supabase
       .from('semis_lignes')
-      .select('id, format, quantite, espece:especes(nom)')
+      .select('id, espece_id, format, quantite')
       .in('format', ['TAPIS', 'GODET'])
       .gt('date_peremption', today)
     if (errL) { setSyncMsg(`Erreur lecture semis: ${errL.message}`); setSyncing(false); return }
     if (!lignes?.length) { setSyncMsg('Aucun semis actif trouvé.'); setSyncing(false); return }
-    const payload = (lignes as unknown as {id:string;format:string;quantite:number;espece:{nom:string}|null}[]).map(l => ({
-      espece: l.espece?.nom ?? '',
+    const payload = (lignes as {id:string;espece_id:string;format:string;quantite:number}[]).map(l => ({
+      espece: especes.find(e => e.id === l.espece_id)?.nom ?? '',
       nom: l.format === 'TAPIS' ? `Tapis ×${l.quantite}` : `Godet ×${l.quantite}`,
       famille: l.format === 'TAPIS' ? 'micro_pousse' : 'champs',
       statut: 'semis' as StatutCulture,

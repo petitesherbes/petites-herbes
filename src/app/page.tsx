@@ -266,6 +266,8 @@ export default function AccueilPage() {
   })
   const enPousse = lignes.filter(l => l.date_dispo && l.date_dispo > todayStr)
     .sort((a, b) => (a.date_dispo! < b.date_dispo! ? -1 : 1))
+  const enPousseMicro  = enPousse.filter(l => l.format === 'TAPIS')
+  const enPousseChamps = enPousse.filter(l => l.format !== 'TAPIS')
 
   function consommationHebdo(especeId: string): number {
     const il_y_a_28j = subDays(new Date(), 28)
@@ -431,21 +433,20 @@ export default function AccueilPage() {
           <div key="production" className="px-4 mt-4 space-y-4">
             {urgent.length > 0 && <SectionProduction titre="Expire bientôt" accent="red" lignes={urgent} aujourd={aujourd} icon="🔴" onLigneClick={l => { setLigneSheet(l); setLigneAction('idle') }} />}
             {disponible.length > 0 && <SectionProduction titre="Disponible à récolter" accent="green" lignes={disponible} aujourd={aujourd} icon="✅" onLigneClick={l => { setLigneSheet(l); setLigneAction('idle') }} />}
-            {enPousse.length > 0 && (
+            {enPousseMicro.length > 0 && (
               <div className="rounded-2xl border border-blue-200 overflow-hidden">
                 <div className="px-4 py-3 bg-blue-600 text-white font-bold text-sm flex justify-between items-center">
-                  <span>🌱 En pousse</span>
-                  <span className="bg-white/25 text-white text-xs font-bold px-2.5 py-0.5 rounded-full">{enPousse.length}</span>
+                  <span>🌱 Micro-pousses en pousse</span>
+                  <span className="bg-white/25 text-white text-xs font-bold px-2.5 py-0.5 rounded-full">{enPousseMicro.length}</span>
                 </div>
                 <div className="bg-blue-50 divide-y divide-blue-100">
-                  {enPousse.slice(0, 8).map(l => {
-                    const ico = l.format === 'TAPIS' ? '🟩' : l.format === 'TERREAU' ? '🟫' : '🟧'
+                  {enPousseMicro.slice(0, 8).map(l => {
                     const jAvant = l.date_dispo ? differenceInDays(parseISO(l.date_dispo), aujourd) : null
                     return (
                       <button key={l.id} onClick={() => { setLigneSheet(l); setLigneAction('idle') }}
                         className="w-full px-4 py-2.5 flex justify-between items-center text-left active:bg-blue-100 transition-colors">
                         <div>
-                          <span className="text-sm font-semibold text-blue-900">{ico} {l.espece?.nom}</span>
+                          <span className="text-sm font-semibold text-blue-900">🟩 {l.espece?.nom}</span>
                           <div className="text-xs text-blue-400 mt-0.5">×{l.quantite} · dispo {l.date_dispo ? format(parseISO(l.date_dispo), 'd MMM', { locale: fr }) : '—'}</div>
                         </div>
                         <div className="flex items-center gap-2">
@@ -455,7 +456,34 @@ export default function AccueilPage() {
                       </button>
                     )
                   })}
-                  {enPousse.length > 8 && <div className="px-4 py-2.5 text-xs text-blue-400">+{enPousse.length - 8} autres lignes</div>}
+                  {enPousseMicro.length > 8 && <div className="px-4 py-2.5 text-xs text-blue-400">+{enPousseMicro.length - 8} autres lignes</div>}
+                </div>
+              </div>
+            )}
+            {enPousseChamps.length > 0 && (
+              <div className="rounded-2xl border border-amber-200 overflow-hidden">
+                <div className="px-4 py-3 bg-amber-600 text-white font-bold text-sm flex justify-between items-center">
+                  <span>🌾 Champs en cours</span>
+                  <span className="bg-white/25 text-white text-xs font-bold px-2.5 py-0.5 rounded-full">{enPousseChamps.length}</span>
+                </div>
+                <div className="bg-amber-50 divide-y divide-amber-100">
+                  {enPousseChamps.slice(0, 8).map(l => {
+                    const jAvant = l.date_dispo ? differenceInDays(parseISO(l.date_dispo), aujourd) : null
+                    return (
+                      <button key={l.id} onClick={() => { setLigneSheet(l); setLigneAction('idle') }}
+                        className="w-full px-4 py-2.5 flex justify-between items-center text-left active:bg-amber-100 transition-colors">
+                        <div>
+                          <span className="text-sm font-semibold text-amber-900">🟧 {l.espece?.nom}</span>
+                          <div className="text-xs text-amber-400 mt-0.5">×{l.quantite} · dispo {l.date_dispo ? format(parseISO(l.date_dispo), 'd MMM', { locale: fr }) : '—'}</div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {jAvant !== null && <span className="text-xs font-bold text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full">J−{jAvant}</span>}
+                          <span className="text-amber-300 text-xs">›</span>
+                        </div>
+                      </button>
+                    )
+                  })}
+                  {enPousseChamps.length > 8 && <div className="px-4 py-2.5 text-xs text-amber-400">+{enPousseChamps.length - 8} autres lignes</div>}
                 </div>
               </div>
             )}
