@@ -51,6 +51,9 @@ export default function FicheSemisPage() {
   const [editCell, setEditCell]       = useState<{ id: string; key: keyof Espece } | null>(null)
   const [editVal, setEditVal]         = useState('')
   const [saving, setSaving]           = useState(false)
+  const [printOpen, setPrintOpen]     = useState(false)
+  const [orientation, setOrientation] = useState<'landscape' | 'portrait'>('landscape')
+  const [fontSize, setFontSize]       = useState<'small' | 'normal' | 'large'>('normal')
 
   useEffect(() => {
     Promise.all([
@@ -138,8 +141,9 @@ export default function FicheSemisPage() {
                 ${configOpen ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-600 border-gray-200'}`}>
               ⚙️ Colonnes
             </button>
-            <button onClick={() => window.print()}
-              className="bg-green-700 text-white px-4 py-2 rounded-xl text-sm font-semibold active:scale-95 transition-transform">
+            <button onClick={() => setPrintOpen(o => !o)}
+              className={`px-4 py-2 rounded-xl text-sm font-semibold active:scale-95 transition-transform
+                ${printOpen ? 'bg-green-800 text-white' : 'bg-green-700 text-white'}`}>
               🖨️ Imprimer
             </button>
           </div>
@@ -150,6 +154,42 @@ export default function FicheSemisPage() {
           <ParamBadge pk="tapis_par_caisse" label="Tapis/caisse" val={tapisParCaisse} />
           <ParamBadge pk="godets_par_serie" label="Godets/série" val={godetsParSerie} />
         </div>
+
+        {/* ── Panneau impression ───────────────────────────────────────── */}
+        {printOpen && (
+          <div className="mt-2 pt-3 border-t border-gray-100 space-y-3">
+            <div className="flex flex-wrap gap-4">
+              <div>
+                <div className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide mb-1.5">Orientation</div>
+                <div className="flex gap-2">
+                  {(['landscape','portrait'] as const).map(o => (
+                    <button key={o} onClick={() => setOrientation(o)}
+                      className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border transition-colors
+                        ${orientation === o ? 'bg-green-700 text-white border-green-700' : 'bg-white text-gray-500 border-gray-200'}`}>
+                      {o === 'landscape' ? '↔ Paysage' : '↕ Portrait'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide mb-1.5">Taille du texte</div>
+                <div className="flex gap-2">
+                  {([['small','Petit'],['normal','Normal'],['large','Grand']] as const).map(([v, l]) => (
+                    <button key={v} onClick={() => setFontSize(v)}
+                      className={`px-3 py-2 rounded-xl text-xs font-semibold border transition-colors
+                        ${fontSize === v ? 'bg-green-700 text-white border-green-700' : 'bg-white text-gray-500 border-gray-200'}`}>
+                      {l}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <button onClick={() => { setPrintOpen(false); setTimeout(() => window.print(), 100) }}
+              className="w-full bg-green-700 text-white py-3 rounded-xl text-sm font-bold active:scale-95 transition-transform">
+              🖨️ Lancer l&apos;impression
+            </button>
+          </div>
+        )}
 
         {/* Sélecteur colonnes */}
         {configOpen && (
@@ -262,11 +302,14 @@ export default function FicheSemisPage() {
         @media print {
           body { background: white; }
           nav, .print\\:hidden { display: none !important; }
-          table { font-size: 9pt; border-collapse: collapse; width: 100%; }
-          th, td { border: 1px solid #e5e7eb; padding: 4px 8px; }
+          table {
+            font-size: ${fontSize === 'small' ? '7.5pt' : fontSize === 'large' ? '11pt' : '9pt'};
+            border-collapse: collapse; width: 100%;
+          }
+          th, td { border: 1px solid #e5e7eb; padding: ${fontSize === 'small' ? '2px 5px' : fontSize === 'large' ? '6px 10px' : '4px 8px'}; }
           th { background: #1f2937!important; color: white!important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           tr:nth-child(even) td { background: #f9fafb!important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          @page { size: landscape; margin: 10mm; }
+          @page { size: ${orientation}; margin: 10mm; }
         }
       `}</style>
     </div>
