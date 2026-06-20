@@ -12,6 +12,7 @@ type Col = {
   defaultOn: boolean
   value: (e: Espece, tp: number, gp: number) => number | null
   calc?: boolean
+  text?: boolean
 }
 
 const COLS: Col[] = [
@@ -25,6 +26,7 @@ const COLS: Col[] = [
   { key: 'jours_conserv',  label: 'J. Conserv.',      unit: 'j',       defaultOn: false, value: e => e.jours_conserv },
   { key: 'rendement',      label: 'Rendement',        unit: 'g/tapis', defaultOn: false, value: e => e.rendement },
   { key: 'prix_graine_kg', label: 'Prix graine',      unit: '€/kg',    defaultOn: false, value: e => e.prix_graine_kg },
+  { key: 'notes',          label: 'Notes',             unit: undefined, defaultOn: false, value: () => null, text: true },
 ]
 
 const STORAGE_KEY = 'fiche_semis_cols'
@@ -94,9 +96,12 @@ export default function FicheSemisPage() {
   async function sauvegarder() {
     if (!editCell) return
     setSaving(true)
-    const num = editVal.trim() === '' ? null : parseFloat(editVal.replace(',', '.'))
-    await supabase.from('especes').update({ [editCell.key]: num }).eq('id', editCell.id)
-    setEspeces(prev => prev.map(e => e.id === editCell.id ? { ...e, [editCell.key]: num } : e))
+    const col = COLS.find(c => c.key === editCell.key)
+    const val = col?.text
+      ? (editVal.trim() === '' ? null : editVal.trim())
+      : (editVal.trim() === '' ? null : parseFloat(editVal.replace(',', '.')))
+    await supabase.from('especes').update({ [editCell.key]: val }).eq('id', editCell.id)
+    setEspeces(prev => prev.map(e => e.id === editCell.id ? { ...e, [editCell.key]: val } : e))
     setEditCell(null)
     setSaving(false)
   }
@@ -301,6 +306,8 @@ export default function FicheSemisPage() {
                   )}
                   {visibles.map(c => {
                     const val = c.value(e, tapisParCaisse, godetsParSerie)
+                    const isEditing = editCell?.id === e.id && editCell?.key === c.key
+
                     if (c.calc) {
                       return (
                         <td key={c.key} className="px-3 py-2.5 text-center text-blue-700 font-semibold">
@@ -308,8 +315,33 @@ export default function FicheSemisPage() {
                         </td>
                       )
                     }
+
+                    if (c.text) {
+                      const textVal = e[c.key as keyof Espece] as string | null
+                      return (
+                        <td key={c.key} className="px-1 py-1 text-gray-600 min-w-[140px]">
+                          {isEditing ? (
+                            <textarea autoFocus value={editVal}
+                              onChange={ev => setEditVal(ev.target.value)}
+                              onBlur={sauvegarder}
+                              onKeyDown={ev => { if (ev.key === 'Escape') setEditCell(null) }}
+                              disabled={saving}
+                              rows={2}
+                              className="w-full text-xs border border-green-400 rounded px-2 py-1 focus:outline-none bg-green-50 resize-none" />
+                          ) : (
+                            <button
+                              onClick={() => { setEditCell({ id: e.id, key: c.key as keyof Espece }); setEditVal(textVal ?? '') }}
+                              className="w-full min-h-[28px] text-left rounded px-2 py-1 print:pointer-events-none transition-colors text-xs hover:bg-green-50">
+                              {textVal
+                                ? <span className="text-gray-700">{textVal}</span>
+                                : <span className="text-gray-200 text-[9px]">—</span>}
+                            </button>
+                          )}
+                        </td>
+                      )
+                    }
+
                     const rawVal = e[c.key as keyof Espece] as number | null
-                    const isEditing = editCell?.id === e.id && editCell?.key === c.key
                     return (
                       <td key={c.key} className="px-1 py-1 text-center text-gray-700">
                         {isEditing ? (

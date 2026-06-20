@@ -17,6 +17,7 @@ export interface Espece {
   rendement: number | null
   stock_actuel_g: number
   prix_graine_kg: number | null
+  notes: string | null
   photo_url: string | null
   actif: boolean
   created_at: string
