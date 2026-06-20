@@ -652,6 +652,27 @@ export default function NouveauSemisPage() {
           </div>
         </div>
 
+        {/* Paramètres série éditables */}
+        <div className="flex gap-2 text-xs">
+          {([
+            { label: 'Tapis/caisse', field: 'tapis_par_caisse' as const, val: params?.tapis_par_caisse ?? 26 },
+            { label: 'Godets/série', field: 'godets_par_serie' as const, val: params?.godets_par_serie ?? 14 },
+          ]).map(({ label, field, val }) => (
+            <button key={field}
+              onClick={async () => {
+                const saisie = prompt(`${label} (actuellement ${val}) :`, String(val))
+                if (!saisie) return
+                const num = Math.max(1, parseInt(saisie) || val)
+                if (num === val) return
+                await supabase.from('parametres_production').update({ [field]: num }).eq('id', params!.id)
+                setParams(p => p ? { ...p, [field]: num } : p)
+              }}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white border border-gray-200 text-gray-600 hover:border-green-400 hover:text-green-700 transition-colors">
+              {label} : <span className="font-bold text-gray-800">{val}</span> ✏️
+            </button>
+          ))}
+        </div>
+
         <SectionLignes titre="🟩 TAPIS" couleur="tapis" lignes={lignesTapis}
           especes={especesPourFormat('TAPIS')} format="TAPIS"
           onModifier={modifierLigne} onSupprimer={supprimerLigne}
