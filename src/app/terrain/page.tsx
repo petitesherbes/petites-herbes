@@ -2712,12 +2712,18 @@ function CulturesTab({ cultures, zones, especes, onSaved }: {
   }
 
   async function archiver(c: Culture) {
-    if (!confirm(`Archiver "${c.espece}" ?`)) return
+    if (!confirm(`Archiver "${c.espece}" ? (marque comme terminée, reste en historique)`)) return
     if (!navigator.onLine) {
       await queueMutation({ table: 'cultures', method: 'update', payload: { actif: false }, matchCol: 'id', matchVal: c.id })
     } else {
       await supabase.from('cultures').update({ actif: false }).eq('id', c.id)
     }
+    onSaved()
+  }
+
+  async function supprimerCulture(c: Culture) {
+    if (!confirm(`Supprimer définitivement "${c.espece}" ? Cette action est irréversible.`)) return
+    await supabase.from('cultures').delete().eq('id', c.id)
     onSaved()
   }
 
@@ -2953,10 +2959,16 @@ function CulturesTab({ cultures, zones, especes, onSaved }: {
                       className="w-full py-2 rounded-xl border border-gray-200 text-gray-500 text-xs">
                       {c.famille === 'micro_pousse' ? '🌾 Déplacer vers Champs' : '🌱 Déplacer vers Micro-pousses'}
                     </button>
-                    <button onClick={() => archiver(c)}
-                      className="w-full py-2 rounded-xl border border-red-100 text-red-400 text-xs">
-                      Archiver
-                    </button>
+                    <div className="flex gap-2">
+                      <button onClick={() => archiver(c)}
+                        className="flex-1 py-2 rounded-xl border border-gray-200 text-gray-400 text-xs">
+                        ✅ Archiver (terminée)
+                      </button>
+                      <button onClick={() => supprimerCulture(c)}
+                        className="flex-1 py-2 rounded-xl border border-red-100 text-red-400 text-xs">
+                        🗑 Supprimer
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
