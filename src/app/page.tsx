@@ -266,8 +266,8 @@ export default function AccueilPage() {
   })
   const enPousse = lignes.filter(l => l.date_dispo && l.date_dispo > todayStr)
     .sort((a, b) => (a.date_dispo! < b.date_dispo! ? -1 : 1))
-  const enPousseMicro  = enPousse.filter(l => l.format === 'TAPIS')
-  const enPousseChamps = enPousse.filter(l => l.format !== 'TAPIS')
+  const enPousseMicro  = enPousse.filter(l => l.format === 'TAPIS' || l.format === 'GODET')
+  const enPousseChamps = enPousse.filter(l => l.format !== 'TAPIS' && l.format !== 'GODET')
 
   function consommationHebdo(especeId: string): number {
     const il_y_a_28j = subDays(new Date(), 28)
@@ -439,11 +439,11 @@ export default function AccueilPage() {
                   <span>🌱 Micro-pousses en pousse</span>
                   <div className="flex items-center gap-2">
                     <span className="bg-white/25 text-white text-xs font-bold px-2.5 py-0.5 rounded-full">{enPousseMicro.length}</span>
-                    <Link href="/terrain" className="text-white/70 text-xs underline">Gérer →</Link>
+                    <Link href="/terrain" onClick={() => { localStorage.setItem('terrain_init_tab','cultures'); localStorage.setItem('terrain_init_famille','micro_pousse') }} className="text-white/70 text-xs underline">Gérer →</Link>
                   </div>
                 </div>
                 <div className="bg-blue-50 divide-y divide-blue-100">
-                  {enPousseMicro.slice(0, 8).map(l => {
+                  {enPousseMicro.slice(0, 12).map(l => {
                     const jAvant = l.date_dispo ? differenceInDays(parseISO(l.date_dispo), aujourd) : null
                     return (
                       <button key={l.id} onClick={() => { setLigneSheet(l); setLigneAction('idle') }}
@@ -459,7 +459,7 @@ export default function AccueilPage() {
                       </button>
                     )
                   })}
-                  {enPousseMicro.length > 8 && <Link href="/terrain" className="block px-4 py-2.5 text-xs text-blue-500 font-semibold">+{enPousseMicro.length - 8} autres lignes → voir tout</Link>}
+                  {enPousseMicro.length > 12 && <Link href="/terrain" onClick={() => { localStorage.setItem('terrain_init_tab','cultures'); localStorage.setItem('terrain_init_famille','micro_pousse') }} className="block px-4 py-2.5 text-xs text-blue-500 font-semibold">+{enPousseMicro.length - 12} autres lignes → voir tout</Link>}
                 </div>
               </div>
             )}
@@ -469,7 +469,7 @@ export default function AccueilPage() {
                   <span>🌾 Champs en cours</span>
                   <div className="flex items-center gap-2">
                     <span className="bg-white/25 text-white text-xs font-bold px-2.5 py-0.5 rounded-full">{enPousseChamps.length}</span>
-                    <Link href="/terrain" className="text-white/70 text-xs underline">Gérer →</Link>
+                    <Link href="/terrain" onClick={() => { localStorage.setItem('terrain_init_tab','cultures'); localStorage.setItem('terrain_init_famille','champs') }} className="text-white/70 text-xs underline">Gérer →</Link>
                   </div>
                 </div>
                 <div className="bg-amber-50 divide-y divide-amber-100">
@@ -489,7 +489,7 @@ export default function AccueilPage() {
                       </button>
                     )
                   })}
-                  {enPousseChamps.length > 8 && <Link href="/terrain" className="block px-4 py-2.5 text-xs text-amber-600 font-semibold">+{enPousseChamps.length - 8} autres lignes → voir tout</Link>}
+                  {enPousseChamps.length > 8 && <Link href="/terrain" onClick={() => { localStorage.setItem('terrain_init_tab','cultures'); localStorage.setItem('terrain_init_famille','champs') }} className="block px-4 py-2.5 text-xs text-amber-600 font-semibold">+{enPousseChamps.length - 8} autres lignes → voir tout</Link>}
                 </div>
               </div>
             )}

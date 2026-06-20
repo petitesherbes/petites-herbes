@@ -2629,7 +2629,13 @@ function HeuresTab({ taches, entrees, zones, pointages, onSaved }: {
 function CulturesTab({ cultures, zones, especes, onSaved }: {
   cultures: Culture[]; zones: Zone[]; especes: { id: string; nom: string }[]; onSaved: () => void
 }) {
-  const [familleVue, setFamilleVue]     = useState<FamilleCulture>('champs')
+  const [familleVue, setFamilleVue]     = useState<FamilleCulture>(() => {
+    if (typeof window !== 'undefined') {
+      const init = localStorage.getItem('terrain_init_famille')
+      if (init) { localStorage.removeItem('terrain_init_famille'); return init as FamilleCulture }
+    }
+    return 'champs'
+  })
   const [filtreStatut, setFiltreStatut] = useState<StatutCulture | 'tout'>('tout')
   const [ouvert, setOuvert]             = useState<string | null>(null)
   const [ajout, setAjout]               = useState(false)
