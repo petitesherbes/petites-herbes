@@ -1190,6 +1190,13 @@ function AgendaTab({ taches, zones, especes, catalogueTaches, zoneTaches, onSave
   const [editAtelier,  setEditAtelier]  = useState<string | null>(null)
   const [editSaving, setEditSaving]   = useState(false)
 
+  // ─── Concerne pour le formulaire création ────────────────────────────────────
+  const [createEspeceId, setCreateEspeceId] = useState<string | null>(null)
+  const [createAtelier,  setCreateAtelier]  = useState<string | null>(null)
+
+  // ─── Vue équipe ──────────────────────────────────────────────────────────────
+  const [equipeOuverte, setEquipeOuverte] = useState(false)
+
   function ouvrirEdit(t: Tache) {
     setEditId(t.id)
     setEditTitre(t.titre)
@@ -1334,12 +1341,15 @@ function AgendaTab({ taches, zones, especes, catalogueTaches, zoneTaches, onSave
           frequence: type === 'recurrente' ? frequence.join(',') || 'quotidien' : null,
           date_echeance: type === 'ponctuelle' ? echeance : null,
           zone_id: zid, priorite, actif: true,
+          espece_id: createEspeceId || null,
+          atelier: createEspeceId ? null : (createAtelier || null),
         })
       ))
     }
     await ajouterAuCatalogueSiNouveau(titre, catalogueTaches)
     setSaving(false); setAjout(false)
     setTitre(''); setType('ponctuelle'); setFreq([]); setPrio('normale'); setZoneIds([])
+    setCreateEspeceId(null); setCreateAtelier(null)
     onSaved()
   }
 
@@ -1546,15 +1556,55 @@ function AgendaTab({ taches, zones, especes, catalogueTaches, zoneTaches, onSave
           })}
         </div>
 
-        {/* Résumé temps par personne */}
+        {/* Résumé temps par personne — cliquable pour détail */}
         {Object.keys(tempsParPersonne).length > 0 && (
-          <div className="px-4 py-3 bg-green-50 border-t border-green-100 flex flex-wrap gap-3">
-            {Object.entries(tempsParPersonne).sort((a, b) => b[1] - a[1]).map(([nom, min]) => (
-              <div key={nom} className={`flex items-center gap-1.5 text-xs font-semibold ${nom === auteur ? 'text-green-800' : 'text-blue-700'}`}>
-                <span>{nom === auteur ? '👤' : '🧑‍🌾'} {nom}</span>
-                <span className="bg-white px-1.5 py-0.5 rounded-full border border-current">{formatDuree(min)}</span>
+          <div className="border-t border-green-100">
+            <button onClick={() => setEquipeOuverte(o => !o)}
+              className="w-full px-4 py-3 bg-green-50 flex items-center justify-between">
+              <div className="flex flex-wrap gap-3">
+                {Object.entries(tempsParPersonne).sort((a, b) => b[1] - a[1]).map(([nom, min]) => (
+                  <div key={nom} className={`flex items-center gap-1.5 text-xs font-semibold ${nom === auteur ? 'text-green-800' : 'text-blue-700'}`}>
+                    <span>{nom === auteur ? '👤' : '🧑‍🌾'} {nom}</span>
+                    <span className="bg-white px-1.5 py-0.5 rounded-full border border-current">{formatDuree(min)}</span>
+                  </div>
+                ))}
               </div>
-            ))}
+              <span className="text-green-600 text-xs ml-2 shrink-0">{equipeOuverte ? '▲' : '▼'}</span>
+            </button>
+
+            {equipeOuverte && (
+              <div className="px-4 pb-3 bg-green-50 space-y-3">
+                {Object.entries(tempsParPersonne).sort((a, b) => b[1] - a[1]).map(([nom, _]) => {
+                  const tachesPersonne = aujTaches.flatMap(t =>
+                    (t.temps || [])
+                      .filter(x => x.date === todayStr && x.auteur === nom && x.minutes > 0)
+                      .map(x => ({ tache: t, minutes: x.minutes, chrono: !!x.chrono_debut }))
+                  )
+                  return (
+                    <div key={nom}>
+                      <div className={`text-xs font-bold mb-1.5 ${nom === auteur ? 'text-green-800' : 'text-blue-700'}`}>
+                        {nom === auteur ? '👤' : '🧑‍🌾'} {nom}
+                      </div>
+                      <div className="space-y-1">
+                        {tachesPersonne.map(({ tache, minutes, chrono }) => (
+                          <div key={tache.id} className="flex items-center justify-between bg-white rounded-lg px-3 py-2 text-xs border border-green-100">
+                            <div className="flex-1 min-w-0">
+                              <span className="font-semibold text-gray-800 truncate block">{tache.titre}</span>
+                              {tache.espece && <span className="text-blue-500">🌿 {tache.espece.nom}</span>}
+                              {!tache.espece && tache.atelier === 'serre' && <span className="text-green-600">🌱 Serre</span>}
+                              {!tache.espece && tache.atelier === 'champs' && <span className="text-amber-600">🌾 Champs</span>}
+                            </div>
+                            <span className={`ml-2 font-bold shrink-0 ${chrono ? 'text-amber-600' : nom === auteur ? 'text-green-700' : 'text-blue-600'}`}>
+                              {chrono && '⏱ '}{formatDuree(minutes)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -1568,17 +1618,22 @@ function AgendaTab({ taches, zones, especes, catalogueTaches, zoneTaches, onSave
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-4">
           {chipsAgenda.length > 0 && (
             <div className="space-y-1.5">
-              <div className="text-xs font-semibold text-gray-400">
-                Suggestions{zoneIds.length === 1 ? ` - ${zones.find(z => z.id === zoneIds[0])?.nom}` : ''}
+              <div className="text-xs font-semibold text-gray-400 flex items-center gap-1">
+                Suggestions{zoneIds.length === 1 ? ` — ${zones.find(z => z.id === zoneIds[0])?.nom}` : ''}
+                <span className="text-gray-300 font-normal">· tap deux fois pour créer direct</span>
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {chipsAgenda.map(c => (
-                  <button key={c.id} onClick={() => setTitre(c.titre)}
+                  <button key={c.id} onClick={() => {
+                    if (titre === c.titre) { sauvegarder(); return }
+                    setTitre(c.titre)
+                  }}
                     className={`px-2.5 py-1 rounded-full text-xs font-semibold border active:scale-95 transition-transform
                       ${titre === c.titre
-                        ? 'bg-green-700 text-white border-green-700'
+                        ? 'bg-green-700 text-white border-green-700 ring-2 ring-green-400 ring-offset-1'
                         : 'bg-green-50 text-green-800 border-green-200'}`}>
                     {c.icone} {c.titre}
+                    {titre === c.titre && ' ▶'}
                   </button>
                 ))}
               </div>
@@ -1659,6 +1714,30 @@ function AgendaTab({ taches, zones, especes, catalogueTaches, zoneTaches, onSave
                 {p === 'haute' ? '🔴' : p === 'normale' ? '🟡' : '⚪'} {p}
               </button>
             ))}
+          </div>
+
+          <div className="space-y-1.5">
+            <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Concerne</div>
+            <div className="flex flex-wrap gap-1.5">
+              <button onClick={() => { setCreateEspeceId(null); setCreateAtelier(null) }}
+                className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition-colors ${!createEspeceId && !createAtelier ? 'bg-gray-700 text-white border-gray-700' : 'bg-white text-gray-500 border-gray-200'}`}>
+                Général
+              </button>
+              <button onClick={() => { setCreateEspeceId(null); setCreateAtelier('serre') }}
+                className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition-colors ${createAtelier === 'serre' ? 'bg-green-700 text-white border-green-700' : 'bg-white text-gray-500 border-gray-200'}`}>
+                🌱 Serre / Micro-pousses
+              </button>
+              <button onClick={() => { setCreateEspeceId(null); setCreateAtelier('champs') }}
+                className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition-colors ${createAtelier === 'champs' ? 'bg-amber-600 text-white border-amber-600' : 'bg-white text-gray-500 border-gray-200'}`}>
+                🌾 Champs global
+              </button>
+              {especes.map(e => (
+                <button key={e.id} onClick={() => { setCreateEspeceId(e.id); setCreateAtelier(null) }}
+                  className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition-colors ${createEspeceId === e.id ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-500 border-gray-200'}`}>
+                  {e.nom}
+                </button>
+              ))}
+            </div>
           </div>
 
           <button onClick={sauvegarder} disabled={saving || !titre.trim()}
