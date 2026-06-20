@@ -67,6 +67,7 @@ type Culture = {
   date_semis: string | null; date_plantation: string | null
   date_debut_recolte: string | null; date_fin_recolte: string | null
   quantite: string | null; notes: string | null; auteur: string | null; actif: boolean
+  recolte_g: number | null
 }
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
@@ -2907,11 +2908,14 @@ function CulturesTab({ cultures, zones, especes, onSaved }: {
   const [quantite, setQuantite]   = useState('')
   const [notes, setNotes]         = useState('')
   const [dateSemis, setDateSemis] = useState(format(new Date(), 'yyyy-MM-dd'))
-  const [editNotes, setEditNotes] = useState<{ id: string; val: string } | null>(null)
-  const [editQty,   setEditQty]   = useState<{ id: string; val: string } | null>(null)
+  const [editNotes,    setEditNotes]    = useState<{ id: string; val: string } | null>(null)
+  const [editQty,      setEditQty]      = useState<{ id: string; val: string } | null>(null)
+  const [editRecolte,  setEditRecolte]  = useState<{ id: string; val: string } | null>(null)
   const [erreurSave, setErreurSave] = useState<string | null>(null)
   const [syncing, setSyncing]       = useState(false)
   const [syncMsg, setSyncMsg]       = useState<string | null>(null)
+  const [modeSelection, setModeSelection] = useState(false)
+  const [selection, setSelection]         = useState<Set<string>>(new Set())
 
   async function syncDepuisSemis() {
     setSyncing(true); setSyncMsg(null)
@@ -2962,12 +2966,42 @@ function CulturesTab({ cultures, zones, especes, onSaved }: {
     if (next === 'en_place') patch.date_plantation    = now
     if (next === 'recolte')  patch.date_debut_recolte = now
     if (next === 'termine')  patch.date_fin_recolte   = now
+    if (next === 'recolte' && c.famille === 'micro_pousse' && c.nom?.startsWith('Tapis')) {
+      const saisie = window.prompt(`🥬 ${c.espece} — Combien de grammes récoltés ? (laisser vide pour saisir plus tard)`)
+      if (saisie === null) return
+      const g = parseFloat(saisie.replace(',', '.'))
+      if (!isNaN(g) && g > 0) patch.recolte_g = g
+    }
     if (!navigator.onLine) {
       await queueMutation({ table: 'cultures', method: 'update', payload: patch, matchCol: 'id', matchVal: c.id })
     } else {
       await supabase.from('cultures').update(patch).eq('id', c.id)
     }
     onSaved()
+  }
+
+  async function sauvegarderRecolteG(c: Culture, val: string) {
+    const g = parseFloat(val.replace(',', '.'))
+    const payload = { recolte_g: (!isNaN(g) && g > 0) ? g : null }
+    await supabase.from('cultures').update(payload).eq('id', c.id)
+    setEditRecolte(null)
+    onSaved()
+  }
+
+  function toggleSelect(id: string) {
+    setSelection(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+  }
+
+  async function avancerBulk(targetStatut: StatutCulture) {
+    const now = format(new Date(), 'yyyy-MM-dd')
+    await Promise.all([...selection].map(id => {
+      const patch: Partial<Culture> = { statut: targetStatut }
+      if (targetStatut === 'en_place') patch.date_plantation    = now
+      if (targetStatut === 'recolte')  patch.date_debut_recolte = now
+      if (targetStatut === 'termine')  patch.date_fin_recolte   = now
+      return supabase.from('cultures').update(patch).eq('id', id)
+    }))
+    setSelection(new Set()); setModeSelection(false); onSaved()
   }
 
   async function changerFamilleC(c: Culture) {
@@ -3077,6 +3111,11 @@ function CulturesTab({ cultures, zones, especes, onSaved }: {
             ${familleVue === 'champs' ? 'bg-amber-600' : 'bg-green-700'}`}>
           + Nouvelle {familleVue === 'champs' ? 'culture' : 'micro-pousse'}
         </button>
+        <button onClick={() => { setModeSelection(v => !v); setSelection(new Set()) }}
+          className={`px-4 py-3 rounded-xl font-semibold text-sm active:scale-95 transition-transform border-2
+            ${modeSelection ? 'bg-green-700 text-white border-green-700' : 'border-gray-200 text-gray-600 bg-white'}`}>
+          ☑
+        </button>
         <button onClick={syncDepuisSemis} disabled={syncing}
           title="Importer tous les semis actifs"
           className={`px-4 py-3 rounded-xl font-semibold text-sm active:scale-95 transition-transform border-2 border-dashed disabled:opacity-50
@@ -3139,12 +3178,20 @@ function CulturesTab({ cultures, zones, especes, onSaved }: {
             const zone   = zones.find(z => z.id === c.zone_id)
             const isOpen = ouvert === c.id
             return (
-              <div key={c.id} className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-                <button onClick={() => setOuvert(isOpen ? null : c.id)}
+              <div key={c.id} className={`bg-white rounded-xl border shadow-sm overflow-hidden transition-all
+                  ${modeSelection && selection.has(c.id) ? 'border-green-500 ring-2 ring-green-200' : 'border-gray-100'}`}>
+                <button onClick={() => modeSelection ? toggleSelect(c.id) : setOuvert(isOpen ? null : c.id)}
                   className="w-full flex items-center gap-3 px-4 py-3 text-left">
-                  <div className={`shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-xl ${info.color}`}>
-                    {info.icon}
-                  </div>
+                  {modeSelection ? (
+                    <div className={`shrink-0 w-9 h-9 rounded-full border-2 flex items-center justify-center font-bold
+                        ${selection.has(c.id) ? 'bg-green-600 border-green-600 text-white' : 'border-gray-300 bg-white text-transparent'}`}>
+                      ✓
+                    </div>
+                  ) : (
+                    <div className={`shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-xl ${info.color}`}>
+                      {info.icon}
+                    </div>
+                  )}
                   <div className="flex-1 min-w-0">
                     <div className="font-semibold text-gray-800 text-sm truncate">
                       {c.espece}{c.nom ? ` — ${c.nom}` : ''}
@@ -3162,9 +3209,9 @@ function CulturesTab({ cultures, zones, especes, onSaved }: {
                       {c.quantite && <span className="text-[10px] text-gray-400">{c.quantite}</span>}
                     </div>
                   </div>
-                  <span className={`text-gray-300 text-sm transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}>▼</span>
+                  {!modeSelection && <span className={`text-gray-300 text-sm transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}>▼</span>}
                 </button>
-                {isOpen && (
+                {!modeSelection && isOpen && (
                   <div className="px-4 pb-4 space-y-3 border-t border-gray-50 pt-3">
                     <div className="grid grid-cols-2 gap-2">
                       {([
@@ -3198,6 +3245,24 @@ function CulturesTab({ cultures, zones, especes, onSaved }: {
                         {c.quantite ? `📦 ${c.quantite}` : '+ Quantité réelle...'}
                       </button>
                     )}
+                    {c.famille === 'micro_pousse' && c.nom?.startsWith('Tapis') && (editRecolte?.id === c.id ? (
+                      <div className="flex items-center gap-2">
+                        <input type="number" value={editRecolte.val}
+                          onChange={e => setEditRecolte({ id: c.id, val: e.target.value })}
+                          autoFocus placeholder="ex: 520"
+                          className="flex-1 border border-emerald-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500" />
+                        <span className="text-xs text-gray-400 shrink-0">g</span>
+                        <button onClick={() => sauvegarderRecolteG(c, editRecolte.val)}
+                          className="px-3 py-2 bg-emerald-700 text-white text-xs rounded-lg font-semibold">OK</button>
+                        <button onClick={() => setEditRecolte(null)}
+                          className="px-3 py-2 bg-gray-100 text-gray-500 text-xs rounded-lg">✕</button>
+                      </div>
+                    ) : (
+                      <button onClick={() => setEditRecolte({ id: c.id, val: c.recolte_g != null ? String(c.recolte_g) : '' })}
+                        className="w-full text-left text-xs bg-emerald-50 rounded-lg px-3 py-2 text-emerald-700">
+                        {c.recolte_g != null ? `🥬 Récolte : ${c.recolte_g} g` : '+ Saisir grammes récoltés...'}
+                      </button>
+                    ))}
                     {editNotes?.id === c.id ? (
                       <div className="space-y-1.5">
                         <textarea value={editNotes.val}
@@ -3334,6 +3399,38 @@ function CulturesTab({ cultures, zones, especes, onSaved }: {
               {saving ? 'Enregistrement...' : famille === 'champs' ? '🌾 Démarrer la culture' : '🌱 Démarrer la micro-pousse'}
             </button>
           </div>
+        </div>
+      )}
+
+      {modeSelection && (
+        <div className="fixed bottom-16 left-0 right-0 bg-white border-t border-gray-200 px-4 py-3 z-30 shadow-lg space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-semibold text-gray-800">
+              {selection.size} sélectionnée{selection.size > 1 ? 's' : ''}
+            </span>
+            <div className="flex gap-3">
+              <button onClick={() => setSelection(new Set(filtered.map(c => c.id)))}
+                className="text-xs text-blue-600 font-semibold">Tout</button>
+              <button onClick={() => setSelection(new Set())}
+                className="text-xs text-gray-400">Aucun</button>
+              <button onClick={() => { setModeSelection(false); setSelection(new Set()) }}
+                className="text-xs text-red-500 font-semibold">Annuler</button>
+            </div>
+          </div>
+          {selection.size > 0 && (
+            <div className="flex gap-2 overflow-x-auto">
+              {statutsActifs.map(s => {
+                const CULT_MAP = familleVue === 'micro_pousse' ? STATUT_CULT_MICRO : STATUT_CULT
+                const inf = CULT_MAP[s]
+                return (
+                  <button key={s} onClick={() => avancerBulk(s)}
+                    className="shrink-0 flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-green-700 text-white text-sm font-semibold active:scale-95 transition-transform">
+                    {inf.icon} → {inf.label}
+                  </button>
+                )
+              })}
+            </div>
+          )}
         </div>
       )}
     </div>
