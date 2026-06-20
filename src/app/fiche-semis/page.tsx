@@ -18,7 +18,7 @@ const COLS: Col[] = [
   { key: 'g_tapis',       label: 'g/tapis',        unit: 'g',       defaultOn: true,  value: e => e.g_tapis },
   { key: 'g_godet',       label: 'g/godet',         unit: 'g',       defaultOn: true,  value: e => e.g_godet },
   { key: 'g_caisse',      label: 'g/caisse',        unit: 'g',       defaultOn: true,  value: e => e.g_caisse },
-  { key: 'g_serie_tapis', label: 'g/série tapis',   unit: 'g',       defaultOn: true,  value: (e, nb) => e.g_tapis !== null ? Math.round(e.g_tapis * nb) : null, calc: true },
+  { key: 'g_serie_tapis', label: 'g/série tapis',   unit: 'g',       defaultOn: true,  value: (e, nb) => e.g_tapis !== null ? Math.round(e.g_tapis * nb * 10) / 10 : null, calc: true },
   { key: 'jours_noir',    label: 'J. Noir',         unit: 'j',       defaultOn: true,  value: e => e.jours_noir },
   { key: 'jours_pousse',  label: 'J. Pousse',       unit: 'j',       defaultOn: true,  value: e => e.jours_pousse },
   { key: 'jours_conserv', label: 'J. Conserv.',     unit: 'j',       defaultOn: false, value: e => e.jours_conserv },
@@ -227,7 +227,7 @@ export default function FicheSemisPage() {
                             onClick={() => { setEditCell({ id: e.id, key: c.key as keyof Espece }); setEditVal(rawVal !== null ? String(rawVal) : '') }}
                             className={`w-full min-h-[28px] rounded px-1 py-0.5 print:pointer-events-none transition-colors
                               ${rawVal !== null ? 'text-gray-800 font-medium hover:bg-green-50 hover:text-green-700' : 'text-gray-200 hover:bg-gray-50 hover:text-gray-400'}`}>
-                            {rawVal !== null ? rawVal : <span className="text-[9px]">—</span>}
+                            {rawVal !== null ? Math.round(rawVal * 10) / 10 : <span className="text-[9px]">—</span>}
                           </button>
                         )}
                       </td>
