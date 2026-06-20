@@ -50,7 +50,6 @@ export interface ParametresProduction {
   cout_achat_godets: number | null
   caisses_par_sac_terreau: number | null
   cout_sac_terreau: number | null
-  nb_tapis_serie: number | null
   updated_at: string
 }
 

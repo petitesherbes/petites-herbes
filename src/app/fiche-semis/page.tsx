@@ -10,38 +10,41 @@ type Col = {
   label: string
   unit?: string
   defaultOn: boolean
-  value: (e: Espece, nbSerie: number) => number | null
+  value: (e: Espece, tp: number, gp: number) => number | null
   calc?: boolean
 }
 
 const COLS: Col[] = [
-  { key: 'g_tapis',       label: 'g/tapis',        unit: 'g',       defaultOn: true,  value: e => e.g_tapis },
-  { key: 'g_godet',       label: 'g/godet',         unit: 'g',       defaultOn: true,  value: e => e.g_godet },
-  { key: 'g_caisse',      label: 'g/caisse',        unit: 'g',       defaultOn: true,  value: e => e.g_caisse },
-  { key: 'g_serie_tapis', label: 'g/série tapis',   unit: 'g',       defaultOn: true,  value: (e, nb) => e.g_tapis !== null ? Math.round(e.g_tapis * nb * 10) / 10 : null, calc: true },
-  { key: 'jours_noir',    label: 'J. Noir',         unit: 'j',       defaultOn: true,  value: e => e.jours_noir },
-  { key: 'jours_pousse',  label: 'J. Pousse',       unit: 'j',       defaultOn: true,  value: e => e.jours_pousse },
-  { key: 'jours_conserv', label: 'J. Conserv.',     unit: 'j',       defaultOn: false, value: e => e.jours_conserv },
-  { key: 'rendement',     label: 'Rendement',       unit: 'g/tapis', defaultOn: false, value: e => e.rendement },
-  { key: 'prix_graine_kg',label: 'Prix graine',     unit: '€/kg',    defaultOn: false, value: e => e.prix_graine_kg },
+  { key: 'g_tapis',        label: 'g/tapis',         unit: 'g',       defaultOn: true,  value: e => e.g_tapis },
+  { key: 'g_godet',        label: 'g/godet',          unit: 'g',       defaultOn: true,  value: e => e.g_godet },
+  { key: 'g_caisse',       label: 'g/caisse',         unit: 'g',       defaultOn: true,  value: e => e.g_caisse },
+  { key: 'g_serie_tapis',  label: 'g/série tapis',    unit: 'g',       defaultOn: true,  value: (e, tp) => e.g_tapis !== null ? Math.round(e.g_tapis * tp * 10) / 10 : null, calc: true },
+  { key: 'g_serie_godets', label: 'g/série godets',   unit: 'g',       defaultOn: true,  value: (e, _, gp) => e.g_godet !== null ? Math.round(e.g_godet * gp * 10) / 10 : null, calc: true },
+  { key: 'jours_noir',     label: 'J. Noir',          unit: 'j',       defaultOn: true,  value: e => e.jours_noir },
+  { key: 'jours_pousse',   label: 'J. Pousse',        unit: 'j',       defaultOn: true,  value: e => e.jours_pousse },
+  { key: 'jours_conserv',  label: 'J. Conserv.',      unit: 'j',       defaultOn: false, value: e => e.jours_conserv },
+  { key: 'rendement',      label: 'Rendement',        unit: 'g/tapis', defaultOn: false, value: e => e.rendement },
+  { key: 'prix_graine_kg', label: 'Prix graine',      unit: '€/kg',    defaultOn: false, value: e => e.prix_graine_kg },
 ]
 
 const STORAGE_KEY = 'fiche_semis_cols'
-
 function initCols(): string[] {
   if (typeof window === 'undefined') return COLS.filter(c => c.defaultOn).map(c => c.key)
   try { const s = localStorage.getItem(STORAGE_KEY); if (s) return JSON.parse(s) } catch { /* */ }
   return COLS.filter(c => c.defaultOn).map(c => c.key)
 }
 
+type ParamKey = 'tapis_par_caisse' | 'godets_par_serie'
+
 export default function FicheSemisPage() {
   const [especes, setEspeces]         = useState<Espece[]>([])
   const [loading, setLoading]         = useState(true)
-  const [nbSerie, setNbSerie]         = useState(26)
-  const [editNb, setEditNb]           = useState(false)
-  const [nbVal, setNbVal]             = useState('26')
-  const [savingNb, setSavingNb]       = useState(false)
   const [paramsId, setParamsId]       = useState<string | null>(null)
+  const [tapisParCaisse, setTapisParCaisse] = useState(26)
+  const [godetsParSerie, setGodetsParSerie] = useState(14)
+  const [editParam, setEditParam]     = useState<ParamKey | null>(null)
+  const [editParamVal, setEditParamVal] = useState('')
+  const [savingParam, setSavingParam] = useState(false)
   const [colsActives, setColsActives] = useState<string[]>(initCols)
   const [showSection, setShowSection] = useState(false)
   const [configOpen, setConfigOpen]   = useState(false)
@@ -52,24 +55,35 @@ export default function FicheSemisPage() {
   useEffect(() => {
     Promise.all([
       supabase.from('especes').select('*').eq('actif', true).order('nom'),
-      supabase.from('parametres_production').select('id, nb_tapis_serie').single(),
-    ]).then(([{ data: esp }, { data: params }]) => {
+      supabase.from('parametres_production').select('id, tapis_par_caisse, godets_par_serie').single(),
+    ]).then(([{ data: esp }, { data: p }]) => {
       setEspeces((esp ?? []) as Espece[])
-      if (params) {
-        setParamsId(params.id as string)
-        const nb = (params as { nb_tapis_serie: number | null }).nb_tapis_serie ?? 26
-        setNbSerie(nb); setNbVal(String(nb))
+      if (p) {
+        setParamsId(p.id as string)
+        setTapisParCaisse((p as { tapis_par_caisse: number | null }).tapis_par_caisse ?? 26)
+        setGodetsParSerie((p as { godets_par_serie: number | null }).godets_par_serie ?? 14)
       }
       setLoading(false)
     })
   }, [])
 
-  async function sauvegarderNb() {
+  async function sauvegarderParam(key: ParamKey, val: string) {
     if (!paramsId) return
-    setSavingNb(true)
-    const nb = Math.max(1, parseInt(nbVal) || 26)
-    await supabase.from('parametres_production').update({ nb_tapis_serie: nb }).eq('id', paramsId)
-    setNbSerie(nb); setEditNb(false); setSavingNb(false)
+    setSavingParam(true)
+    const num = Math.max(1, parseInt(val) || 1)
+    await supabase.from('parametres_production').update({ [key]: num }).eq('id', paramsId)
+    if (key === 'tapis_par_caisse') setTapisParCaisse(num)
+    else setGodetsParSerie(num)
+    setEditParam(null)
+    setSavingParam(false)
+  }
+
+  function toggleCol(key: string) {
+    setColsActives(prev => {
+      const next = prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
+      return next
+    })
   }
 
   async function sauvegarder() {
@@ -82,20 +96,39 @@ export default function FicheSemisPage() {
     setSaving(false)
   }
 
-  function toggleCol(key: string) {
-    setColsActives(prev => {
-      const next = prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
-      return next
-    })
-  }
-
   const visibles = COLS.filter(c => colsActives.includes(c.key))
+
+  function ParamBadge({ pk, label, val }: { pk: ParamKey; label: string; val: number }) {
+    const isEditing = editParam === pk
+    return (
+      <div className="flex items-center gap-1.5 text-xs">
+        <span className="text-gray-500">{label} :</span>
+        {isEditing ? (
+          <>
+            <input autoFocus type="number" value={editParamVal}
+              onChange={e => setEditParamVal(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') sauvegarderParam(pk, editParamVal); if (e.key === 'Escape') setEditParam(null) }}
+              className="w-14 text-center border border-green-400 rounded-lg px-2 py-0.5 focus:outline-none bg-green-50 text-sm" />
+            <button onClick={() => sauvegarderParam(pk, editParamVal)} disabled={savingParam}
+              className="bg-green-700 text-white px-2 py-0.5 rounded-lg text-xs disabled:opacity-40">
+              {savingParam ? '…' : 'OK'}
+            </button>
+            <button onClick={() => setEditParam(null)} className="text-gray-400 text-xs">✕</button>
+          </>
+        ) : (
+          <button onClick={() => { setEditParam(pk); setEditParamVal(String(val)) }}
+            className="px-2.5 py-0.5 rounded-lg bg-blue-50 text-blue-700 font-bold border border-blue-200 hover:bg-blue-100 transition-colors">
+            {val} ✏️
+          </button>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
 
-      {/* ── Header (masqué à l'impression) ───────────────────────────── */}
+      {/* ── Header ──────────────────────────────────────────────────────── */}
       <div className="print:hidden sticky top-0 z-20 bg-white border-b border-gray-200 px-4 py-3 space-y-2">
         <div className="flex items-center justify-between gap-3">
           <div className="text-base font-bold text-gray-900">Fiche semis</div>
@@ -112,27 +145,10 @@ export default function FicheSemisPage() {
           </div>
         </div>
 
-        {/* Paramètre série */}
-        <div className="flex items-center gap-2 text-xs">
-          <span className="text-gray-500">Tapis/série :</span>
-          {editNb ? (
-            <>
-              <input autoFocus type="number" value={nbVal} onChange={e => setNbVal(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') sauvegarderNb(); if (e.key === 'Escape') setEditNb(false) }}
-                className="w-14 text-center border border-green-400 rounded-lg px-2 py-0.5 focus:outline-none bg-green-50 text-sm" />
-              <button onClick={sauvegarderNb} disabled={savingNb}
-                className="bg-green-700 text-white px-2.5 py-0.5 rounded-lg disabled:opacity-40">
-                {savingNb ? '…' : 'OK'}
-              </button>
-              <button onClick={() => setEditNb(false)} className="text-gray-400">Annuler</button>
-            </>
-          ) : (
-            <button onClick={() => { setEditNb(true); setNbVal(String(nbSerie)) }}
-              className="px-2.5 py-0.5 rounded-lg bg-blue-50 text-blue-700 font-bold border border-blue-200 hover:bg-blue-100 transition-colors">
-              {nbSerie} tapis ✏️
-            </button>
-          )}
-          <span className="text-gray-400">→ g/série = g/tapis × {nbSerie}</span>
+        {/* Paramètres série */}
+        <div className="flex flex-wrap gap-4">
+          <ParamBadge pk="tapis_par_caisse" label="Tapis/caisse" val={tapisParCaisse} />
+          <ParamBadge pk="godets_par_serie" label="Godets/série" val={godetsParSerie} />
         </div>
 
         {/* Sélecteur colonnes */}
@@ -172,7 +188,7 @@ export default function FicheSemisPage() {
         <div className="text-lg font-bold">Fiche semis — Les Petites Herbes</div>
         <div className="text-[8pt] text-gray-500 mt-0.5">
           {new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
-          {visibles.some(c => c.calc) ? ` · g/série tapis = g/tapis × ${nbSerie}` : ''}
+          {' · '}{tapisParCaisse} tapis/caisse · {godetsParSerie} godets/série
         </div>
       </div>
 
@@ -189,6 +205,8 @@ export default function FicheSemisPage() {
                   <th key={c.key} className={`px-3 py-2.5 text-center whitespace-nowrap min-w-[70px] ${c.calc ? 'text-blue-200' : ''}`}>
                     {c.label}
                     {c.unit && <div className="text-[8px] font-normal opacity-50 leading-tight">{c.unit}</div>}
+                    {c.key === 'g_serie_tapis'  && <div className="text-[8px] font-normal text-blue-300 leading-tight">×{tapisParCaisse}</div>}
+                    {c.key === 'g_serie_godets' && <div className="text-[8px] font-normal text-blue-300 leading-tight">×{godetsParSerie}</div>}
                   </th>
                 ))}
               </tr>
@@ -203,7 +221,7 @@ export default function FicheSemisPage() {
                     <td className="px-3 py-2.5 text-center text-gray-400 text-[10px] capitalize">{e.section ?? ''}</td>
                   )}
                   {visibles.map(c => {
-                    const val = c.value(e, nbSerie)
+                    const val = c.value(e, tapisParCaisse, godetsParSerie)
                     if (c.calc) {
                       return (
                         <td key={c.key} className="px-3 py-2.5 text-center text-blue-700 font-semibold">

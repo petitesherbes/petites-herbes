@@ -666,7 +666,7 @@ export default function NouveauSemisPage() {
           especes={especesPourFormat('GODET')} format="GODET"
           onModifier={modifierLigne} onSupprimer={supprimerLigne}
           onAjouter={() => ajouterLigne('GODET')} calculer={calculerLigne}
-          zones={zones} />
+          zones={zones} nbParSerie={params?.godets_par_serie ?? 14} />
 
         <button onClick={passerEtape3} disabled={lignes.length === 0}
           className="w-full bg-green-700 hover:bg-green-800 text-white py-4 rounded-xl font-bold text-base disabled:opacity-40 transition-colors shadow-sm">
@@ -1145,7 +1145,7 @@ function CulturesTab({ cultures, zones, onSaved }: {
 
 // ─── SectionLignes ────────────────────────────────────────────────────────────
 
-function SectionLignes({ titre, couleur, lignes, especes, format: fmt, onModifier, onSupprimer, onAjouter, calculer, zones }: {
+function SectionLignes({ titre, couleur, lignes, especes, format: fmt, onModifier, onSupprimer, onAjouter, calculer, zones, nbParSerie }: {
   titre: string; couleur: 'tapis' | 'terreau' | 'godets'
   lignes: LigneAvecId[]; especes: Espece[]; format: Format
   onModifier: (id: number, champ: 'espece_id' | 'quantite' | 'g_par_unite' | 'zone_id', val: string | number | null) => void
@@ -1153,6 +1153,7 @@ function SectionLignes({ titre, couleur, lignes, especes, format: fmt, onModifie
   onAjouter: () => void
   calculer: (l: LigneAvecId) => { poids: number; total: number; coutG: number }
   zones?: Zone[]
+  nbParSerie?: number
 }) {
   const colors = {
     tapis:   { header: 'bg-green-700',  light: 'bg-green-50',  border: 'border-green-200' },
@@ -1244,6 +1245,11 @@ function SectionLignes({ titre, couleur, lignes, especes, format: fmt, onModifie
                       ? <span className="text-xs text-orange-500">⚠️ Prix manquant</span>
                       : <span className="text-xs text-gray-500">💶 {calc.total.toFixed(2)}€</span>
                     }
+                    {fmt === 'GODET' && nbParSerie && gEffectif > 0 && (
+                      <span className="text-xs text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded-full">
+                        {Math.round(gEffectif * nbParSerie * 10) / 10}g/série ({nbParSerie} godets)
+                      </span>
+                    )}
                     {fmt === 'GODET' && l.zone_id && zones?.find(z => z.id === l.zone_id) && (
                       <span className="text-xs text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-full">
                         📍 {zones.find(z => z.id === l.zone_id)!.nom}
