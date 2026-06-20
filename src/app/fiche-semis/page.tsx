@@ -371,8 +371,8 @@ export default function FicheSemisPage() {
                         ) : (
                           <button
                             onClick={() => { setEditCell({ id: e.id, key: c.key as keyof Espece }); setEditVal(rawVal !== null ? String(rawVal) : '') }}
-                            className={`w-full min-h-[28px] rounded px-1 py-0.5 print:pointer-events-none transition-colors
-                              ${rawVal !== null ? 'text-gray-800 font-medium' : 'text-gray-200'}`}>
+                            className="w-full min-h-[28px] rounded px-1 py-0.5 print:pointer-events-none transition-colors font-medium"
+                            style={{ color: rawVal !== null ? (fk ? fmtColors[fk].header : '#1f2937') : '#e5e7eb' }}>
                             {rawVal !== null ? Math.round(rawVal * 10) / 10 : <span className="text-[9px]">—</span>}
                           </button>
                         )}
