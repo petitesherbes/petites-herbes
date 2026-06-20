@@ -10,7 +10,6 @@ export const ALL_NAV_TABS = [
   { href: '/commandes',   icon: '🛒', label: 'Commandes', locked: false },
   { href: '/planning',    icon: '📅', label: 'Planning',  locked: false },
   { href: '/terrain',     icon: '🌿', label: 'Terrain',   locked: false },
-  { href: '/fiche-semis', icon: '📋', label: 'Fiche',     locked: false },
   { href: '/parametres',  icon: '⚙️',  label: 'Réglages',  locked: true  },
 ]
 

@@ -480,10 +480,16 @@ export default function NouveauSemisPage() {
             🌾 Cultures
           </button>
         </div>
-        <Link href="/historique"
-          className="ml-3 flex items-center gap-1 text-xs text-green-700 font-semibold bg-green-50 px-3 py-2.5 rounded-xl border border-green-200 whitespace-nowrap">
-          📋 Historique
-        </Link>
+        <div className="ml-3 flex flex-col gap-1.5">
+          <Link href="/historique"
+            className="flex items-center gap-1 text-xs text-green-700 font-semibold bg-green-50 px-3 py-2 rounded-xl border border-green-200 whitespace-nowrap">
+            📋 Historique
+          </Link>
+          <Link href="/fiche-semis"
+            className="flex items-center gap-1 text-xs text-gray-600 font-semibold bg-gray-50 px-3 py-2 rounded-xl border border-gray-200 whitespace-nowrap">
+            📄 Fiche doses
+          </Link>
+        </div>
       </div>
 
       <div>
