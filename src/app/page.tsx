@@ -235,7 +235,7 @@ export default function AccueilPage() {
     const payload = {
       espece: l.espece?.nom ?? '',
       nom: l.format === 'TAPIS' ? `Tapis ×${l.quantite}` : `Godet ×${l.quantite}`,
-      famille: l.format === 'TAPIS' ? 'micro_pousse' : 'champs',
+      famille: (l.format === 'TAPIS' || l.format === 'GODET') ? 'micro_pousse' : 'champs',
       statut: 'semis',
       date_semis: format(new Date(), 'yyyy-MM-dd'),
       quantite: String(l.quantite),
@@ -437,7 +437,10 @@ export default function AccueilPage() {
               <div className="rounded-2xl border border-blue-200 overflow-hidden">
                 <div className="px-4 py-3 bg-blue-600 text-white font-bold text-sm flex justify-between items-center">
                   <span>🌱 Micro-pousses en pousse</span>
-                  <span className="bg-white/25 text-white text-xs font-bold px-2.5 py-0.5 rounded-full">{enPousseMicro.length}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="bg-white/25 text-white text-xs font-bold px-2.5 py-0.5 rounded-full">{enPousseMicro.length}</span>
+                    <Link href="/terrain" className="text-white/70 text-xs underline">Gérer →</Link>
+                  </div>
                 </div>
                 <div className="bg-blue-50 divide-y divide-blue-100">
                   {enPousseMicro.slice(0, 8).map(l => {
@@ -456,7 +459,7 @@ export default function AccueilPage() {
                       </button>
                     )
                   })}
-                  {enPousseMicro.length > 8 && <div className="px-4 py-2.5 text-xs text-blue-400">+{enPousseMicro.length - 8} autres lignes</div>}
+                  {enPousseMicro.length > 8 && <Link href="/terrain" className="block px-4 py-2.5 text-xs text-blue-500 font-semibold">+{enPousseMicro.length - 8} autres lignes → voir tout</Link>}
                 </div>
               </div>
             )}
@@ -464,7 +467,10 @@ export default function AccueilPage() {
               <div className="rounded-2xl border border-amber-200 overflow-hidden">
                 <div className="px-4 py-3 bg-amber-600 text-white font-bold text-sm flex justify-between items-center">
                   <span>🌾 Champs en cours</span>
-                  <span className="bg-white/25 text-white text-xs font-bold px-2.5 py-0.5 rounded-full">{enPousseChamps.length}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="bg-white/25 text-white text-xs font-bold px-2.5 py-0.5 rounded-full">{enPousseChamps.length}</span>
+                    <Link href="/terrain" className="text-white/70 text-xs underline">Gérer →</Link>
+                  </div>
                 </div>
                 <div className="bg-amber-50 divide-y divide-amber-100">
                   {enPousseChamps.slice(0, 8).map(l => {
@@ -483,7 +489,7 @@ export default function AccueilPage() {
                       </button>
                     )
                   })}
-                  {enPousseChamps.length > 8 && <div className="px-4 py-2.5 text-xs text-amber-400">+{enPousseChamps.length - 8} autres lignes</div>}
+                  {enPousseChamps.length > 8 && <Link href="/terrain" className="block px-4 py-2.5 text-xs text-amber-600 font-semibold">+{enPousseChamps.length - 8} autres lignes → voir tout</Link>}
                 </div>
               </div>
             )}

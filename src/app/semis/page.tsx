@@ -312,7 +312,7 @@ export default function NouveauSemisPage() {
       .map(l => ({
         espece: l.espece?.nom ?? '',
         nom: l.format === 'TAPIS' ? `Tapis ×${l.quantite}` : `Godet ×${l.quantite}`,
-        famille: l.format === 'TAPIS' ? 'micro_pousse' : 'champs',
+        famille: (l.format === 'TAPIS' || l.format === 'GODET') ? 'micro_pousse' : 'champs',
         statut: 'semis',
         date_semis: dateSemis,
         quantite: String(l.quantite),

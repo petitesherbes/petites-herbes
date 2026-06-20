@@ -365,7 +365,7 @@ export default function TerrainPage() {
         return data
       }).then(r => r.data),
       fetchWithCache('especes_noms', async () => {
-        const { data } = await supabase.from('especes').select('id, nom').eq('actif', true).order('nom')
+        const { data } = await supabase.from('especes').select('id, nom, jours_noir, jours_pousse, jours_conserv, g_tapis, g_godet, rendement').eq('actif', true).order('nom')
         return data
       }).then(r => r.data),
       fetchWithCache('especes_serre', async () => {
@@ -2661,7 +2661,7 @@ function CulturesTab({ cultures, zones, especes, onSaved }: {
     const payload = (lignes as {id:string;espece_id:string;format:string;quantite:number}[]).map(l => ({
       espece: especes.find(e => e.id === l.espece_id)?.nom ?? '',
       nom: l.format === 'TAPIS' ? `Tapis ×${l.quantite}` : `Godet ×${l.quantite}`,
-      famille: l.format === 'TAPIS' ? 'micro_pousse' : 'champs',
+      famille: (l.format === 'TAPIS' || l.format === 'GODET') ? 'micro_pousse' : 'champs',
       statut: 'semis' as StatutCulture,
       date_semis: today,
       quantite: String(l.quantite),
@@ -2702,6 +2702,12 @@ function CulturesTab({ cultures, zones, especes, onSaved }: {
     } else {
       await supabase.from('cultures').update(patch).eq('id', c.id)
     }
+    onSaved()
+  }
+
+  async function changerFamilleC(c: Culture) {
+    const newFamille: FamilleCulture = c.famille === 'micro_pousse' ? 'champs' : 'micro_pousse'
+    await supabase.from('cultures').update({ famille: newFamille }).eq('id', c.id)
     onSaved()
   }
 
@@ -2943,6 +2949,10 @@ function CulturesTab({ cultures, zones, especes, onSaved }: {
                         {CULT[next].icon} → {CULT[next].label}
                       </button>
                     )}
+                    <button onClick={() => changerFamilleC(c)}
+                      className="w-full py-2 rounded-xl border border-gray-200 text-gray-500 text-xs">
+                      {c.famille === 'micro_pousse' ? '🌾 Déplacer vers Champs' : '🌱 Déplacer vers Micro-pousses'}
+                    </button>
                     <button onClick={() => archiver(c)}
                       className="w-full py-2 rounded-xl border border-red-100 text-red-400 text-xs">
                       Archiver

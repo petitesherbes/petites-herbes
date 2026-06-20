@@ -11,6 +11,7 @@ export interface Espece {
   g_godet: number | null
   g_caisse: number | null
   pct_perte: number | null
+  jours_noir: number | null
   jours_pousse: number | null
   jours_conserv: number | null
   rendement: number | null
