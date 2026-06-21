@@ -59,6 +59,7 @@ export default function FicheSemisPage() {
   const [orientation, setOrientation] = useState<'landscape' | 'portrait'>('landscape')
   const [fontSize, setFontSize]       = useState<'small' | 'normal' | 'large'>('normal')
   const [especesExclues, setEspecesExclues] = useState<Set<string>>(new Set())
+  const [grouperParType, setGrouperParType] = useState(false)
   const [fmtColors, setFmtColors] = useState<FormatColors>(loadFormatColors)
 
   useEffect(() => {
@@ -115,6 +116,16 @@ export default function FicheSemisPage() {
   }
 
   const visibles = COLS.filter(c => colsActives.includes(c.key))
+
+  const ORDRE_SECTION: Record<string, number> = { TAPIS: 0, TERREAU: 1, GODETS: 2 }
+  const especesFiltrees = especes.filter(e => !especesExclues.has(e.id))
+  const especesOrdonnees = grouperParType
+    ? [...especesFiltrees].sort((a, b) => {
+        const oA = ORDRE_SECTION[a.section ?? ''] ?? 3
+        const oB = ORDRE_SECTION[b.section ?? ''] ?? 3
+        return oA !== oB ? oA - oB : a.nom.localeCompare(b.nom)
+      })
+    : especesFiltrees
 
   function ParamBadge({ pk, label, val }: { pk: ParamKey; label: string; val: number }) {
     const isEditing = editParam === pk
@@ -204,6 +215,23 @@ export default function FicheSemisPage() {
                 </div>
               </div>
             </div>
+            {/* Groupement par type */}
+            <div className="border-t border-gray-100 pt-3">
+              <div className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide mb-1.5">Ordre d&apos;impression</div>
+              <div className="flex gap-2">
+                <button onClick={() => setGrouperParType(false)}
+                  className={`px-3 py-2 rounded-xl text-xs font-semibold border transition-colors
+                    ${!grouperParType ? 'bg-green-700 text-white border-green-700' : 'bg-white text-gray-500 border-gray-200'}`}>
+                  A→Z alphabétique
+                </button>
+                <button onClick={() => setGrouperParType(true)}
+                  className={`px-3 py-2 rounded-xl text-xs font-semibold border transition-colors
+                    ${grouperParType ? 'bg-green-700 text-white border-green-700' : 'bg-white text-gray-500 border-gray-200'}`}>
+                  🟩 Tapis · 🟫 Terreau · 🟧 Godets
+                </button>
+              </div>
+            </div>
+
             {/* Sélection des espèces */}
             <div className="border-t border-gray-100 pt-3">
               <div className="flex justify-between items-center mb-2">
@@ -311,11 +339,24 @@ export default function FicheSemisPage() {
               </tr>
             </thead>
             <tbody>
-              {especes.filter(e => !especesExclues.has(e.id)).map((e, i) => (
-                <tr key={e.id} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
-                  <td className={`px-3 py-2.5 font-semibold text-gray-800 sticky left-0 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
-                    {e.nom}
-                  </td>
+              {(() => {
+                const SECT_LABEL: Record<string, string> = { TAPIS: '🟩 Tapis', TERREAU: '🟫 Terreau / Caisse', GODETS: '🟧 Godets' }
+                let lastSection = ''
+                return especesOrdonnees.map((e, i) => {
+                  const showHeader = grouperParType && e.section !== lastSection
+                  if (showHeader) lastSection = e.section ?? ''
+                  return [
+                    showHeader && (
+                      <tr key={`header-${e.section}`} className="bg-gray-100">
+                        <td colSpan={999} className="px-3 py-1.5 text-xs font-bold text-gray-600 uppercase tracking-wide">
+                          {SECT_LABEL[e.section ?? ''] ?? e.section}
+                        </td>
+                      </tr>
+                    ),
+                    <tr key={e.id} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
+                      <td className={`px-3 py-2.5 font-semibold text-gray-800 sticky left-0 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
+                        {e.nom}
+                      </td>
                   {showSection && (
                     <td className="px-3 py-2.5 text-center text-gray-400 text-[10px] capitalize">{e.section ?? ''}</td>
                   )}
@@ -379,8 +420,10 @@ export default function FicheSemisPage() {
                       </td>
                     )
                   })}
-                </tr>
-              ))}
+                    </tr>,
+                  ]
+                })
+              })()}
             </tbody>
           </table>
         </div>
