@@ -141,10 +141,10 @@ export default function SemisDocument({ lignes, dateSemis, templateNom, tapisPar
                 {tapis.map((l, i) => (
                   <View key={i} style={s.tr}>
                     <Text style={[s.td, s.colEspece]}>{l.espece}</Text>
-                    <Text style={[s.td, s.colUnite]}>{l.poids_unite != null ? `${Math.round(l.poids_unite)} g` : '—'}</Text>
-                    <Text style={[s.td, s.colSerie]}>{l.poids_serie != null ? `${Math.round(l.poids_serie)} g` : '—'}</Text>
+                    <Text style={[s.td, s.colUnite]}>{l.poids_unite != null ? `${+(l.poids_unite).toFixed(1)} g` : '—'}</Text>
+                    <Text style={[s.td, s.colSerie]}>{l.poids_serie != null ? `${+(l.poids_serie).toFixed(1)} g` : '—'}</Text>
                     <Text style={[s.td, s.colSeries]}>×{l.quantite}</Text>
-                    <Text style={[s.td, s.colTotal]}>{Math.round(l.poids)} g</Text>
+                    <Text style={[s.td, s.colTotal]}>{+(l.poids).toFixed(1)} g</Text>
                   </View>
                 ))}
                 <View style={s.trTotal}>
@@ -152,7 +152,7 @@ export default function SemisDocument({ lignes, dateSemis, templateNom, tapisPar
                   <Text style={[s.tdBold, s.colUnite]}></Text>
                   <Text style={[s.tdBold, s.colSerie]}></Text>
                   <Text style={[s.tdBold, s.colSeries]}>{totalTapisCaisses}</Text>
-                  <Text style={[s.tdBold, s.colTotal]}>{Math.round(totalTapisPoids)} g</Text>
+                  <Text style={[s.tdBold, s.colTotal]}>{+(totalTapisPoids).toFixed(1)} g</Text>
                 </View>
               </View>
             </View>
@@ -210,10 +210,10 @@ export default function SemisDocument({ lignes, dateSemis, templateNom, tapisPar
                 {godets.map((l, i) => (
                   <View key={i} style={s.tr}>
                     <Text style={[s.td, s.colEspece]}>{l.espece}</Text>
-                    <Text style={[s.td, s.colUnite]}>{l.poids_unite != null ? `${Math.round(l.poids_unite)} g` : '—'}</Text>
-                    <Text style={[s.td, s.colSerie]}>{l.poids_serie != null ? `${Math.round(l.poids_serie)} g` : '—'}</Text>
+                    <Text style={[s.td, s.colUnite]}>{l.poids_unite != null ? `${+(l.poids_unite).toFixed(1)} g` : '—'}</Text>
+                    <Text style={[s.td, s.colSerie]}>{l.poids_serie != null ? `${+(l.poids_serie).toFixed(1)} g` : '—'}</Text>
                     <Text style={[s.td, s.colSeries]}>×{l.quantite}</Text>
-                    <Text style={[s.td, s.colTotal]}>{Math.round(l.poids)} g</Text>
+                    <Text style={[s.td, s.colTotal]}>{+(l.poids).toFixed(1)} g</Text>
                   </View>
                 ))}
                 <View style={s.trTotal}>
@@ -221,7 +221,7 @@ export default function SemisDocument({ lignes, dateSemis, templateNom, tapisPar
                   <Text style={[s.tdBold, s.colUnite]}></Text>
                   <Text style={[s.tdBold, s.colSerie]}></Text>
                   <Text style={[s.tdBold, s.colSeries]}>{totalGodetsSeries}</Text>
-                  <Text style={[s.tdBold, s.colTotal]}>{Math.round(totalGodetsPoids)} g</Text>
+                  <Text style={[s.tdBold, s.colTotal]}>{+(totalGodetsPoids).toFixed(1)} g</Text>
                 </View>
               </View>
             </View>
