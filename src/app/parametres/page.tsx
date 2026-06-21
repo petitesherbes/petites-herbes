@@ -148,8 +148,7 @@ export default function ParametresPage() {
 // ─── Réglages panel ───────────────────────────────────────────────────────────
 
 function ReglagesPanel({ router, tapis, setTapis, godets, setGodets, sauvegarderSeries, savingParams }: {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  router: any
+  router: ReturnType<typeof useRouter>
   tapis: string; setTapis: (v: string) => void
   godets: string; setGodets: (v: string) => void
   sauvegarderSeries: () => void; savingParams: boolean
