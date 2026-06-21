@@ -6,6 +6,8 @@ export type SemisLignePdf = {
   format: 'TAPIS' | 'GODET' | 'TERREAU'
   quantite: number
   poids: number
+  poids_unite?: number
+  poids_serie?: number
 }
 
 export type SemisDocumentProps = {
@@ -46,10 +48,11 @@ const s = StyleSheet.create({
   td:        { fontSize: 9, padding: '3.5 6' },
   tdBold:    { fontSize: 9, padding: '3.5 6', fontFamily: 'Helvetica-Bold' },
 
-  colEspece: { flex: 4 },
-  colSeries: { flex: 1.5, textAlign: 'center' },
-  colUnites: { flex: 1.5, textAlign: 'right' },
-  colPoids:  { flex: 2, textAlign: 'right' },
+  colEspece:      { flex: 3.5 },
+  colUnite:       { flex: 1.5, textAlign: 'right' },
+  colSerie:       { flex: 1.5, textAlign: 'right' },
+  colSeries:      { flex: 1.2, textAlign: 'center' },
+  colTotal:       { flex: 1.8, textAlign: 'right' },
 
   recap:      { marginTop: 18, border: `1.5 solid ${c.noir}`, padding: '10 14' },
   recapTitle: { fontFamily: 'Helvetica-Bold', fontSize: 10, borderBottom: `1 solid ${c.border}`, paddingBottom: 5, marginBottom: 8, letterSpacing: 0.3 },
@@ -129,24 +132,27 @@ export default function SemisDocument({ lignes, dateSemis, templateNom, tapisPar
             <View style={s.table}>
               <View style={s.thead}>
                 <Text style={[s.th, s.colEspece]}>Espèce</Text>
-                <Text style={[s.th, s.colSeries, { textAlign: 'center' }]}>Séries</Text>
-                <Text style={[s.th, s.colUnites, { textAlign: 'right' }]}>Tapis</Text>
-                <Text style={[s.th, s.colPoids, { textAlign: 'right' }]}>Poids graines</Text>
+                <Text style={[s.th, s.colUnite]}>g/tapis</Text>
+                <Text style={[s.th, s.colSerie]}>g/série</Text>
+                <Text style={[s.th, s.colSeries]}>Séries</Text>
+                <Text style={[s.th, s.colTotal]}>Total</Text>
               </View>
               <View style={s.tbody}>
                 {tapis.map((l, i) => (
                   <View key={i} style={s.tr}>
                     <Text style={[s.td, s.colEspece]}>{l.espece}</Text>
-                    <Text style={[s.td, s.colSeries, { textAlign: 'center' }]}>×{l.quantite}</Text>
-                    <Text style={[s.td, s.colUnites, { textAlign: 'right' }]}>{l.quantite * tapisParCaisse}</Text>
-                    <Text style={[s.td, s.colPoids, { textAlign: 'right' }]}>{Math.round(l.poids)} g</Text>
+                    <Text style={[s.td, s.colUnite]}>{l.poids_unite != null ? `${Math.round(l.poids_unite)} g` : '—'}</Text>
+                    <Text style={[s.td, s.colSerie]}>{l.poids_serie != null ? `${Math.round(l.poids_serie)} g` : '—'}</Text>
+                    <Text style={[s.td, s.colSeries]}>×{l.quantite}</Text>
+                    <Text style={[s.td, s.colTotal]}>{Math.round(l.poids)} g</Text>
                   </View>
                 ))}
                 <View style={s.trTotal}>
                   <Text style={[s.tdBold, s.colEspece]}>TOTAL TAPIS</Text>
-                  <Text style={[s.tdBold, s.colSeries, { textAlign: 'center' }]}></Text>
-                  <Text style={[s.tdBold, s.colUnites, { textAlign: 'right' }]}>{totalTapisTapis} tapis</Text>
-                  <Text style={[s.tdBold, s.colPoids, { textAlign: 'right' }]}>{Math.round(totalTapisPoids)} g</Text>
+                  <Text style={[s.tdBold, s.colUnite]}></Text>
+                  <Text style={[s.tdBold, s.colSerie]}></Text>
+                  <Text style={[s.tdBold, s.colSeries]}>{totalTapisCaisses}</Text>
+                  <Text style={[s.tdBold, s.colTotal]}>{Math.round(totalTapisPoids)} g</Text>
                 </View>
               </View>
             </View>
@@ -195,24 +201,27 @@ export default function SemisDocument({ lignes, dateSemis, templateNom, tapisPar
             <View style={s.table}>
               <View style={s.thead}>
                 <Text style={[s.th, s.colEspece]}>Espèce</Text>
-                <Text style={[s.th, s.colSeries, { textAlign: 'center' }]}>Séries</Text>
-                <Text style={[s.th, s.colUnites, { textAlign: 'right' }]}>Godets</Text>
-                <Text style={[s.th, s.colPoids, { textAlign: 'right' }]}>Poids graines</Text>
+                <Text style={[s.th, s.colUnite]}>g/godet</Text>
+                <Text style={[s.th, s.colSerie]}>g/série</Text>
+                <Text style={[s.th, s.colSeries]}>Séries</Text>
+                <Text style={[s.th, s.colTotal]}>Total</Text>
               </View>
               <View style={s.tbody}>
                 {godets.map((l, i) => (
                   <View key={i} style={s.tr}>
                     <Text style={[s.td, s.colEspece]}>{l.espece}</Text>
-                    <Text style={[s.td, s.colSeries, { textAlign: 'center' }]}>×{l.quantite}</Text>
-                    <Text style={[s.td, s.colUnites, { textAlign: 'right' }]}>{l.quantite * godetsParSerie}</Text>
-                    <Text style={[s.td, s.colPoids, { textAlign: 'right' }]}>{Math.round(l.poids)} g</Text>
+                    <Text style={[s.td, s.colUnite]}>{l.poids_unite != null ? `${Math.round(l.poids_unite)} g` : '—'}</Text>
+                    <Text style={[s.td, s.colSerie]}>{l.poids_serie != null ? `${Math.round(l.poids_serie)} g` : '—'}</Text>
+                    <Text style={[s.td, s.colSeries]}>×{l.quantite}</Text>
+                    <Text style={[s.td, s.colTotal]}>{Math.round(l.poids)} g</Text>
                   </View>
                 ))}
                 <View style={s.trTotal}>
                   <Text style={[s.tdBold, s.colEspece]}>TOTAL GODETS</Text>
-                  <Text style={[s.tdBold, s.colSeries, { textAlign: 'center' }]}></Text>
-                  <Text style={[s.tdBold, s.colUnites, { textAlign: 'right' }]}>{totalGodetsUnites} godets</Text>
-                  <Text style={[s.tdBold, s.colPoids, { textAlign: 'right' }]}>{Math.round(totalGodetsPoids)} g</Text>
+                  <Text style={[s.tdBold, s.colUnite]}></Text>
+                  <Text style={[s.tdBold, s.colSerie]}></Text>
+                  <Text style={[s.tdBold, s.colSeries]}>{totalGodetsSeries}</Text>
+                  <Text style={[s.tdBold, s.colTotal]}>{Math.round(totalGodetsPoids)} g</Text>
                 </View>
               </View>
             </View>

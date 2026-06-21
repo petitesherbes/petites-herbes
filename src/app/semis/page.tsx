@@ -239,17 +239,21 @@ export default function NouveauSemisPage() {
   async function telechargerBonTravail() {
     setGeneratingPdf(true)
     try {
+      const tpc = params?.tapis_par_caisse ?? 24
+      const gps = params?.godets_par_serie ?? 14
       const body = {
-        lignes: lignes.map(l => ({
-          espece: l.espece?.nom ?? '',
-          format: l.format,
-          quantite: l.quantite,
-          poids: calculerLigne(l).poids,
-        })),
+        lignes: lignes.map(l => {
+          const esp = l.g_par_unite_override != null
+            ? { ...l.espece, g_tapis: l.g_par_unite_override, g_godet: l.g_par_unite_override }
+            : l.espece
+          const poids_unite = l.format === 'TAPIS' ? (esp?.g_tapis ?? 0) : l.format === 'GODET' ? (esp?.g_godet ?? 0) : undefined
+          const poids_serie = l.format === 'TAPIS' ? (poids_unite ?? 0) * tpc : l.format === 'GODET' ? (poids_unite ?? 0) * gps : undefined
+          return { espece: l.espece?.nom ?? '', format: l.format, quantite: l.quantite, poids: calculerLigne(l).poids, poids_unite, poids_serie }
+        }),
         dateSemis,
         templateNom: templateChoisi || undefined,
-        tapisParCaisse: params?.tapis_par_caisse ?? 24,
-        godetsParSerie: params?.godets_par_serie ?? 14,
+        tapisParCaisse: tpc,
+        godetsParSerie: gps,
       }
       const res = await fetch('/api/pdf/semis', {
         method: 'POST',
@@ -402,12 +406,16 @@ export default function NouveauSemisPage() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        lignes: lignes.map(l => ({
-          espece: l.espece?.nom ?? '',
-          format: l.format,
-          quantite: l.quantite,
-          poids: calculerLigne(l).poids,
-        })),
+        lignes: lignes.map(l => {
+          const tpc2 = params?.tapis_par_caisse ?? 24
+          const gps2 = params?.godets_par_serie ?? 14
+          const esp = l.g_par_unite_override != null
+            ? { ...l.espece, g_tapis: l.g_par_unite_override, g_godet: l.g_par_unite_override }
+            : l.espece
+          const poids_unite = l.format === 'TAPIS' ? (esp?.g_tapis ?? 0) : l.format === 'GODET' ? (esp?.g_godet ?? 0) : undefined
+          const poids_serie = l.format === 'TAPIS' ? (poids_unite ?? 0) * tpc2 : l.format === 'GODET' ? (poids_unite ?? 0) * gps2 : undefined
+          return { espece: l.espece?.nom ?? '', format: l.format, quantite: l.quantite, poids: calculerLigne(l).poids, poids_unite, poids_serie }
+        }),
         dateSemis,
         templateNom: templateChoisi || undefined,
         tapisParCaisse: params?.tapis_par_caisse ?? 24,
