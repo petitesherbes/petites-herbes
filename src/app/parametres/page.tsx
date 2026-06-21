@@ -27,16 +27,17 @@ type TemplateComplet = Template & {
 
 export default function ParametresPage() {
   const router = useRouter()
-  const [onglet, setOnglet] = useState<'especes' | 'templates' | 'email' | 'export' | 'taches' | 'nav' | 'couleurs' | 'test'>('especes')
-  const [especes, setEspeces] = useState<Espece[]>([])
-  const [templates, setTemplates] = useState<TemplateComplet[]>([])
-  const [params, setParams] = useState<ParamsProduction | null>(null)
-  const [tapis, setTapis] = useState('')
-  const [godets, setGodets] = useState('')
-  const [savingParams, setSavingParams] = useState(false)
-  const [loading, setLoading] = useState(true)
-  const [editEspece, setEditEspece] = useState<Espece | null>(null)
-  const [editTemplate, setEditTemplate] = useState<TemplateComplet | null>(null)
+  const [onglet, setOnglet]               = useState<'cultures' | 'taches' | 'reglages'>('cultures')
+  const [sousCultures, setSousCultures]   = useState<'especes' | 'templates'>('especes')
+  const [especes, setEspeces]             = useState<Espece[]>([])
+  const [templates, setTemplates]         = useState<TemplateComplet[]>([])
+  const [params, setParams]               = useState<ParamsProduction | null>(null)
+  const [tapis, setTapis]                 = useState('')
+  const [godets, setGodets]               = useState('')
+  const [savingParams, setSavingParams]   = useState(false)
+  const [loading, setLoading]             = useState(true)
+  const [editEspece, setEditEspece]       = useState<Espece | null>(null)
+  const [editTemplate, setEditTemplate]   = useState<TemplateComplet | null>(null)
   const [nouveauTemplate, setNouveauTemplate] = useState(false)
 
   useEffect(() => { charger() }, [])
@@ -73,64 +74,61 @@ export default function ParametresPage() {
     <div className="p-4 space-y-4">
       <h1 className="text-xl font-bold text-green-900">&#x2699;&#xFE0F; Param&egrave;tres</h1>
 
-      <div className="flex flex-wrap rounded-lg overflow-hidden border border-gray-200">
-        {[
-          { val: 'especes',   label: '&#x1F33F; Esp&egrave;ces' },
-          { val: 'templates', label: '&#x1F4CB; Templates' },
-          { val: 'taches',    label: 'T&acirc;ches' },
-          { val: 'couleurs',  label: '&#x1F3A8; Couleurs' },
-          { val: 'nav',       label: '&#x1F4F1; Nav' },
-          { val: 'email',     label: '&#x1F4E7; Email' },
-          { val: 'export',    label: '&#x1F4BE; Export' },
-          { val: 'test',      label: '&#x1F9EA; Test' },
-        ].map(o => (
-          <button key={o.val} onClick={() => setOnglet(o.val as typeof onglet)}
-            className={`shrink-0 px-3 py-2 text-xs font-medium transition-colors border-b border-r border-gray-100
-              ${onglet === o.val ? 'bg-green-700 text-white' : 'bg-white text-gray-600'}`}
-            dangerouslySetInnerHTML={{ __html: o.label }} />
+      {/* ── 3 onglets principaux ── */}
+      <div className="flex rounded-xl overflow-hidden border border-gray-200">
+        {([
+          { val: 'cultures',  label: '🌿 Cultures' },
+          { val: 'taches',    label: '✅ Tâches' },
+          { val: 'reglages',  label: '⚙️ Réglages' },
+        ] as { val: typeof onglet; label: string }[]).map(o => (
+          <button key={o.val} onClick={() => setOnglet(o.val)}
+            className={`flex-1 py-2.5 text-sm font-semibold transition-colors
+              ${onglet === o.val ? 'bg-green-700 text-white' : 'bg-white text-gray-500'}`}>
+            {o.label}
+          </button>
         ))}
       </div>
 
-      <div className="grid grid-cols-2 gap-2">
-        <button onClick={() => router.push('/couts')}
-          className="flex items-center justify-between p-3 bg-amber-50 border border-amber-200 rounded-xl text-sm">
-          <span className="font-medium text-amber-800 text-xs">&#x1F4CA; Co&ucirc;ts production</span>
-          <span className="text-amber-600">&#x203A;</span>
-        </button>
-        <button onClick={() => router.push('/stock')}
-          className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-xl text-sm">
-          <span className="font-medium text-green-800 text-xs">&#x1F33E; Stock &amp; produits</span>
-          <span className="text-green-600">&#x203A;</span>
-        </button>
-      </div>
+      {/* ── Cultures : sous-onglets Espèces / Templates ── */}
+      {onglet === 'cultures' && (
+        <>
+          <div className="flex rounded-lg overflow-hidden border border-gray-200">
+            {([
+              { val: 'especes',   label: '🌱 Espèces' },
+              { val: 'templates', label: '📋 Templates semis' },
+            ] as { val: typeof sousCultures; label: string }[]).map(o => (
+              <button key={o.val} onClick={() => setSousCultures(o.val)}
+                className={`flex-1 py-2 text-xs font-medium transition-colors
+                  ${sousCultures === o.val ? 'bg-green-100 text-green-800 font-semibold' : 'bg-white text-gray-500'}`}>
+                {o.label}
+              </button>
+            ))}
+          </div>
+          {sousCultures === 'especes' && (
+            <EspecesPanel especes={especes} onEdit={setEditEspece} onRefresh={charger} />
+          )}
+          {sousCultures === 'templates' && (
+            <TemplatesPanel
+              templates={templates} especes={especes}
+              onEdit={setEditTemplate}
+              onNouveauTemplate={() => setNouveauTemplate(true)}
+              onRefresh={charger}
+            />
+          )}
+        </>
+      )}
 
-      {onglet === 'especes' && (
-        <EspecesPanel
-          especes={especes}
-          onEdit={setEditEspece}
-          onRefresh={charger}
-          tapis={tapis}
-          setTapis={setTapis}
-          godets={godets}
-          setGodets={setGodets}
+      {onglet === 'taches' && <TachesPanel />}
+
+      {onglet === 'reglages' && (
+        <ReglagesPanel
+          router={router}
+          tapis={tapis} setTapis={setTapis}
+          godets={godets} setGodets={setGodets}
           sauvegarderSeries={sauvegarderSeries}
           savingParams={savingParams}
         />
       )}
-      {onglet === 'templates' && (
-        <TemplatesPanel
-          templates={templates} especes={especes}
-          onEdit={setEditTemplate}
-          onNouveauTemplate={() => setNouveauTemplate(true)}
-          onRefresh={charger}
-        />
-      )}
-      {onglet === 'taches'    && <TachesPanel />}
-      {onglet === 'couleurs'  && <CouleurPanel />}
-      {onglet === 'nav'       && <NavPanel />}
-      {onglet === 'test'      && <TestPanel />}
-      {onglet === 'email'   && <EmailPanel />}
-      {onglet === 'export'  && <ExportPanel />}
 
       {editEspece && (
         <EspeceModal espece={editEspece} onClose={() => setEditEspece(null)} onSave={charger} />
@@ -143,6 +141,88 @@ export default function ParametresPage() {
           onSave={() => { setEditTemplate(null); setNouveauTemplate(false); charger() }}
         />
       )}
+    </div>
+  )
+}
+
+// ─── Réglages panel ───────────────────────────────────────────────────────────
+
+function ReglagesPanel({ router, tapis, setTapis, godets, setGodets, sauvegarderSeries, savingParams }: {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  router: any
+  tapis: string; setTapis: (v: string) => void
+  godets: string; setGodets: (v: string) => void
+  sauvegarderSeries: () => void; savingParams: boolean
+}) {
+  const [ouvert, setOuvert] = useState<string | null>(null)
+  function toggle(s: string) { setOuvert(o => o === s ? null : s) }
+
+  const sections = [
+    { key: 'production', icon: '📦', label: 'Production',      desc: 'Séries, coûts, stock' },
+    { key: 'affichage',  icon: '🎨', label: 'Affichage',       desc: 'Couleurs, navigation' },
+    { key: 'comm',       icon: '📧', label: 'Communication',   desc: 'Email récapitulatif' },
+    { key: 'export',     icon: '💾', label: 'Export données',  desc: 'CSV, sauvegarde' },
+    { key: 'test',       icon: '🧪', label: 'Mode test',       desc: 'Données isolées' },
+  ]
+
+  return (
+    <div className="space-y-2">
+      {sections.map(s => (
+        <div key={s.key} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <button onClick={() => toggle(s.key)}
+            className="w-full flex items-center gap-3 px-4 py-3 text-left">
+            <span className="text-xl">{s.icon}</span>
+            <div className="flex-1">
+              <div className="font-semibold text-sm text-gray-800">{s.label}</div>
+              <div className="text-xs text-gray-400">{s.desc}</div>
+            </div>
+            <span className={`text-gray-300 text-sm transition-transform duration-200 ${ouvert === s.key ? 'rotate-180' : ''}`}>▼</span>
+          </button>
+
+          {ouvert === s.key && (
+            <div className="border-t border-gray-100">
+              {s.key === 'production' && (
+                <div className="p-4 space-y-4">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">Tapis par série (caisse)</label>
+                      <input type="number" inputMode="numeric" value={tapis}
+                        onChange={e => setTapis(e.target.value)}
+                        className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-lg font-bold text-center focus:outline-none focus:border-green-400" />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">Godets par série (plaque)</label>
+                      <input type="number" inputMode="numeric" value={godets}
+                        onChange={e => setGodets(e.target.value)}
+                        className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-lg font-bold text-center focus:outline-none focus:border-green-400" />
+                    </div>
+                  </div>
+                  <button onClick={sauvegarderSeries} disabled={savingParams}
+                    className="w-full bg-green-700 text-white py-2.5 rounded-xl font-semibold text-sm disabled:opacity-50">
+                    {savingParams ? 'Sauvegarde...' : '💾 Enregistrer les séries'}
+                  </button>
+                  <div className="grid grid-cols-2 gap-2 pt-1">
+                    <button onClick={() => router.push('/couts')}
+                      className="flex items-center justify-between p-3 bg-amber-50 border border-amber-200 rounded-xl">
+                      <span className="font-medium text-amber-800 text-xs">📊 Coûts production</span>
+                      <span className="text-amber-600">›</span>
+                    </button>
+                    <button onClick={() => router.push('/stock')}
+                      className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-xl">
+                      <span className="font-medium text-green-800 text-xs">🌾 Stock & produits</span>
+                      <span className="text-green-600">›</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+              {s.key === 'affichage'  && <div className="divide-y divide-gray-50"><CouleurPanel /><NavPanel /></div>}
+              {s.key === 'comm'       && <EmailPanel />}
+              {s.key === 'export'     && <ExportPanel />}
+              {s.key === 'test'       && <TestPanel />}
+            </div>
+          )}
+        </div>
+      ))}
     </div>
   )
 }
@@ -567,16 +647,10 @@ function TemplateModal({ template, especes, onClose, onSave }: {
 
 // ─── Espèces panel ────────────────────────────────────────────────────────────
 
-function EspecesPanel({ especes, onEdit, onRefresh, tapis, setTapis, godets, setGodets, sauvegarderSeries, savingParams }: {
+function EspecesPanel({ especes, onEdit, onRefresh }: {
   especes: Espece[]
   onEdit: (e: Espece) => void
   onRefresh: () => void
-  tapis: string
-  setTapis: (v: string) => void
-  godets: string
-  setGodets: (v: string) => void
-  sauvegarderSeries: () => void
-  savingParams: boolean
 }) {
   const especesTapis   = especes.filter(e => e.section === 'TAPIS')
   const especesTerreau = especes.filter(e => e.section === 'TERREAU' || e.section === 'GODETS')
@@ -614,27 +688,6 @@ function EspecesPanel({ especes, onEdit, onRefresh, tapis, setTapis, godets, set
           <div className="text-xl font-bold text-amber-900">{totalValeur.toFixed(2)} &euro;</div>
           <div className="text-[10px] text-amber-600 mt-0.5">esp&egrave;ces avec prix renseign&eacute;</div>
         </div>
-      </div>
-
-      <div className="bg-white rounded-2xl border border-green-200 p-4 space-y-3">
-        <div className="font-bold text-sm text-green-900">&#x1F331; S&eacute;ries de production</div>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Tapis par s&eacute;rie (caisse)</label>
-            <input type="number" inputMode="numeric" value={tapis}
-              onChange={e => setTapis(e.target.value)}
-              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-lg font-bold text-center focus:outline-none focus:border-green-400" />
-          </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Godets par s&eacute;rie (plaque)</label>
-            <input type="number" inputMode="numeric" value={godets}
-              onChange={e => setGodets(e.target.value)}
-              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-lg font-bold text-center focus:outline-none focus:border-green-400" />
-          </div>
-        </div>
-        <button onClick={sauvegarderSeries} disabled={savingParams}
-          className="w-full bg-green-700 text-white py-2.5 rounded-xl font-semibold text-sm active:scale-95 transition-transform disabled:opacity-50"
-          dangerouslySetInnerHTML={{ __html: savingParams ? 'Sauvegarde...' : '&#x1F4BE; Enregistrer les s&eacute;ries' }} />
       </div>
 
       <SectionEspeces
