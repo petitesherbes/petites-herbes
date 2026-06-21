@@ -8,6 +8,7 @@ import { Espece, Template } from '@/types'
 import { ALL_NAV_TABS } from '@/components/BottomNav'
 import { loadFormatColors, saveFormatColors, FORMAT_COLORS_DEFAULT, type FormatKey } from '@/lib/formatColors'
 import { loadTestMode, saveTestMode } from '@/lib/testMode'
+import { saveCache } from '@/lib/offline'
 
 type ParamsProduction = {
   id: string
@@ -299,8 +300,15 @@ function TestPanel() {
   async function effacerDonneesTest() {
     if (!confirm('Supprimer toutes les données de test ? (cultures, semis, completions test)')) return
     setClearing(true)
-    const tables = ['cultures', 'semis_lignes', 'semis', 'taches_completions', 'stock_mouvements'] as const
-    await Promise.all(tables.map(t => supabase.from(t).delete().eq('is_test', true)))
+    // Ordre séquentiel pour respecter les FK : lignes avant parents
+    await supabase.from('cultures').delete().eq('is_test', true)
+    await supabase.from('semis_lignes').delete().eq('is_test', true)
+    await supabase.from('semis').delete().eq('is_test', true)
+    await supabase.from('taches_completions').delete().eq('is_test', true)
+    await supabase.from('stock_mouvements').delete().eq('is_test', true)
+    // Invalider le cache historique
+    await saveCache('semis_complets_test', [])
+    await saveCache('semis_complets_prod', [])
     setClearing(false)
     setCleared('Données test supprimées ✓')
     setTimeout(() => setCleared(null), 3000)
