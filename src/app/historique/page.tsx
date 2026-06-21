@@ -200,6 +200,34 @@ function SemisDetail({ semis, tapis, terreau, godets }: {
     alert('Email renvoyé !')
   }
 
+  async function telechargerPdf() {
+    const res = await fetch('/api/pdf/semis', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        dateSemis: semis.date_semis,
+        templateNom: semis.nom_template,
+        lignes: semis.semis_lignes.map(l => ({
+          espece: l.espece?.nom ?? '',
+          format: l.format,
+          quantite: l.quantite,
+          poids: Number(l.poids_graines_g ?? 0),
+          poids_unite: l.format === 'TAPIS' ? (l.espece?.g_tapis ?? undefined) : l.format === 'GODET' ? (l.espece?.g_godet ?? undefined) : undefined,
+          poids_serie: l.quantite > 0 ? Number(l.poids_graines_g ?? 0) / l.quantite : undefined,
+        })),
+        tapisParCaisse: 26,
+        godetsParSerie: 14,
+      }),
+    })
+    if (!res.ok) { alert('Erreur génération PDF'); return }
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = `semis-${semis.date_semis}.pdf`
+    document.body.appendChild(a); a.click()
+    document.body.removeChild(a); URL.revokeObjectURL(url)
+  }
+
   async function sauvegarderTemplate() {
     const nom = prompt('Nom du template :')
     if (!nom) return
@@ -281,7 +309,7 @@ function SemisDetail({ semis, tapis, terreau, godets }: {
       {renderGroupe(tapis, 'TAPIS', '🟩')}
       {renderGroupe(terreau, 'TERREAU', '🟫')}
       {renderGroupe(godets, 'GODETS', '🟧')}
-      <div className="px-4 py-3 grid grid-cols-3 gap-2 border-t border-gray-100">
+      <div className="px-4 py-3 grid grid-cols-2 gap-2 border-t border-gray-100">
         <a href={`/semis/${semis.id}/modifier`}
           className="text-center text-sm py-2 rounded-lg border border-green-200 text-green-700 hover:bg-green-50 font-medium">
           ✏️ Modifier
@@ -289,6 +317,10 @@ function SemisDetail({ semis, tapis, terreau, godets }: {
         <button onClick={sauvegarderTemplate}
           className="text-sm py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">
           💾 Template
+        </button>
+        <button onClick={telechargerPdf}
+          className="text-sm py-2 rounded-lg border border-orange-200 text-orange-600 hover:bg-orange-50">
+          📄 PDF
         </button>
         <button onClick={renvoyerEmail}
           className="text-sm py-2 rounded-lg border border-blue-200 text-blue-600 hover:bg-blue-50">

@@ -449,9 +449,9 @@ export default function NouveauSemisPage() {
           Génération du PDF en cours...
         </div>
       ) : pdfBlobUrl ? (
-        <a href={pdfBlobUrl} target="_blank" rel="noopener noreferrer"
+        <a href={pdfBlobUrl} download={`semis-${dateSemis}.pdf`}
           className="w-full flex items-center justify-center gap-2 border-2 border-green-600 text-green-700 py-4 rounded-xl font-semibold text-sm active:scale-95 transition-transform">
-          📄 Voir / télécharger le bon de semis
+          📄 Télécharger le bon de semis
         </a>
       ) : null}
 
