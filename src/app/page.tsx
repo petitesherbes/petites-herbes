@@ -1021,19 +1021,38 @@ function PointageBlock({ pointages, onPointer }: {
   )
 }
 
-const ROUTINE: { jour: string; court: string; activites: { emoji: string; label: string }[] }[] = [
-  { jour: 'Lundi',    court: 'Lun', activites: [{ emoji: '🌱', label: 'Semis' }, { emoji: '🌾', label: 'Récolte' }, { emoji: '💧', label: '×3' }] },
-  { jour: 'Mardi',   court: 'Mar', activites: [{ emoji: '📦', label: 'Livraison' }, { emoji: '💧', label: '×3' }] },
-  { jour: 'Mercredi',court: 'Mer', activites: [{ emoji: '🌾', label: 'Récolte' }, { emoji: '💧', label: '×3' }] },
-  { jour: 'Jeudi',   court: 'Jeu', activites: [{ emoji: '🌾', label: 'Récolte' }, { emoji: '📦', label: 'Livraison' }, { emoji: '💧', label: '×3' }] },
-  { jour: 'Vendredi',court: 'Ven', activites: [{ emoji: '🌱', label: 'Semis' }, { emoji: '📦', label: 'Livraison' }, { emoji: '💧', label: '×3' }] },
-  { jour: 'Samedi',  court: 'Sam', activites: [{ emoji: '💧', label: '×3' }] },
-  { jour: 'Dimanche',court: 'Dim', activites: [{ emoji: '💧', label: '×3' }] },
+const JOURS_SEMAINE = [
+  { court: 'Lun', nom: 'lundi' },
+  { court: 'Mar', nom: 'mardi' },
+  { court: 'Mer', nom: 'mercredi' },
+  { court: 'Jeu', nom: 'jeudi' },
+  { court: 'Ven', nom: 'vendredi' },
+  { court: 'Sam', nom: 'samedi' },
+  { court: 'Dim', nom: 'dimanche' },
 ]
 
+type TacheRec = { id: string; titre: string; frequence: string | null; duree_minutes: number | null }
+
 function AgendaSemaine() {
-  const jourIdx    = new Date().getDay()
-  const routineIdx = jourIdx === 0 ? 6 : jourIdx - 1
+  const [taches, setTaches] = useState<TacheRec[]>([])
+  const jourIdx    = new Date().getDay()          // 0=dim…6=sam
+  const routineIdx = jourIdx === 0 ? 6 : jourIdx - 1  // 0=lun…6=dim
+
+  useEffect(() => {
+    supabase.from('taches')
+      .select('id,titre,frequence,duree_minutes')
+      .eq('type', 'recurrente').eq('actif', true)
+      .then(({ data }) => { if (data) setTaches(data) })
+  }, [])
+
+  function tachesPourJour(nomJour: string): TacheRec[] {
+    return taches.filter(t => {
+      if (!t.frequence) return false
+      const freq = t.frequence.toLowerCase()
+      if (freq === 'quotidien') return true
+      return freq.split(',').map(s => s.trim()).includes(nomJour)
+    })
+  }
 
   function ouvrirAgenda() {
     if (typeof window !== 'undefined') localStorage.setItem('terrain_init_tab', 'agenda')
@@ -1043,21 +1062,24 @@ function AgendaSemaine() {
     <div>
       <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2.5">Rythme de la semaine</div>
       <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
-        {ROUTINE.map((r, i) => {
+        {JOURS_SEMAINE.map((j, i) => {
           const estAujourdHui = i === routineIdx
+          const tachesJour = tachesPourJour(j.nom)
           return (
-            <Link key={r.jour} href="/terrain" onClick={ouvrirAgenda}
+            <Link key={j.nom} href="/terrain" onClick={ouvrirAgenda}
               className={`flex items-start gap-3 px-4 py-2.5 border-b border-gray-100 last:border-0
                 active:bg-gray-50 transition-colors ${estAujourdHui ? 'bg-green-50 active:bg-green-100' : ''}`}>
               <div className={`w-9 text-xs font-bold pt-0.5 shrink-0 ${estAujourdHui ? 'text-green-700' : 'text-gray-400'}`}>
-                {r.court}
+                {j.court}
                 {estAujourdHui && <div className="text-[9px] text-green-500">auj.</div>}
               </div>
               <div className="flex flex-wrap gap-1.5 flex-1">
-                {r.activites.map((a, j) => (
-                  <span key={j} className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium
+                {tachesJour.length === 0 ? (
+                  <span className="text-xs text-gray-300 italic">—</span>
+                ) : tachesJour.map(t => (
+                  <span key={t.id} className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium
                     ${estAujourdHui ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
-                    {a.emoji} {a.label}
+                    {t.titre}{t.duree_minutes ? ` · ${t.duree_minutes}min` : ''}
                   </span>
                 ))}
               </div>
