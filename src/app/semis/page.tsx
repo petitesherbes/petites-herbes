@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic'
 import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { loadFormatColors } from '@/lib/formatColors'
+import { loadTestMode } from '@/lib/testMode'
 import { fetchWithCache, queueMutation, saveCache } from '@/lib/offline'
 import { Espece, Template, TemplateLigne, SemisLigneForm, Format, ParametresProduction, Contenant } from '@/types'
 import {
@@ -290,7 +291,8 @@ export default function NouveauSemisPage() {
 
     // Génère l'UUID ici pour pouvoir l'utiliser offline
     const semisId = crypto.randomUUID()
-    const semisPayload = { id: semisId, date_semis: dateSemis, nom_template: templateChoisi || null, cout_total: totalCout }
+    const isTest = loadTestMode()
+    const semisPayload = { id: semisId, date_semis: dateSemis, nom_template: templateChoisi || null, cout_total: totalCout, is_test: isTest }
 
     const lignesInsert = lignes.map(l => {
       const calc = calculerLigne(l)
@@ -308,6 +310,7 @@ export default function NouveauSemisPage() {
         cout_terreau: calc.coutT,
         cout_contenant: calc.coutC,
         cout_total_ligne: calc.total,
+        is_test: isTest,
       }
     })
 
@@ -323,6 +326,7 @@ export default function NouveauSemisPage() {
         quantite: String(l.quantite),
         zone_id: l.zone_id || null,
         actif: true,
+        is_test: isTest,
       }))
 
     if (!navigator.onLine) {
@@ -335,7 +339,7 @@ export default function NouveauSemisPage() {
         const poids = calculerLigne(l).poids
         const esp = especes.find(e => e.id === l.espece_id)
         if (!esp || poids === 0) continue
-        await queueMutation({ table: 'stock_mouvements', method: 'insert', payload: { espece_id: l.espece_id, type: 'semis', quantite_g: -poids, semis_id: semisId } })
+        await queueMutation({ table: 'stock_mouvements', method: 'insert', payload: { espece_id: l.espece_id, type: 'semis', quantite_g: -poids, semis_id: semisId, is_test: isTest } })
         await queueMutation({ table: 'especes', method: 'update', payload: { stock_actuel_g: Math.max(0, esp.stock_actuel_g - poids) }, matchCol: 'id', matchVal: l.espece_id })
       }
       // Mise à jour optimiste du cache espèces
@@ -369,7 +373,7 @@ export default function NouveauSemisPage() {
       const esp = especes.find(e => e.id === l.espece_id)
       if (!esp || poids === 0) continue
       await supabase.from('stock_mouvements').insert({
-        espece_id: l.espece_id, type: 'semis', quantite_g: -poids, semis_id: semisData.id,
+        espece_id: l.espece_id, type: 'semis', quantite_g: -poids, semis_id: semisData.id, is_test: isTest,
       })
       await supabase.from('especes')
         .update({ stock_actuel_g: Math.max(0, esp.stock_actuel_g - poids) })

@@ -4,6 +4,7 @@ import BottomNav from '@/components/BottomNav'
 import PwaRegister from '@/components/PwaRegister'
 import OfflineBanner from '@/components/OfflineBanner'
 import TaskPanel from '@/components/TaskPanel'
+import TestModeBanner from '@/components/TestModeBanner'
 
 export const metadata: Metadata = {
   title: 'GAEC Les Petites Herbes',
@@ -35,6 +36,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="min-h-full flex flex-col bg-cream">
         <PwaRegister />
+        <TestModeBanner />
         <OfflineBanner />
         <main className="flex-1 max-w-2xl mx-auto w-full pb-2">
           {children}

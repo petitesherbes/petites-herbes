@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase'
 import { Espece, Template } from '@/types'
 import { ALL_NAV_TABS } from '@/components/BottomNav'
 import { loadFormatColors, saveFormatColors, FORMAT_COLORS_DEFAULT, type FormatKey } from '@/lib/formatColors'
+import { loadTestMode, saveTestMode } from '@/lib/testMode'
 
 type ParamsProduction = {
   id: string
@@ -26,7 +27,7 @@ type TemplateComplet = Template & {
 
 export default function ParametresPage() {
   const router = useRouter()
-  const [onglet, setOnglet] = useState<'especes' | 'templates' | 'email' | 'export' | 'taches' | 'nav' | 'couleurs'>('especes')
+  const [onglet, setOnglet] = useState<'especes' | 'templates' | 'email' | 'export' | 'taches' | 'nav' | 'couleurs' | 'test'>('especes')
   const [especes, setEspeces] = useState<Espece[]>([])
   const [templates, setTemplates] = useState<TemplateComplet[]>([])
   const [params, setParams] = useState<ParamsProduction | null>(null)
@@ -79,6 +80,7 @@ export default function ParametresPage() {
           { val: 'taches',    label: 'T&acirc;ches' },
           { val: 'couleurs',  label: '&#x1F3A8; Couleurs' },
           { val: 'nav',       label: '&#x1F4F1; Nav' },
+          { val: 'test',      label: '&#x1F9EA; Test' },
           { val: 'email',     label: '&#x1F4E7; Email' },
           { val: 'export',    label: '&#x1F4BE; Export' },
         ].map(o => (
@@ -126,6 +128,7 @@ export default function ParametresPage() {
       {onglet === 'taches'    && <TachesPanel />}
       {onglet === 'couleurs'  && <CouleurPanel />}
       {onglet === 'nav'       && <NavPanel />}
+      {onglet === 'test'      && <TestPanel />}
       {onglet === 'email'   && <EmailPanel />}
       {onglet === 'export'  && <ExportPanel />}
 
@@ -197,6 +200,64 @@ function CouleurPanel() {
         className="w-full py-2.5 text-sm text-gray-500 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors">
         R&eacute;initialiser les couleurs par d&eacute;faut
       </button>
+    </div>
+  )
+}
+
+// ─── Test panel ───────────────────────────────────────────────────────────────
+
+function TestPanel() {
+  const [active, setActive] = useState(loadTestMode)
+  const [clearing, setClearing] = useState(false)
+  const [cleared, setCleared] = useState<string | null>(null)
+
+  function toggle() {
+    const next = !active
+    setActive(next)
+    saveTestMode(next)
+  }
+
+  async function effacerDonneesTest() {
+    if (!confirm('Supprimer toutes les données de test ? (cultures, semis, completions test)')) return
+    setClearing(true)
+    const tables = ['cultures', 'semis_lignes', 'semis', 'taches_completions', 'stock_mouvements'] as const
+    await Promise.all(tables.map(t => supabase.from(t).delete().eq('is_test', true)))
+    setClearing(false)
+    setCleared('Données test supprimées ✓')
+    setTimeout(() => setCleared(null), 3000)
+  }
+
+  return (
+    <div className="space-y-4 p-4">
+      <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="font-semibold text-orange-900 text-sm">Mode test</div>
+            <div className="text-xs text-orange-700 mt-0.5">
+              Toutes les actions (semis, cultures, tâches) créent des données isolées, invisibles en mode normal.
+            </div>
+          </div>
+          <button onClick={toggle}
+            className={`relative w-12 h-6 rounded-full transition-colors shrink-0 ml-4 ${active ? 'bg-orange-500' : 'bg-gray-300'}`}>
+            <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${active ? 'translate-x-6' : 'translate-x-0.5'}`} />
+          </button>
+        </div>
+        {active && (
+          <div className="text-xs text-orange-800 bg-orange-100 rounded-lg px-3 py-2">
+            🧪 Actif — une bannière orange apparaît en haut de l&apos;app
+          </div>
+        )}
+      </div>
+
+      <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-2">
+        <div className="font-semibold text-gray-800 text-sm">Nettoyer les données test</div>
+        <div className="text-xs text-gray-500">Supprime tous les semis, cultures, completions et mouvements de stock créés en mode test.</div>
+        <button onClick={effacerDonneesTest} disabled={clearing}
+          className="w-full mt-1 py-2 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm font-semibold disabled:opacity-50">
+          {clearing ? 'Suppression...' : '🗑 Effacer les données test'}
+        </button>
+        {cleared && <div className="text-xs text-green-700 text-center">{cleared}</div>}
+      </div>
     </div>
   )
 }

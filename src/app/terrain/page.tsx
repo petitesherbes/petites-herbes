@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic'
 import { useEffect, useState, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
 import { fetchWithCache, queueMutation, saveCache, queuePhoto } from '@/lib/offline'
+import { loadTestMode } from '@/lib/testMode'
 import { format, parseISO, isToday, isTomorrow, addDays } from 'date-fns'
 import { fr } from 'date-fns/locale'
 
@@ -391,7 +392,8 @@ export default function TerrainPage() {
         return data
       }).then(r => r.data),
       fetchWithCache('cultures', async () => {
-        const { data } = await supabase.from('cultures').select('*').neq('actif', false).order('created_at', { ascending: false })
+        const { data } = await supabase.from('cultures').select('*').neq('actif', false)
+          .eq('is_test', loadTestMode()).order('created_at', { ascending: false })
         return data
       }).then(r => r.data),
     ])
@@ -1356,7 +1358,7 @@ function AgendaTab({ taches, zones, especes, catalogueTaches, zoneTaches, onSave
         if (saisie === null) return
         note = saisie.trim() || null
       }
-      const payload = { tache_id: t.id, date_completion: todayStr, ...(note !== null ? { note } : {}) }
+      const payload = { tache_id: t.id, date_completion: todayStr, is_test: loadTestMode(), ...(note !== null ? { note } : {}) }
       if (!navigator.onLine) {
         await queueMutation({ table: 'taches_completions', method: 'upsert', payload, onConflict: 'tache_id,date_completion' })
       } else {
