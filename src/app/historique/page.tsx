@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { fetchWithCache } from '@/lib/offline'
+import { loadTestMode } from '@/lib/testMode'
 import { Semis, SemisLigne, Espece } from '@/types'
 import { format, parseISO, differenceInDays } from 'date-fns'
 import { fr } from 'date-fns/locale'
@@ -21,10 +22,13 @@ export default function HistoriquePage() {
   useEffect(() => { charger() }, [])
 
   async function charger() {
-    const { data } = await fetchWithCache('semis_complets', async () => {
+    const isTest = loadTestMode()
+    const cacheKey = isTest ? 'semis_complets_test' : 'semis_complets_prod'
+    const { data } = await fetchWithCache(cacheKey, async () => {
       const { data: s } = await supabase
         .from('semis')
         .select('*, semis_lignes(*, espece:especes(*))')
+        .eq('is_test', isTest)
         .order('date_semis', { ascending: false })
       return s
     })
