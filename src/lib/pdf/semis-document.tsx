@@ -168,24 +168,24 @@ export default function SemisDocument({ lignes, dateSemis, templateNom, tapisPar
             <View style={s.table}>
               <View style={s.thead}>
                 <Text style={[s.th, s.colEspece]}>Espèce</Text>
-                <Text style={[s.th, s.colSeries, { textAlign: 'center' }]}>Caisses</Text>
-                <Text style={[s.th, s.colUnites, { textAlign: 'right' }]}>Unités</Text>
-                <Text style={[s.th, s.colPoids, { textAlign: 'right' }]}>Poids graines</Text>
+                <Text style={[s.th, s.colSerie]}></Text>
+                <Text style={[s.th, s.colSeries]}>Caisses</Text>
+                <Text style={[s.th, s.colTotal]}>Poids graines</Text>
               </View>
               <View style={s.tbody}>
                 {terreau.map((l, i) => (
                   <View key={i} style={s.tr}>
                     <Text style={[s.td, s.colEspece]}>{l.espece}</Text>
-                    <Text style={[s.td, s.colSeries, { textAlign: 'center' }]}>×{l.quantite}</Text>
-                    <Text style={[s.td, s.colUnites, { textAlign: 'right' }]}>{l.quantite}</Text>
-                    <Text style={[s.td, s.colPoids, { textAlign: 'right' }]}>{Math.round(l.poids)} g</Text>
+                    <Text style={[s.td, s.colSerie]}>—</Text>
+                    <Text style={[s.td, s.colSeries]}>×{l.quantite}</Text>
+                    <Text style={[s.td, s.colTotal]}>{Math.round(l.poids)} g</Text>
                   </View>
                 ))}
                 <View style={s.trTotal}>
                   <Text style={[s.tdBold, s.colEspece]}>TOTAL TERREAU</Text>
-                  <Text style={[s.tdBold, s.colSeries, { textAlign: 'center' }]}></Text>
-                  <Text style={[s.tdBold, s.colUnites, { textAlign: 'right' }]}>{totalTerreauCaisses} caisse{totalTerreauCaisses > 1 ? 's' : ''}</Text>
-                  <Text style={[s.tdBold, s.colPoids, { textAlign: 'right' }]}>{Math.round(totalTerreauPoids)} g</Text>
+                  <Text style={[s.tdBold, s.colSerie]}></Text>
+                  <Text style={[s.tdBold, s.colSeries]}>{totalTerreauCaisses}</Text>
+                  <Text style={[s.tdBold, s.colTotal]}>{Math.round(totalTerreauPoids)} g</Text>
                 </View>
               </View>
             </View>
