@@ -18,8 +18,19 @@ export default function HistoriquePage() {
   const [ouvert, setOuvert] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [filtreStatut, setFiltreStatut] = useState<'tous' | 'en_cours' | 'disponible' | 'perime'>('tous')
+  const [supprimant, setSupprimant] = useState<string | null>(null)
 
   useEffect(() => { charger() }, [])
+
+  async function supprimerSemis(id: string) {
+    if (!confirm('Supprimer ce semis du cahier ? Cette action est irréversible.')) return
+    setSupprimant(id)
+    await supabase.from('cultures').delete().eq('semis_id', id)
+    await supabase.from('semis_lignes').delete().eq('semis_id', id)
+    await supabase.from('semis').delete().eq('id', id)
+    setSemisList(prev => prev.filter(s => s.id !== id))
+    setSupprimant(null)
+  }
 
   async function charger() {
     const isTest = loadTestMode()
@@ -94,25 +105,32 @@ export default function HistoriquePage() {
 
           return (
             <div key={s.id} className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-              <button onClick={() => setOuvert(isOpen ? null : s.id)}
-                className="w-full text-left px-4 py-3 flex items-center justify-between">
-                <div>
-                  <div className="font-semibold text-gray-900 capitalize">
-                    {format(parseISO(s.date_semis), 'EEEE d MMM yyyy', { locale: fr })}
+              <div className="flex items-center">
+                <button onClick={() => setOuvert(isOpen ? null : s.id)}
+                  className="flex-1 text-left px-4 py-3 flex items-center justify-between">
+                  <div>
+                    <div className="font-semibold text-gray-900 capitalize">
+                      {format(parseISO(s.date_semis), 'EEEE d MMM yyyy', { locale: fr })}
+                    </div>
+                    <div className="text-sm text-gray-500 flex gap-2 flex-wrap mt-0.5">
+                      {s.nom_template && <span>{s.nom_template}</span>}
+                      <span>{s.semis_lignes.length} espèces</span>
+                      {s.cout_total != null && <span>💶 {Number(s.cout_total).toFixed(2)}€</span>}
+                    </div>
                   </div>
-                  <div className="text-sm text-gray-500 flex gap-2 flex-wrap mt-0.5">
-                    {s.nom_template && <span>{s.nom_template}</span>}
-                    <span>{s.semis_lignes.length} espèces</span>
-                    {s.cout_total != null && <span>💶 {Number(s.cout_total).toFixed(2)}€</span>}
+                  <div className="flex items-center gap-2">
+                    <span className={`text-xs px-2 py-1 rounded-full font-medium ${statutColors}`}>
+                      {statut === 'en_cours' ? 'En cours' : statut === 'disponible' ? 'Disponible' : 'Périmé'}
+                    </span>
+                    <span className="text-gray-400">{isOpen ? '▲' : '▼'}</span>
                   </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className={`text-xs px-2 py-1 rounded-full font-medium ${statutColors}`}>
-                    {statut === 'en_cours' ? 'En cours' : statut === 'disponible' ? 'Disponible' : 'Périmé'}
-                  </span>
-                  <span className="text-gray-400">{isOpen ? '▲' : '▼'}</span>
-                </div>
-              </button>
+                </button>
+                <button onClick={() => supprimerSemis(s.id)} disabled={supprimant === s.id}
+                  className="px-3 py-3 text-gray-300 hover:text-red-400 transition-colors disabled:opacity-40"
+                  title="Supprimer ce semis">
+                  {supprimant === s.id ? '…' : '🗑️'}
+                </button>
+              </div>
 
               {isOpen && (
                 <div className="border-t border-gray-100">
