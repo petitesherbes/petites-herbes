@@ -73,19 +73,19 @@ export default function ParametresPage() {
     <div className="p-4 space-y-4">
       <h1 className="text-xl font-bold text-green-900">&#x2699;&#xFE0F; Param&egrave;tres</h1>
 
-      <div className="flex rounded-lg overflow-hidden border border-gray-200 overflow-x-auto">
+      <div className="flex flex-wrap rounded-lg overflow-hidden border border-gray-200">
         {[
           { val: 'especes',   label: '&#x1F33F; Esp&egrave;ces' },
           { val: 'templates', label: '&#x1F4CB; Templates' },
           { val: 'taches',    label: 'T&acirc;ches' },
           { val: 'couleurs',  label: '&#x1F3A8; Couleurs' },
           { val: 'nav',       label: '&#x1F4F1; Nav' },
-          { val: 'test',      label: '&#x1F9EA; Test' },
           { val: 'email',     label: '&#x1F4E7; Email' },
           { val: 'export',    label: '&#x1F4BE; Export' },
+          { val: 'test',      label: '&#x1F9EA; Test' },
         ].map(o => (
           <button key={o.val} onClick={() => setOnglet(o.val as typeof onglet)}
-            className={`shrink-0 flex-1 py-2 text-xs font-medium transition-colors
+            className={`shrink-0 px-3 py-2 text-xs font-medium transition-colors border-b border-r border-gray-100
               ${onglet === o.val ? 'bg-green-700 text-white' : 'bg-white text-gray-600'}`}
             dangerouslySetInnerHTML={{ __html: o.label }} />
         ))}
