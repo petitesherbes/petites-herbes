@@ -48,7 +48,7 @@ export default function AccueilPage() {
   const [caSemaine, setCaSemaine]         = useState<number | null>(null)
   const [mouvements, setMouvements]       = useState<StockMouvement[]>([])
   const [nbClients, setNbClients]         = useState(0)
-  const [tachesAujourdHui, setTachesAujourdHui] = useState<{id:string;titre:string;priorite:string;completions:{date_completion:string}[]}[]>([])
+  const [tachesAujourdHui, setTachesAujourdHui] = useState<{id:string;titre:string;priorite:string;date_echeance:string|null;completions:{date_completion:string}[]}[]>([])
   const [blsSemaine, setBlsSemaine]       = useState<{client:{nom:string}|null;created_at:string;montant:number}[]>([])
   const [pointagesAuj, setPointagesAuj]   = useState<{auteur:string;heure_arrivee:string|null;heure_depart:string|null;pause_minutes:number}[]>([])
   const [alerteGel, setAlerteGel]         = useState<{date:string;tmin:number}[]>([])
@@ -194,16 +194,37 @@ export default function AccueilPage() {
       const jourFr = ['dimanche','lundi','mardi','mercredi','jeudi','vendredi','samedi'][todayDate.getDay()]
       const duJour = (tachesData as unknown as {id:string;titre:string;priorite:string;type:string;frequence:string|null;date_echeance:string|null;completions:{date_completion:string}[]}[])
         .filter(t => {
-          if (t.type === 'ponctuelle') return t.date_echeance === todayStr
+          if (t.type === 'ponctuelle') {
+            if (!t.date_echeance || t.date_echeance > todayStr) return false
+            return !t.completions.some(c => c.date_completion < todayStr)
+          }
           if (!t.frequence) return false
           const freq = t.frequence.toLowerCase()
           if (freq === 'quotidien') return true
           return freq.split(',').map((s: string) => s.trim()).includes(jourFr)
         })
+        .sort((a, b) => {
+          const done = (t: typeof a) => t.completions.some(c => c.date_completion === todayStr) ? 100 : 0
+          const rep  = (t: typeof a) => (t.type === 'ponctuelle' && t.date_echeance && t.date_echeance < todayStr) ? 0 : 10
+          const prio = (t: typeof a) => t.priorite === 'haute' ? 0 : t.priorite === 'normale' ? 1 : 2
+          return (done(a) + rep(a) + prio(a)) - (done(b) + rep(b) + prio(b))
+        })
       setTachesAujourdHui(duJour)
     }
 
     setLoading(false)
+  }
+
+  async function cocherTacheHome(t: {id:string;completions:{date_completion:string}[]}) {
+    const todayStr = format(new Date(), 'yyyy-MM-dd')
+    const faite = t.completions.some(c => c.date_completion === todayStr)
+    if (faite) {
+      await supabase.from('taches_completions').delete().eq('tache_id', t.id).eq('date_completion', todayStr)
+      setTachesAujourdHui(prev => prev.map(x => x.id === t.id ? { ...x, completions: x.completions.filter(c => c.date_completion !== todayStr) } : x))
+    } else {
+      await supabase.from('taches_completions').upsert({ tache_id: t.id, date_completion: todayStr }, { onConflict: 'tache_id,date_completion' })
+      setTachesAujourdHui(prev => prev.map(x => x.id === t.id ? { ...x, completions: [...x.completions, { date_completion: todayStr }] } : x))
+    }
   }
 
   async function handlePointer(auteur: string, type: 'arrivee' | 'depart') {
@@ -368,12 +389,21 @@ export default function AccueilPage() {
                   </div>
                   <div className="divide-y divide-amber-100 bg-amber-50">
                     {tachesAujourdHui.map(t => {
-                      const faite = t.completions.some(c => c.date_completion === todayStr)
+                      const faite    = t.completions.some(c => c.date_completion === todayStr)
+                      const reportee = t.date_echeance && t.date_echeance < todayStr
                       return (
-                        <Link key={t.id} href="/terrain" className="flex items-center gap-3 px-4 py-2.5">
-                          <span className={`text-base ${faite ? 'opacity-40' : ''}`}>{faite ? '✅' : '⬜'}</span>
-                          <span className={`text-sm font-semibold ${faite ? 'line-through text-gray-400' : 'text-amber-900'}`}>{t.titre}</span>
-                        </Link>
+                        <button key={t.id} onClick={() => cocherTacheHome(t)}
+                          className="w-full flex items-center gap-3 px-4 py-2.5 text-left active:bg-amber-100 transition-colors">
+                          <span className={`text-base shrink-0 ${faite ? 'opacity-40' : ''}`}>{faite ? '✅' : '⬜'}</span>
+                          <span className={`text-sm font-semibold flex-1 ${faite ? 'line-through text-gray-400' : 'text-amber-900'}`}>
+                            {t.titre}
+                          </span>
+                          {reportee && !faite && (
+                            <span className="text-[10px] font-semibold text-orange-600 bg-orange-100 px-1.5 py-0.5 rounded-full shrink-0">
+                              ⚠ reportée
+                            </span>
+                          )}
+                        </button>
                       )
                     })}
                   </div>

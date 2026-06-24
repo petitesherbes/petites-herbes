@@ -1106,10 +1106,10 @@ function ExportPanel() {
 
 // ─── Tâches panel ─────────────────────────────────────────────────────────────
 
-type CatItem       = { id: string; titre: string; categorie: string; icone: string; active: boolean; ordre: number }
+type CatItem       = { id: string; titre: string; categorie: string; icone: string; active: boolean; ordre: number; duree_minutes: number | null }
 type ZoneLite      = { id: string; nom: string; type: string }
 type ZoneTacheLite = { zone_id: string; catalogue_id: string }
-type RecurrenteLite = { id: string; titre: string; frequence: string | null }
+type RecurrenteLite = { id: string; titre: string; frequence: string | null; catalogue_id: string | null }
 
 const FREQ_PRESETS = [
   { val: 'quotidien',                          label: 'Tous les jours' },
@@ -1156,28 +1156,41 @@ function TachesPanel() {
       supabase.from('zones').select('id,nom,type').eq('actif', true).order('ordre'),
       supabase.from('taches_catalogue').select('*').order('ordre'),
       supabase.from('zone_taches_catalogue').select('*'),
-      supabase.from('taches').select('id,titre,frequence').eq('type', 'recurrente').eq('actif', true),
+      supabase.from('taches').select('id,titre,frequence,catalogue_id').eq('type', 'recurrente').eq('actif', true),
     ])
     if (z) setZones(z); if (c) setCatalogue(c as CatItem[])
     if (zt) setZoneTaches(zt); if (r) setRecurrentes(r as RecurrenteLite[])
   }
 
+  function trouverRecurrente(cat: CatItem): RecurrenteLite | undefined {
+    return recurrentes.find(r => r.catalogue_id === cat.id || r.titre.toLowerCase() === cat.titre.toLowerCase())
+  }
+
   async function activerRecurrente(cat: CatItem) {
-    const existing = recurrentes.find(r => r.titre.toLowerCase() === cat.titre.toLowerCase())
+    const existing = trouverRecurrente(cat)
     if (existing) {
-      await supabase.from('taches').update({ frequence: activantFreq }).eq('id', existing.id)
+      await supabase.from('taches').update({ frequence: activantFreq, catalogue_id: cat.id, duree_minutes: cat.duree_minutes }).eq('id', existing.id)
     } else {
-      await supabase.from('taches').insert({ titre: cat.titre, type: 'recurrente', frequence: activantFreq, actif: true, priorite: 'normale' })
+      await supabase.from('taches').insert({ titre: cat.titre, type: 'recurrente', frequence: activantFreq, actif: true, priorite: 'normale', catalogue_id: cat.id, duree_minutes: cat.duree_minutes })
     }
     setActivantId(null)
     await chargerTaches()
   }
 
   async function desactiverRecurrente(cat: CatItem) {
-    const existing = recurrentes.find(r => r.titre.toLowerCase() === cat.titre.toLowerCase())
+    const existing = trouverRecurrente(cat)
     if (!existing) return
     if (!confirm(`Désactiver la tâche récurrente "${cat.titre}" ?`)) return
     await supabase.from('taches').update({ actif: false }).eq('id', existing.id)
+    await chargerTaches()
+  }
+
+  async function sauvegarderDuree(cat: CatItem, val: string) {
+    const minutes = val === '' ? null : parseInt(val)
+    if (minutes !== null && isNaN(minutes)) return
+    await supabase.from('taches_catalogue').update({ duree_minutes: minutes }).eq('id', cat.id)
+    const existing = trouverRecurrente(cat)
+    if (existing) await supabase.from('taches').update({ duree_minutes: minutes }).eq('id', existing.id)
     await chargerTaches()
   }
 
@@ -1263,10 +1276,15 @@ function TachesPanel() {
       </div>
 
       <div className="flex gap-1.5 overflow-x-auto pb-1">
+        <button onClick={() => setVue('recurrentes')}
+          className={`px-3 py-2 rounded-xl text-xs font-bold whitespace-nowrap border active:scale-95 flex-shrink-0
+            ${vue === 'recurrentes' ? 'bg-green-700 text-white border-green-700' : 'bg-green-50 text-green-700 border-green-200'}`}>
+          🔁 Récurrentes ({recurrentes.length})
+        </button>
         <button onClick={() => setVue('global')}
           className={`px-3 py-2 rounded-xl text-xs font-bold whitespace-nowrap border active:scale-95 flex-shrink-0
             ${vue === 'global' ? 'bg-green-700 text-white border-green-700' : 'bg-gray-50 text-gray-600 border-gray-200'}`}>
-          Global
+          Catalogue
         </button>
         {zones.map(z => (
           <button key={z.id} onClick={() => setVue(z.id)}
@@ -1277,7 +1295,77 @@ function TachesPanel() {
         ))}
       </div>
 
-      {vue === 'global' ? (
+      {vue === 'recurrentes' ? (
+        <div className="space-y-2">
+          {recurrentes.length === 0 ? (
+            <div className="text-center py-8 text-gray-400 text-sm">
+              <div className="text-3xl mb-2">🔁</div>
+              Aucune tâche récurrente active.<br />
+              <span className="text-xs">Activez-en depuis l&apos;onglet Catalogue.</span>
+            </div>
+          ) : recurrentes.map(r => {
+            const cat = catalogue.find(c => c.id === r.catalogue_id || c.titre.toLowerCase() === r.titre.toLowerCase())
+            return (
+              <div key={r.id} className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+                {activantId === r.catalogue_id || activantId === r.id ? (
+                  <div className="p-3 bg-green-50 border border-green-200 space-y-2">
+                    <div className="text-xs font-bold text-green-800">Modifier — {r.titre}</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {FREQ_PRESETS.map(f => (
+                        <button key={f.val} onClick={() => setActivantFreq(f.val)}
+                          className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition-colors
+                            ${activantFreq === f.val ? 'bg-green-700 text-white border-green-700' : 'bg-white text-gray-600 border-gray-200'}`}>
+                          {f.label}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs text-green-700 font-semibold whitespace-nowrap">🕐 Durée estimée :</label>
+                      <input type="number" inputMode="numeric" placeholder="min"
+                        defaultValue={cat?.duree_minutes ?? ''}
+                        onBlur={e => cat && sauvegarderDuree(cat, e.target.value)}
+                        className="w-20 border border-green-200 rounded-lg px-2 py-1 text-xs bg-white focus:outline-none focus:border-green-400" />
+                      <span className="text-xs text-gray-400">min</span>
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={() => cat ? activerRecurrente(cat) : null}
+                        className="flex-1 py-2 bg-green-700 text-white rounded-lg text-xs font-bold active:scale-95">
+                        ✓ Mettre à jour
+                      </button>
+                      <button onClick={() => cat ? desactiverRecurrente(cat) : null}
+                        className="px-3 py-2 bg-red-50 text-red-600 border border-red-200 rounded-lg text-xs font-semibold">
+                        Désactiver
+                      </button>
+                      <button onClick={() => setActivantId(null)}
+                        className="px-3 py-2 border border-gray-200 rounded-lg text-xs text-gray-500">✕</button>
+                    </div>
+                  </div>
+                ) : (
+                  <button onClick={() => { setActivantId(r.catalogue_id || r.id); setActivantFreq(r.frequence || 'quotidien') }}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-left active:bg-gray-50">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-semibold text-gray-800">{r.titre}</div>
+                      {cat?.duree_minutes != null && (
+                        <div className="text-xs text-amber-600 mt-0.5">
+                          🕐 {cat.duree_minutes < 60 ? `${cat.duree_minutes} min estimées` : `${Math.floor(cat.duree_minutes/60)}h${cat.duree_minutes%60>0?cat.duree_minutes%60+'min':''} estimées`}
+                        </div>
+                      )}
+                    </div>
+                    <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-green-100 text-green-700 border border-green-200 shrink-0">
+                      🔁 {r.frequence === 'quotidien' ? 'tous les jours' : r.frequence?.split(',').map(j => j.trim().slice(0,3)).join(' · ') || '—'}
+                    </span>
+                    <span className="text-gray-300 text-sm">›</span>
+                  </button>
+                )}
+              </div>
+            )
+          })}
+          <button onClick={() => setVue('global')}
+            className="w-full py-3 border-2 border-dashed border-gray-200 rounded-xl text-xs text-gray-400 font-semibold active:scale-95 transition-transform">
+            + Ajouter depuis le catalogue
+          </button>
+        </div>
+      ) : vue === 'global' ? (
         <div className="space-y-2">
           {categories.map(cat => {
             const items = catalogue.filter(c => c.categorie === cat)
@@ -1305,7 +1393,7 @@ function TachesPanel() {
                 </div>
 
                 {items.map(c => {
-                  const recurrente = recurrentes.find(r => r.titre.toLowerCase() === c.titre.toLowerCase())
+                  const recurrente = trouverRecurrente(c)
                   return (
                   <div key={c.id}>
                   {editingId === c.id ? (
@@ -1325,7 +1413,12 @@ function TachesPanel() {
                           ${c.active ? 'bg-green-600 border-green-600 text-white' : 'border-gray-300 bg-white'}`}>
                         {c.active ? '✓' : ''}
                       </button>
-                      <span className="text-sm text-gray-800 flex-1 leading-snug">{c.titre}</span>
+                      <div className="flex-1 min-w-0">
+                        <span className="text-sm text-gray-800 leading-snug">{c.titre}</span>
+                        {c.duree_minutes != null && (
+                          <span className="ml-2 text-[10px] text-gray-400">🕐 {c.duree_minutes < 60 ? `${c.duree_minutes}min` : `${Math.floor(c.duree_minutes/60)}h${c.duree_minutes%60>0?c.duree_minutes%60+'':''}` }</span>
+                        )}
+                      </div>
                       {saving === c.id ? <span className="text-xs text-gray-400 animate-pulse">...</span> : <>
                         {/* Badge récurrente ou bouton d'activation */}
                         {recurrente ? (
@@ -1365,6 +1458,14 @@ function TachesPanel() {
                             {f.label}
                           </button>
                         ))}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <label className="text-xs text-green-700 font-semibold whitespace-nowrap">🕐 Durée :</label>
+                        <input type="number" inputMode="numeric" placeholder="min"
+                          defaultValue={c.duree_minutes ?? ''}
+                          onBlur={e => sauvegarderDuree(c, e.target.value)}
+                          className="w-20 border border-green-200 rounded-lg px-2 py-1 text-xs bg-white focus:outline-none focus:border-green-400" />
+                        <span className="text-xs text-gray-400">min</span>
                       </div>
                       <div className="flex gap-2">
                         <button onClick={() => activerRecurrente(c)}

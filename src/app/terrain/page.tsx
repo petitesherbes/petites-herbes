@@ -132,12 +132,22 @@ function prochainStatutCulture(c: Culture): StatutCulture | null {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function tacheEstAujourdHui(t: Tache): boolean {
-  const today = new Date()
-  if (t.type === 'ponctuelle') return t.date_echeance === format(today, 'yyyy-MM-dd')
+  const today    = new Date()
+  const todayStr = format(today, 'yyyy-MM-dd')
+  if (t.type === 'ponctuelle') {
+    if (!t.date_echeance || t.date_echeance > todayStr) return false
+    // Complétée un jour précédent → tâche terminée, ne plus afficher
+    return !(t.completions || []).some(c => c.date_completion < todayStr)
+  }
   if (!t.frequence) return false
   const freq = t.frequence.toLowerCase()
   if (freq === 'quotidien') return true
   return freq.split(',').map(s => s.trim()).includes(JOURS_FR[today.getDay()])
+}
+
+function tacheEstReportee(t: Tache): boolean {
+  const todayStr = format(new Date(), 'yyyy-MM-dd')
+  return t.type === 'ponctuelle' && !!t.date_echeance && t.date_echeance < todayStr
 }
 
 function tacheEstCompleteeAujourdHui(t: Tache): boolean {
@@ -1289,9 +1299,12 @@ function AgendaTab({ taches, zones, especes, catalogueTaches, zoneTaches, onSave
   void tick
 
   const aujTachesRaw = taches.filter(t => tacheEstAujourdHui(t))
-  const aujTaches    = [...aujTachesRaw].sort((a, b) =>
-    (tacheEstCompleteeAujourdHui(a) ? 1 : 0) - (tacheEstCompleteeAujourdHui(b) ? 1 : 0)
-  )
+  const aujTaches    = [...aujTachesRaw].sort((a, b) => {
+    const done = (t: Tache) => tacheEstCompleteeAujourdHui(t) ? 100 : 0
+    const rep  = (t: Tache) => tacheEstReportee(t)             ?   0 : 10
+    const prio = (t: Tache) => t.priorite === 'haute' ? 0 : t.priorite === 'normale' ? 1 : 2
+    return (done(a) + rep(a) + prio(a)) - (done(b) + rep(b) + prio(b))
+  })
   const autresTaches = taches.filter(t => !tacheEstAujourdHui(t))
 
   const todayStr = format(new Date(), 'yyyy-MM-dd')
@@ -1507,6 +1520,11 @@ function AgendaTab({ taches, zones, especes, catalogueTaches, zoneTaches, onSave
                       <span className={`px-1.5 py-0.5 rounded-full border text-[10px] ${prioriteColor(t.priorite)}`}>
                         {t.priorite}
                       </span>
+                      {tacheEstReportee(t) && (
+                        <span className="text-[10px] font-semibold text-orange-600 bg-orange-50 border border-orange-200 px-1.5 py-0.5 rounded-full">
+                          ⚠ reportée
+                        </span>
+                      )}
                       {t.type === 'recurrente' && <span>🔁 {t.frequence === 'quotidien' ? 'tous les jours' : t.frequence?.split(',').map(j => j.trim().slice(0,3)).join('·')}</span>}
                       {t.duree_minutes != null && (
                         <span className="text-amber-600">🕐 {t.duree_minutes < 60 ? `${t.duree_minutes}min` : `${Math.floor(t.duree_minutes/60)}h${t.duree_minutes%60>0?t.duree_minutes%60+'':''}`}</span>
