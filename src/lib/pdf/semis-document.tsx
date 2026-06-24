@@ -168,24 +168,24 @@ export default function SemisDocument({ lignes, dateSemis, templateNom, tapisPar
             <View style={s.table}>
               <View style={s.thead}>
                 <Text style={[s.th, s.colEspece]}>Espèce</Text>
-                <Text style={[s.th, s.colSerie]}></Text>
+                <Text style={[s.th, s.colSerie]}>g/caisse</Text>
                 <Text style={[s.th, s.colSeries]}>Caisses</Text>
-                <Text style={[s.th, s.colTotal]}>Poids graines</Text>
+                <Text style={[s.th, s.colTotal]}>Total</Text>
               </View>
               <View style={s.tbody}>
                 {terreau.map((l, i) => (
                   <View key={i} style={s.tr}>
                     <Text style={[s.td, s.colEspece]}>{l.espece}</Text>
-                    <Text style={[s.td, s.colSerie]}>—</Text>
+                    <Text style={[s.td, s.colSerie]}>{l.poids_serie != null ? `${+(l.poids_serie).toFixed(1)} g` : '—'}</Text>
                     <Text style={[s.td, s.colSeries]}>×{l.quantite}</Text>
-                    <Text style={[s.td, s.colTotal]}>{Math.round(l.poids)} g</Text>
+                    <Text style={[s.td, s.colTotal]}>{+(l.poids).toFixed(1)} g</Text>
                   </View>
                 ))}
                 <View style={s.trTotal}>
                   <Text style={[s.tdBold, s.colEspece]}>TOTAL TERREAU</Text>
                   <Text style={[s.tdBold, s.colSerie]}></Text>
                   <Text style={[s.tdBold, s.colSeries]}>{totalTerreauCaisses}</Text>
-                  <Text style={[s.tdBold, s.colTotal]}>{Math.round(totalTerreauPoids)} g</Text>
+                  <Text style={[s.tdBold, s.colTotal]}>{+(totalTerreauPoids).toFixed(1)} g</Text>
                 </View>
               </View>
             </View>

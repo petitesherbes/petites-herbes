@@ -218,9 +218,7 @@ export default function NouveauSemisPage() {
 
   function especesPourFormat(fmt: Format) {
     return especes.filter(e =>
-      fmt === 'TAPIS'
-        ? e.section === 'TAPIS'
-        : (e.section === 'TERREAU' || e.section === 'GODETS')
+      fmt === 'TAPIS' ? e.section === 'TAPIS' : (e.section === 'TERREAU' || e.section === 'GODETS')
     )
   }
 
@@ -247,9 +245,12 @@ export default function NouveauSemisPage() {
           const esp = l.g_par_unite_override != null
             ? { ...l.espece, g_tapis: l.g_par_unite_override, g_godet: l.g_par_unite_override }
             : l.espece
-          const poids_unite = l.format === 'TAPIS' ? (esp?.g_tapis ?? 0) : l.format === 'GODET' ? (esp?.g_godet ?? 0) : undefined
-          const poids_serie = l.format === 'TAPIS' ? (poids_unite ?? 0) * tpc : l.format === 'GODET' ? (poids_unite ?? 0) * gps : undefined
-          return { espece: l.espece?.nom ?? '', format: l.format, quantite: l.quantite, poids: calculerLigne(l).poids, poids_unite, poids_serie }
+          const totalPoids = calculerLigne(l).poids
+          const poids_unite = l.format === 'TAPIS' ? (esp?.g_tapis ?? undefined) : l.format === 'GODET' ? (esp?.g_godet ?? undefined) : undefined
+          const poids_serie = l.format === 'TAPIS' ? (poids_unite != null ? poids_unite * tpc : undefined)
+            : l.format === 'GODET' ? (poids_unite != null ? poids_unite * gps : undefined)
+            : l.format === 'TERREAU' && l.quantite > 0 ? totalPoids / l.quantite : undefined
+          return { espece: l.espece?.nom ?? '', format: l.format, quantite: l.quantite, poids: totalPoids, poids_unite, poids_serie }
         }),
         dateSemis,
         templateNom: templateChoisi || undefined,
@@ -416,9 +417,12 @@ export default function NouveauSemisPage() {
           const esp = l.g_par_unite_override != null
             ? { ...l.espece, g_tapis: l.g_par_unite_override, g_godet: l.g_par_unite_override }
             : l.espece
-          const poids_unite = l.format === 'TAPIS' ? (esp?.g_tapis ?? 0) : l.format === 'GODET' ? (esp?.g_godet ?? 0) : undefined
-          const poids_serie = l.format === 'TAPIS' ? (poids_unite ?? 0) * tpc2 : l.format === 'GODET' ? (poids_unite ?? 0) * gps2 : undefined
-          return { espece: l.espece?.nom ?? '', format: l.format, quantite: l.quantite, poids: calculerLigne(l).poids, poids_unite, poids_serie }
+          const totalPoids2 = calculerLigne(l).poids
+          const poids_unite = l.format === 'TAPIS' ? (esp?.g_tapis ?? undefined) : l.format === 'GODET' ? (esp?.g_godet ?? undefined) : undefined
+          const poids_serie = l.format === 'TAPIS' ? (poids_unite != null ? poids_unite * tpc2 : undefined)
+            : l.format === 'GODET' ? (poids_unite != null ? poids_unite * gps2 : undefined)
+            : l.format === 'TERREAU' && l.quantite > 0 ? totalPoids2 / l.quantite : undefined
+          return { espece: l.espece?.nom ?? '', format: l.format, quantite: l.quantite, poids: totalPoids2, poids_unite, poids_serie }
         }),
         dateSemis,
         templateNom: templateChoisi || undefined,

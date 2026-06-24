@@ -40,6 +40,7 @@ type Tache = {
   frequence: string | null; date_echeance: string | null
   zone_id: string | null; priorite: string; actif: boolean
   espece_id: string | null; atelier: string | null
+  duree_minutes: number | null; catalogue_id: string | null
   completions?: { date_completion: string; note?: string | null }[]
   temps?: TempsTache[]
   espece?: { nom: string } | null
@@ -1333,7 +1334,7 @@ function AgendaTab({ taches, zones, especes, catalogueTaches, zoneTaches, onSave
   async function ajouterTempsManuel(t: Tache, minutes: number) {
     const todayStr = format(new Date(), 'yyyy-MM-dd')
     const existant = tempsAujourdHui(t)
-    const payload = { tache_id: t.id, date: todayStr, auteur, minutes: (existant?.minutes || 0) + minutes, chrono_debut: existant?.chrono_debut || null }
+    const payload = { tache_id: t.id, date: todayStr, auteur, minutes: Math.max(0, (existant?.minutes || 0) + minutes), chrono_debut: existant?.chrono_debut || null }
     if (!navigator.onLine) {
       await queueMutation({ table: 'taches_temps', method: 'upsert', payload, onConflict: 'tache_id,date,auteur' })
     } else {
@@ -1497,7 +1498,10 @@ function AgendaTab({ taches, zones, especes, catalogueTaches, zoneTaches, onSave
                       <span className={`px-1.5 py-0.5 rounded-full border text-[10px] ${prioriteColor(t.priorite)}`}>
                         {t.priorite}
                       </span>
-                      {t.type === 'recurrente' && <span>🔁 {t.frequence}</span>}
+                      {t.type === 'recurrente' && <span>🔁 {t.frequence === 'quotidien' ? 'tous les jours' : t.frequence?.split(',').map(j => j.trim().slice(0,3)).join('·')}</span>}
+                      {t.duree_minutes != null && (
+                        <span className="text-amber-600">🕐 {t.duree_minutes < 60 ? `${t.duree_minutes}min` : `${Math.floor(t.duree_minutes/60)}h${t.duree_minutes%60>0?t.duree_minutes%60+'':''}`}</span>
+                      )}
                     </div>
                     {/* Temps des autres personnes */}
                     {(t.temps || []).filter(x => x.date === todayStr && x.auteur !== auteur && x.minutes > 0).length > 0 && (
@@ -1595,17 +1599,30 @@ function AgendaTab({ taches, zones, especes, catalogueTaches, zoneTaches, onSave
 
                 {/* Panneau temps */}
                 {tempsOuvert === t.id && !enChrono && (
-                  <div className="mt-2 ml-10 flex items-center gap-2 flex-wrap">
-                    <button onClick={() => { demarrerChrono(t); setTempsOuvert(null) }}
-                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-green-600 text-white text-xs font-bold active:scale-95 transition-transform">
-                      ▶️ Démarrer le chrono
-                    </button>
-                    {[5, 15, 30, 60].map(m => (
-                      <button key={m} onClick={() => { ajouterTempsManuel(t, m); setTempsOuvert(null) }}
-                        className="px-3 py-2 rounded-xl bg-gray-100 text-gray-700 text-xs font-semibold active:scale-95 transition-transform">
-                        +{m} min
+                  <div className="mt-2 ml-10 flex flex-col gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button onClick={() => { demarrerChrono(t); setTempsOuvert(null) }}
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-green-600 text-white text-xs font-bold active:scale-95 transition-transform">
+                        ▶️ Démarrer le chrono
                       </button>
-                    ))}
+                      {[5, 15, 30, 60].map(m => (
+                        <button key={m} onClick={() => { ajouterTempsManuel(t, m); setTempsOuvert(null) }}
+                          className="px-3 py-2 rounded-xl bg-gray-100 text-gray-700 text-xs font-semibold active:scale-95 transition-transform">
+                          +{m} min
+                        </button>
+                      ))}
+                    </div>
+                    {(tempsAujourdHui(t)?.minutes ?? 0) > 0 && (
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs text-gray-400">Soustraire :</span>
+                        {[5, 15, 30].map(m => (
+                          <button key={m} onClick={() => { ajouterTempsManuel(t, -m); setTempsOuvert(null) }}
+                            className="px-3 py-2 rounded-xl bg-red-50 text-red-600 text-xs font-semibold active:scale-95 transition-transform border border-red-100">
+                            -{m} min
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -2926,7 +2943,7 @@ function CulturesTab({ cultures, zones, especes, onSaved }: {
       .from('semis_lignes')
       .select('id, espece_id, format, quantite')
       .in('format', ['TAPIS', 'GODET'])
-      .gt('date_peremption', today)
+      .gte('date_peremption', today)
     if (errL) { setSyncMsg(`Erreur lecture semis: ${errL.message}`); setSyncing(false); return }
     if (!lignes?.length) { setSyncMsg('Aucun semis actif trouvé.'); setSyncing(false); return }
     const payload = (lignes as {id:string;espece_id:string;format:string;quantite:number}[]).map(l => ({

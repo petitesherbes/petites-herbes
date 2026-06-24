@@ -69,8 +69,7 @@ export default function ModifierSemisPage() {
 
   function especesPourFormat(fmt: Format) {
     return especes.filter(e =>
-      fmt === 'TAPIS'   ? e.section === 'TAPIS' :
-      fmt === 'GODET'   ? e.section === 'GODETS' : e.section === 'TERREAU'
+      fmt === 'TAPIS' ? e.section === 'TAPIS' : (e.section === 'TERREAU' || e.section === 'GODETS')
     )
   }
 
