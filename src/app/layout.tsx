@@ -15,6 +15,10 @@ export const metadata: Metadata = {
     statusBarStyle: 'default',
     title: 'Petites Herbes',
   },
+  icons: {
+    apple: '/apple-touch-icon.png',
+    icon:  '/icon-192.png',
+  },
 }
 
 export const viewport: Viewport = {

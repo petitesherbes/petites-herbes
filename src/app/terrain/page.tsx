@@ -1182,6 +1182,7 @@ function AgendaTab({ taches, zones, especes, catalogueTaches, zoneTaches, onSave
   const [editAuteur, setEditAuteur] = useState(false)
   const [auteurDraft, setAuteurDraft] = useState(auteur)
   const [tempsOuvert, setTempsOuvert] = useState<string | null>(null)
+  const [bilanOuvert, setBilanOuvert] = useState(false)
   const [tick, setTick] = useState(0)
 
   // ─── Edition inline ───────────────────────────────────────────────────────────
@@ -1437,9 +1438,17 @@ function AgendaTab({ taches, zones, especes, catalogueTaches, zoneTaches, onSave
               </form>
             )}
           </div>
-          <span className="bg-white/20 text-white text-xs font-bold px-2 py-0.5 rounded-full">
-            {aujTaches.filter(t => !tacheEstCompleteeAujourdHui(t)).length} restantes
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="bg-white/20 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+              {aujTaches.filter(t => !tacheEstCompleteeAujourdHui(t)).length} restantes
+            </span>
+            {aujTaches.length > 0 && (
+              <button onClick={() => setBilanOuvert(true)}
+                className="bg-white text-green-700 text-xs font-bold px-2.5 py-0.5 rounded-full active:scale-95 transition-transform">
+                📋 Bilan
+              </button>
+            )}
+          </div>
         </div>
         <div className="divide-y divide-green-100">
           {aujTaches.length === 0 && (
@@ -1739,6 +1748,95 @@ function AgendaTab({ taches, zones, especes, catalogueTaches, zoneTaches, onSave
           </div>
         )}
       </div>
+
+      {/* ── Modal Bilan du jour ── */}
+      {bilanOuvert && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end" onClick={() => setBilanOuvert(false)}>
+          <div className="bg-white w-full max-w-2xl mx-auto rounded-t-2xl max-h-[88vh] flex flex-col"
+            onClick={e => e.stopPropagation()}>
+
+            {/* Header */}
+            <div className="px-4 py-3 bg-green-700 text-white font-bold text-sm flex justify-between items-center rounded-t-2xl flex-shrink-0">
+              <span>📋 Bilan du jour</span>
+              <button onClick={() => setBilanOuvert(false)} className="text-white/70 text-xl leading-none">✕</button>
+            </div>
+
+            {/* Barre récap */}
+            <div className="px-4 py-2 bg-green-50 border-b border-green-100 flex items-center gap-3 text-xs flex-shrink-0">
+              <span className="text-green-700 font-semibold">
+                ✅ {aujTaches.filter(t => tacheEstCompleteeAujourdHui(t)).length}/{aujTaches.length} faites
+              </span>
+              <span className="text-gray-300">·</span>
+              <span className="text-gray-600 font-semibold">
+                ⏱ {formatDuree(aujTaches.reduce((s, t) => s + (tempsAujourdHui(t)?.minutes || 0), 0))} enregistrées
+              </span>
+            </div>
+
+            {/* Liste des tâches */}
+            <div className="overflow-y-auto flex-1 divide-y divide-gray-100">
+              {aujTaches.map(t => {
+                const faite = tacheEstCompleteeAujourdHui(t)
+                const tt    = tempsAujourdHui(t)
+                const enCh  = !!tt?.chrono_debut
+                const zone  = zones.find(z => z.id === t.zone_id)
+                return (
+                  <div key={t.id} className={`px-4 py-3 ${faite ? 'bg-gray-50/70' : 'bg-white'}`}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <button onClick={() => cocher(t)}
+                        className={`w-6 h-6 rounded-full border-2 flex-shrink-0 flex items-center justify-center text-xs active:scale-95 transition-all
+                          ${faite ? 'bg-green-600 border-green-600 text-white' : 'border-gray-300 bg-white'}`}>
+                        {faite && '✓'}
+                      </button>
+                      <span className={`text-sm font-semibold flex-1 min-w-0 truncate ${faite ? 'line-through text-gray-400' : 'text-gray-800'}`}>
+                        {t.titre}
+                      </span>
+                      {zone && <span className="text-[10px] text-gray-400 shrink-0">{zone.nom}</span>}
+                      {(tt?.minutes ?? 0) > 0 && (
+                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full shrink-0 ${enCh ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'}`}>
+                          ⏱ {formatDuree(tt!.minutes)}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex gap-1.5 ml-8 flex-wrap">
+                      {[15, 30, 60].map(m => (
+                        <button key={m} onClick={() => ajouterTempsManuel(t, m)}
+                          className="px-3 py-1.5 rounded-lg bg-gray-100 text-gray-700 text-xs font-semibold active:scale-95 transition-transform">
+                          +{m < 60 ? `${m}min` : '1h'}
+                        </button>
+                      ))}
+                      {enCh ? (
+                        <button onClick={() => arreterChrono(t)}
+                          className="px-3 py-1.5 rounded-lg bg-amber-500 text-white text-xs font-bold active:scale-95 transition-transform">
+                          ⏹ Stop
+                        </button>
+                      ) : (
+                        <button onClick={() => { demarrerChrono(t); setBilanOuvert(false) }}
+                          className="px-3 py-1.5 rounded-lg bg-green-100 text-green-700 text-xs font-semibold active:scale-95 transition-transform">
+                          ▶ Chrono
+                        </button>
+                      )}
+                      {!faite && (
+                        <button onClick={() => cocher(t)}
+                          className="px-3 py-1.5 rounded-lg bg-green-700 text-white text-xs font-bold active:scale-95 transition-transform ml-auto">
+                          ✓ Fait
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Pied */}
+            <div className="px-4 pt-3 pb-6 border-t border-gray-100 flex-shrink-0">
+              <button onClick={() => setBilanOuvert(false)}
+                className="w-full py-3 bg-green-700 text-white rounded-xl font-bold text-sm active:scale-95 transition-transform">
+                Fermer le bilan
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <button onClick={() => setAjout(!ajout)}
         className="w-full bg-green-700 text-white py-3.5 rounded-xl font-bold text-base active:scale-95 transition-transform">
