@@ -5,7 +5,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { loadFormatColors } from '@/lib/formatColors'
 import { loadTestMode } from '@/lib/testMode'
-import { fetchWithCache, queueMutation, saveCache } from '@/lib/offline'
+import { fetchWithCache, queueMutation, saveCache, loadCache } from '@/lib/offline'
 import { Espece, Template, TemplateLigne, SemisLigneForm, Format, ParametresProduction, Contenant } from '@/types'
 import {
   calculerPoidsGraines, calculerProdEstimee, calculerDates,
@@ -350,8 +350,21 @@ export default function NouveauSemisPage() {
         return { ...e, stock_actuel_g: Math.max(0, e.stock_actuel_g - calculerLigne(ligne).poids) }
       })
       await saveCache('especes', especesUpdated)
+
+      // Mise à jour optimiste du cache historique pour que la redirection affiche le nouveau semis
+      const cacheKey = isTest ? 'semis_complets_test' : 'semis_complets_prod'
+      const semisCache = await loadCache<unknown[]>(cacheKey)
+      const newSemisComplet = {
+        ...semisPayload,
+        semis_lignes: lignesInsert.map(l => ({
+          ...l,
+          espece: especes.find(e => e.id === l.espece_id) ?? null,
+        })),
+      }
+      await saveCache(cacheKey, [newSemisComplet, ...(semisCache ?? [])])
+
       setSaving(false)
-      router.push('/semis/historique')
+      router.push('/historique')
       return
     }
 

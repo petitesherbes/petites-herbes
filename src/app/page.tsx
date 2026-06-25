@@ -48,7 +48,10 @@ export default function AccueilPage() {
   const [caSemaine, setCaSemaine]         = useState<number | null>(null)
   const [mouvements, setMouvements]       = useState<StockMouvement[]>([])
   const [nbClients, setNbClients]         = useState(0)
-  const [tachesAujourdHui, setTachesAujourdHui] = useState<{id:string;titre:string;priorite:string;date_echeance:string|null;completions:{date_completion:string}[]}[]>([])
+  type TacheAujourdHui = {id:string;titre:string;priorite:string;date_echeance:string|null;completions:{date_completion:string}[];temps?:{minutes:number;date:string}[]}
+  const [tachesAujourdHui, setTachesAujourdHui] = useState<TacheAujourdHui[]>([])
+  const [tacheSheetId, setTacheSheetId] = useState<string | null>(null)
+  const [savingTemps, setSavingTemps] = useState(false)
   const [blsSemaine, setBlsSemaine]       = useState<{client:{nom:string}|null;created_at:string;montant:number}[]>([])
   const [pointagesAuj, setPointagesAuj]   = useState<{auteur:string;heure_arrivee:string|null;heure_depart:string|null;pause_minutes:number}[]>([])
   const [alerteGel, setAlerteGel]         = useState<{date:string;tmin:number}[]>([])
@@ -160,7 +163,7 @@ export default function AccueilPage() {
       // Nb clients : live
       supabase.from('clients').select('*', { count: 'exact', head: true }).eq('actif', true).then(r => r.count),
       fetchWithCache('taches', async () => {
-        const { data } = await supabase.from('taches').select('id, titre, priorite, type, frequence, date_echeance, completions:taches_completions(date_completion)').eq('actif', true)
+        const { data } = await supabase.from('taches').select('id, titre, priorite, type, frequence, date_echeance, completions:taches_completions(date_completion), temps:taches_temps(minutes,date)').eq('actif', true)
         return data
       }).then(r => r.data),
       // Pointages du jour : en parallèle avec le reste
@@ -192,7 +195,7 @@ export default function AccueilPage() {
       const todayDate = new Date()
       const todayStr = format(todayDate, 'yyyy-MM-dd')
       const jourFr = ['dimanche','lundi','mardi','mercredi','jeudi','vendredi','samedi'][todayDate.getDay()]
-      const duJour = (tachesData as unknown as {id:string;titre:string;priorite:string;type:string;frequence:string|null;date_echeance:string|null;completions:{date_completion:string}[]}[])
+      const duJour = (tachesData as unknown as {id:string;titre:string;priorite:string;type:string;frequence:string|null;date_echeance:string|null;completions:{date_completion:string}[];temps?:{minutes:number;date:string}[]}[])
         .filter(t => {
           if (t.type === 'ponctuelle') {
             if (!t.date_echeance || t.date_echeance > todayStr) return false
@@ -225,6 +228,22 @@ export default function AccueilPage() {
       await supabase.from('taches_completions').upsert({ tache_id: t.id, date_completion: todayStr }, { onConflict: 'tache_id,date_completion' })
       setTachesAujourdHui(prev => prev.map(x => x.id === t.id ? { ...x, completions: [...x.completions, { date_completion: todayStr }] } : x))
     }
+  }
+
+  async function logguerTempsHome(tacheId: string, minutes: number) {
+    setSavingTemps(true)
+    const todayStr = format(new Date(), 'yyyy-MM-dd')
+    const payload = { tache_id: tacheId, date: todayStr, auteur: 'Antoine', minutes }
+    if (!navigator.onLine) {
+      await queueMutation({ table: 'taches_temps', method: 'insert', payload })
+    } else {
+      await supabase.from('taches_temps').insert(payload)
+    }
+    setTachesAujourdHui(prev => prev.map(t =>
+      t.id === tacheId ? { ...t, temps: [...(t.temps ?? []), { minutes, date: todayStr }] } : t
+    ))
+    // tacheSheet se met à jour automatiquement via tachesAujourdHui
+    setSavingTemps(false)
   }
 
   async function handlePointer(auteur: string, type: 'arrivee' | 'depart') {
@@ -391,19 +410,29 @@ export default function AccueilPage() {
                     {tachesAujourdHui.map(t => {
                       const faite    = t.completions.some(c => c.date_completion === todayStr)
                       const reportee = t.date_echeance && t.date_echeance < todayStr
+                      const minsAuj  = (t.temps ?? []).filter(x => x.date === todayStr).reduce((s, x) => s + x.minutes, 0)
                       return (
-                        <button key={t.id} onClick={() => cocherTacheHome(t)}
-                          className="w-full flex items-center gap-3 px-4 py-2.5 text-left active:bg-amber-100 transition-colors">
-                          <span className={`text-base shrink-0 ${faite ? 'opacity-40' : ''}`}>{faite ? '✅' : '⬜'}</span>
-                          <span className={`text-sm font-semibold flex-1 ${faite ? 'line-through text-gray-400' : 'text-amber-900'}`}>
-                            {t.titre}
-                          </span>
-                          {reportee && !faite && (
-                            <span className="text-[10px] font-semibold text-orange-600 bg-orange-100 px-1.5 py-0.5 rounded-full shrink-0">
-                              ⚠ reportée
+                        <div key={t.id} className="flex items-center gap-2 px-3 py-2.5 active:bg-amber-100 transition-colors">
+                          <button onClick={() => cocherTacheHome(t)} className="shrink-0 p-1">
+                            <span className={`text-base ${faite ? 'opacity-40' : ''}`}>{faite ? '✅' : '⬜'}</span>
+                          </button>
+                          <button onClick={() => setTacheSheetId(t.id)} className="flex-1 flex items-center gap-2 text-left min-w-0">
+                            <span className={`text-sm font-semibold flex-1 truncate ${faite ? 'line-through text-gray-400' : 'text-amber-900'}`}>
+                              {t.titre}
                             </span>
-                          )}
-                        </button>
+                            {minsAuj > 0 && (
+                              <span className="text-[10px] font-semibold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded-full shrink-0">
+                                {minsAuj >= 60 ? `${Math.floor(minsAuj/60)}h${minsAuj%60 > 0 ? String(minsAuj%60).padStart(2,'0') : ''}` : `${minsAuj}min`}
+                              </span>
+                            )}
+                            {reportee && !faite && (
+                              <span className="text-[10px] font-semibold text-orange-600 bg-orange-100 px-1.5 py-0.5 rounded-full shrink-0">
+                                ⚠ reportée
+                              </span>
+                            )}
+                            <span className="text-amber-300 text-xs shrink-0">›</span>
+                          </button>
+                        </div>
                       )
                     })}
                   </div>
@@ -645,6 +674,79 @@ export default function AccueilPage() {
           </div>
         </div>
       </div>
+
+      {/* Sheet détail tâche */}
+      {tacheSheetId && (() => {
+        const t = tachesAujourdHui.find(x => x.id === tacheSheetId)
+        if (!t) return null
+        const faite    = t.completions.some(c => c.date_completion === todayStr)
+        const minsAuj  = (t.temps ?? []).filter(x => x.date === todayStr).reduce((s, x) => s + x.minutes, 0)
+        const reportee = t.date_echeance && t.date_echeance < todayStr
+        return (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-end" onClick={() => setTacheSheetId(null)}>
+            <div className="bg-white w-full max-w-2xl mx-auto rounded-t-3xl shadow-2xl"
+              style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+              onClick={e => e.stopPropagation()}>
+
+              {/* Header */}
+              <div className="flex items-start justify-between px-5 pt-5 pb-4 border-b border-gray-100">
+                <div className="flex-1 min-w-0 pr-3">
+                  <h2 className="font-bold text-gray-900 text-base leading-tight">{t.titre}</h2>
+                  <div className="flex items-center gap-2 mt-1.5">
+                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${t.priorite === 'haute' ? 'bg-red-100 text-red-700' : t.priorite === 'moyenne' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-500'}`}>
+                      {t.priorite}
+                    </span>
+                    {reportee && !faite && <span className="text-[10px] font-semibold text-orange-600 bg-orange-100 px-1.5 py-0.5 rounded-full">⚠ reportée</span>}
+                  </div>
+                </div>
+                <button onClick={() => setTacheSheetId(null)} className="w-9 h-9 flex items-center justify-center rounded-full bg-gray-100 text-gray-500 text-lg shrink-0">✕</button>
+              </div>
+
+              <div className="px-5 py-4 space-y-4">
+                {/* Temps du jour */}
+                <div>
+                  <div className="flex items-baseline gap-2 mb-3">
+                    <div className="text-xs font-bold text-gray-400 uppercase tracking-wider">Temps aujourd&apos;hui</div>
+                    {minsAuj > 0 && (
+                      <div className="text-xl font-bold text-green-700">
+                        {minsAuj >= 60 ? `${Math.floor(minsAuj/60)}h${minsAuj%60 > 0 ? String(minsAuj%60).padStart(2,'0') : ''}` : `${minsAuj}min`}
+                      </div>
+                    )}
+                    {minsAuj === 0 && <div className="text-sm text-gray-300 font-medium">Rien encore</div>}
+                  </div>
+                  <div className="grid grid-cols-4 gap-2">
+                    {[5, 15, 30, 60].map(mins => (
+                      <button key={mins} onClick={() => logguerTempsHome(t.id, mins)}
+                        disabled={savingTemps}
+                        className="py-3 rounded-xl bg-green-50 border border-green-200 text-green-800 font-bold text-sm active:scale-95 transition-transform disabled:opacity-40">
+                        +{mins >= 60 ? '1h' : `${mins}min`}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Statut */}
+                <div>
+                  <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Statut</div>
+                  <button onClick={() => cocherTacheHome(t)}
+                    className={`w-full py-3.5 rounded-xl font-bold text-sm border-2 transition-colors active:scale-95 ${faite ? 'bg-green-50 border-green-400 text-green-700' : 'bg-white border-gray-200 text-gray-600'}`}>
+                    {faite ? '✅ Terminée — annuler' : '⬜ Marquer comme terminée'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="px-5 pb-5 pt-1">
+                <Link href="/terrain"
+                  onClick={() => { setTacheSheetId(null); if (typeof window !== 'undefined') localStorage.setItem('terrain_init_tab', 'agenda') }}
+                  className="block w-full text-center text-sm font-semibold text-green-700 py-2.5 rounded-xl bg-green-50 active:bg-green-100">
+                  Voir l&apos;agenda complet →
+                </Link>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Sheet action ligne production */}
       {ligneSheet && (() => {
