@@ -428,10 +428,10 @@ export default function CommanderPage() {
           return (
             <div key={cat} data-cat={cat} ref={el => { sectionRefs.current[cat] = el }}>
               {/* Titre section sticky */}
-              <div className="sticky z-10 flex items-center gap-2 px-4 py-2.5 bg-cream/95 backdrop-blur border-b border-green-100"
+              <div className="sticky z-10 flex items-center gap-2 px-4 py-1.5 bg-cream/95 backdrop-blur border-b border-green-100"
                 style={{ top: categories.length > 1 ? '88px' : '56px' }}>
-                <span className="text-base">{CAT_EMOJI[cat]}</span>
-                <h2 className="font-serif text-green-900 text-lg flex-1">{CAT_LABEL[cat]}</h2>
+                <span className="text-sm">{CAT_EMOJI[cat]}</span>
+                <h2 className="font-serif text-green-900 text-base flex-1">{CAT_LABEL[cat]}</h2>
                 <span className="text-xs text-green-600/50">{prods.length}</span>
               </div>
 
@@ -441,18 +441,18 @@ export default function CommanderPage() {
                   const qte    = panier[p.id] || 0
                   const epuise = p.quantite_dispo != null && p.quantite_dispo <= 0
                   return (
-                    <div key={p.id} className={`flex items-center gap-3 px-4 py-3 transition-colors
+                    <div key={p.id} className={`flex items-center gap-2.5 px-4 py-2 transition-colors
                       ${qte > 0 ? 'bg-green-50/60' : ''} ${epuise ? 'opacity-50' : ''}`}>
 
                       {/* Thumbnail — tap = fiche */}
                       <button onClick={() => p.description && setFicheId(p.id)}
-                        className={`relative w-[60px] h-[60px] rounded-2xl overflow-hidden bg-gradient-to-br from-green-50 to-green-100 shrink-0 ${p.description ? 'active:scale-95 transition-transform' : ''}`}>
+                        className={`relative w-[48px] h-[48px] rounded-xl overflow-hidden bg-gradient-to-br from-green-50 to-green-100 shrink-0 ${p.description ? 'active:scale-95 transition-transform' : ''}`}>
                         {p.photo_url ? (
                           <Image src={p.photo_url} alt={p.designation} fill
-                            className="object-cover" sizes="60px" />
+                            className="object-cover" sizes="48px" />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center">
-                            <span className="text-3xl opacity-20">{CAT_EMOJI[cat]}</span>
+                            <span className="text-2xl opacity-20">{CAT_EMOJI[cat]}</span>
                           </div>
                         )}
                         {qte > 0 && (
@@ -493,7 +493,7 @@ export default function CommanderPage() {
                           <span className="text-[10px] text-gray-400 font-semibold px-2">N/D</span>
                         ) : qte === 0 ? (
                           <button onClick={() => setQte(p.id, 1)}
-                            className="w-10 h-10 bg-green-700 text-white rounded-2xl text-2xl font-light flex items-center justify-center shadow-sm active:scale-90 transition-transform leading-none">
+                            className="w-9 h-9 bg-green-700 text-white rounded-xl text-xl font-light flex items-center justify-center shadow-sm active:scale-90 transition-transform leading-none">
                             +
                           </button>
                         ) : (
