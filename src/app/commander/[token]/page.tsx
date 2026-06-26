@@ -12,10 +12,17 @@ const CAT_EMOJI: Record<ProduitCategorie, string> = {
   FLEUR:'🌸', LIVRAISON:'🚚', CHAMP:'🌾', AUTRE:'📦',
 }
 const CAT_LABEL: Record<ProduitCategorie, string> = {
-  TAPIS:'Micro-pousses', BARQUETTE:'Barquettes', GODET:'Godets',
-  BOTTE:'Bottes', FLEUR:'Fleurs', LIVRAISON:'Livraison',
+  TAPIS:'Tapis vivants', BARQUETTE:'Barquettes coupées', GODET:'Godets vivants',
+  BOTTE:'Bottes', FLEUR:'Fleurs comestibles', LIVRAISON:'Livraison',
   CHAMP:'Du champ', AUTRE:'Divers',
 }
+
+const SUPER_CATS = [
+  { id: 'MICROPOUSSES', label: 'Micropousses', emoji: '🌱', cats: ['GODET', 'BARQUETTE', 'TAPIS'] as ProduitCategorie[] },
+  { id: 'FLEUR',        label: 'Fleurs',        emoji: '🌸', cats: ['FLEUR'] as ProduitCategorie[] },
+  { id: 'BOTTE',        label: 'Bottes',        emoji: '🌿', cats: ['BOTTE'] as ProduitCategorie[] },
+  { id: 'CHAMP',        label: 'Du champ',      emoji: '🌾', cats: ['CHAMP'] as ProduitCategorie[] },
+]
 
 // getDay() : mardi=2 jeudi=4 vendredi=5
 const JOUR_IDX: Record<string, number> = { mardi: 2, jeudi: 4, vendredi: 5 }
@@ -50,7 +57,7 @@ export default function CommanderPage() {
   const [ecran, setEcran]       = useState<Ecran>('chargement')
   const [sending, setSending]   = useState(false)
   const [blNumero, setBlNumero] = useState('')
-  const [catActive, setCatActive] = useState<ProduitCategorie | null>(null)
+  const [catActive, setCatActive] = useState<string | null>(null)
   const [recurrentes, setRecurrentes] = useState<LigneRecurrente[]>([])
   const [sauvegarde, setSauvegarde]   = useState<'idle'|'saving'|'ok'>('idle')
   const [showSavePrompt, setShowSavePrompt] = useState(false)
@@ -110,7 +117,7 @@ export default function CommanderPage() {
     const observer = new IntersectionObserver(
       entries => {
         for (const e of entries) {
-          if (e.isIntersecting) setCatActive(e.target.getAttribute('data-cat') as ProduitCategorie)
+          if (e.isIntersecting) setCatActive(e.target.getAttribute('data-cat'))
         }
       },
       { rootMargin: '-30% 0px -60% 0px', threshold: 0 }
@@ -125,8 +132,8 @@ export default function CommanderPage() {
     if (btn) btn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
   }, [catActive])
 
-  function scrollTocat(cat: ProduitCategorie) {
-    const el = sectionRefs.current[cat]
+  function scrollTocat(id: string) {
+    const el = sectionRefs.current[id]
     if (!el) return
     window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 172, behavior: 'smooth' })
   }
@@ -319,7 +326,7 @@ export default function CommanderPage() {
   )
 
   // ── Page commande ───────────────────────────────────────────
-  const categories = Array.from(new Set(produits.map(p => p.categorie))) as ProduitCategorie[]
+  const superCatsActives = SUPER_CATS.filter(sc => sc.cats.some(c => produits.some(p => p.categorie === c)))
   const hasHabituelle = recurrentes.length > 0
 
   return (
@@ -362,22 +369,22 @@ export default function CommanderPage() {
           )}
         </div>
 
-        {categories.length > 1 && (
+        {superCatsActives.length > 1 && (
           <div ref={catNavRef}
             className="bg-cream/95 backdrop-blur border-b border-green-100 flex gap-1.5 overflow-x-auto px-3 py-2 no-scrollbar">
-            {categories.map(cat => {
-              const catQte = produits.filter(p => p.categorie === cat).reduce((s, p) => s + (panier[p.id] || 0), 0)
-              const actif  = catActive === cat
+            {superCatsActives.map(sc => {
+              const scQte = sc.cats.reduce((s, c) => s + produits.filter(p => p.categorie === c).reduce((s2, p) => s2 + (panier[p.id] || 0), 0), 0)
+              const actif = catActive === sc.id
               return (
-                <button key={cat} data-cat={cat} onClick={() => scrollTocat(cat)}
+                <button key={sc.id} data-cat={sc.id} onClick={() => scrollTocat(sc.id)}
                   className={`shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-colors
                     ${actif ? 'bg-green-700 text-white' : 'bg-white text-green-800 border border-green-100 active:bg-green-50'}`}>
-                  <span>{CAT_EMOJI[cat]}</span>
-                  <span>{CAT_LABEL[cat]}</span>
-                  {catQte > 0 && (
+                  <span>{sc.emoji}</span>
+                  <span>{sc.label}</span>
+                  {scQte > 0 && (
                     <span className={`ml-0.5 min-w-[16px] h-4 px-1 rounded-full text-[10px] font-bold flex items-center justify-center
                       ${actif ? 'bg-white/30 text-white' : 'bg-green-700 text-white'}`}>
-                      {catQte}
+                      {scQte}
                     </span>
                   )}
                 </button>
@@ -420,102 +427,117 @@ export default function CommanderPage() {
         </div>
       )}
 
-      {/* ── Produits par catégorie — liste compacte ── */}
+      {/* ── Produits par super-catégorie ── */}
       <div className="max-w-lg mx-auto pt-2">
-        {categories.map(cat => {
-          const prods = produits.filter(p => p.categorie === cat)
-          if (prods.length === 0) return null
+        {superCatsActives.map(sc => {
+          const topOffset = superCatsActives.length > 1 ? '88px' : '56px'
           return (
-            <div key={cat} data-cat={cat} ref={el => { sectionRefs.current[cat] = el }}>
-              {/* Titre section sticky */}
-              <div className="sticky z-10 flex items-center gap-2 px-4 py-1.5 bg-cream/95 backdrop-blur border-b border-green-100"
-                style={{ top: categories.length > 1 ? '88px' : '56px' }}>
-                <span className="text-sm">{CAT_EMOJI[cat]}</span>
-                <h2 className="font-serif text-green-900 text-base flex-1">{CAT_LABEL[cat]}</h2>
-                <span className="text-xs text-green-600/50">{prods.length}</span>
+            <div key={sc.id} data-cat={sc.id} ref={el => { sectionRefs.current[sc.id] = el }}>
+              {/* En-tête super-catégorie sticky */}
+              <div className="sticky z-10 flex items-center gap-2 px-4 py-2 bg-green-800"
+                style={{ top: topOffset }}>
+                <span className="text-base">{sc.emoji}</span>
+                <h2 className="font-serif text-white text-base flex-1">{sc.label}</h2>
               </div>
 
-              {/* Grille 2 colonnes */}
-              <div className="grid grid-cols-2 gap-2 p-2">
-                {prods.map(p => {
-                  const qte    = panier[p.id] || 0
-                  const epuise = p.quantite_dispo != null && p.quantite_dispo <= 0
-                  return (
-                    <div key={p.id} className={`rounded-2xl overflow-hidden border transition-colors
-                      ${qte > 0 ? 'border-green-400 bg-green-50/60' : 'border-green-100 bg-white'}
-                      ${epuise ? 'opacity-50' : ''}`}>
-
-                      {/* Photo — tap = fiche */}
-                      <button onClick={() => p.description && setFicheId(p.id)}
-                        className={`relative w-full aspect-[4/3] bg-gradient-to-br from-green-50 to-green-100 block ${p.description ? 'active:opacity-80 transition-opacity' : ''}`}>
-                        {p.photo_url ? (
-                          <Image src={p.photo_url} alt={p.designation} fill
-                            className="object-cover" sizes="50vw" />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center">
-                            <span className="text-3xl opacity-20">{CAT_EMOJI[cat]}</span>
-                          </div>
-                        )}
-                        {qte > 0 && (
-                          <div className="absolute top-1.5 right-1.5 bg-green-700 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center shadow-md">
-                            {qte}
-                          </div>
-                        )}
-                        {p.description && (
-                          <div className="absolute top-1.5 left-1.5 bg-black/30 text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center">ℹ</div>
-                        )}
-                        {epuise && (
-                          <div className="absolute inset-0 bg-white/70 flex items-center justify-center">
-                            <span className="text-[9px] font-bold text-gray-400">Épuisé</span>
-                          </div>
-                        )}
-                      </button>
-
-                      {/* Infos */}
-                      <div className="px-2 pt-1.5 pb-2">
-                        <button onClick={() => p.description && setFicheId(p.id)} className="text-left w-full">
-                          <div className="text-xs font-semibold text-green-900 leading-tight line-clamp-2">
-                            {p.designation}
-                            {p.bio && <span className="ml-1 text-[8px] font-bold text-green-600 bg-green-100 px-1 py-0.5 rounded-full">BIO</span>}
-                          </div>
-                          {p.prix_ht > 0 && (
-                            <div className="text-[11px] text-green-700 font-semibold mt-0.5">
-                              {p.prix_ht.toFixed(2)} €<span className="text-green-500/70 font-normal">/{p.unite}</span>
-                            </div>
-                          )}
-                          {p.quantite_dispo != null && p.quantite_dispo > 0 && p.quantite_dispo <= 5 && (
-                            <div className="text-[10px] font-bold text-orange-500">⚡{p.quantite_dispo} restant{p.quantite_dispo > 1 ? 's' : ''}</div>
-                          )}
-                        </button>
-
-                        {/* Contrôles */}
-                        <div className="mt-1.5">
-                          {epuise ? (
-                            <div className="text-[10px] text-gray-400 font-semibold text-center">Indisponible</div>
-                          ) : qte === 0 ? (
-                            <button onClick={() => setQte(p.id, 1)}
-                              className="w-full h-8 bg-green-700 text-white rounded-xl text-xl font-light flex items-center justify-center shadow-sm active:scale-95 transition-transform">
-                              +
-                            </button>
-                          ) : (
-                            <div className="flex items-center justify-between">
-                              <button onClick={() => setQte(p.id, -1)}
-                                className="w-8 h-8 bg-white border border-green-200 rounded-xl text-green-800 text-lg font-bold flex items-center justify-center active:scale-90 transition-transform shadow-sm">
-                                −
-                              </button>
-                              <span className="font-bold text-green-900 text-sm">{qte}</span>
-                              <button onClick={() => setQte(p.id, 1)}
-                                className="w-8 h-8 bg-green-700 rounded-xl text-white text-lg font-bold flex items-center justify-center active:scale-90 transition-transform shadow-sm">
-                                +
-                              </button>
-                            </div>
-                          )}
-                        </div>
+              {/* Sous-sections (1 par catégorie DB) */}
+              {sc.cats.map(cat => {
+                const prods = produits.filter(p => p.categorie === cat)
+                if (prods.length === 0) return null
+                return (
+                  <div key={cat}>
+                    {/* Sous-titre (uniquement si plusieurs sous-parties) */}
+                    {sc.cats.filter(c => produits.some(p => p.categorie === c)).length > 1 && (
+                      <div className="flex items-center gap-2 px-4 py-1.5 bg-cream/95 backdrop-blur border-b border-green-100 sticky z-[9]"
+                        style={{ top: `calc(${topOffset} + 38px)` }}>
+                        <span className="text-xs">{CAT_EMOJI[cat]}</span>
+                        <span className="text-xs font-semibold text-green-700">{CAT_LABEL[cat]}</span>
+                        <span className="text-xs text-green-500/50 ml-auto">{prods.length}</span>
                       </div>
+                    )}
+
+                    {/* Grille 2 colonnes */}
+                    <div className="grid grid-cols-2 gap-2 p-2">
+                      {prods.map(p => {
+                        const qte    = panier[p.id] || 0
+                        const epuise = p.quantite_dispo != null && p.quantite_dispo <= 0
+                        return (
+                          <div key={p.id} className={`rounded-2xl overflow-hidden border transition-colors
+                            ${qte > 0 ? 'border-green-400 bg-green-50/60' : 'border-green-100 bg-white'}
+                            ${epuise ? 'opacity-50' : ''}`}>
+
+                            {/* Photo — tap = fiche */}
+                            <button onClick={() => p.description && setFicheId(p.id)}
+                              className={`relative w-full aspect-[4/3] bg-gradient-to-br from-green-50 to-green-100 block ${p.description ? 'active:opacity-80 transition-opacity' : ''}`}>
+                              {p.photo_url ? (
+                                <Image src={p.photo_url} alt={p.designation} fill
+                                  className="object-cover" sizes="50vw" />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center">
+                                  <span className="text-3xl opacity-20">{CAT_EMOJI[cat]}</span>
+                                </div>
+                              )}
+                              {qte > 0 && (
+                                <div className="absolute top-1.5 right-1.5 bg-green-700 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center shadow-md">
+                                  {qte}
+                                </div>
+                              )}
+                              {p.description && (
+                                <div className="absolute top-1.5 left-1.5 bg-black/30 text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center">ℹ</div>
+                              )}
+                              {epuise && (
+                                <div className="absolute inset-0 bg-white/70 flex items-center justify-center">
+                                  <span className="text-[9px] font-bold text-gray-400">Épuisé</span>
+                                </div>
+                              )}
+                            </button>
+
+                            {/* Infos */}
+                            <div className="px-2 pt-1.5 pb-2">
+                              <button onClick={() => p.description && setFicheId(p.id)} className="text-left w-full">
+                                <div className="text-xs font-semibold text-green-900 leading-tight line-clamp-2">
+                                  {p.designation}
+                                  {p.bio && <span className="ml-1 text-[8px] font-bold text-green-600 bg-green-100 px-1 py-0.5 rounded-full">BIO</span>}
+                                </div>
+                                {p.prix_ht > 0 && (
+                                  <div className="text-[11px] text-green-700 font-semibold mt-0.5">
+                                    {p.prix_ht.toFixed(2)} €<span className="text-green-500/70 font-normal">/{p.unite}</span>
+                                  </div>
+                                )}
+                                {p.quantite_dispo != null && p.quantite_dispo > 0 && p.quantite_dispo <= 5 && (
+                                  <div className="text-[10px] font-bold text-orange-500">⚡{p.quantite_dispo} restant{p.quantite_dispo > 1 ? 's' : ''}</div>
+                                )}
+                              </button>
+                              <div className="mt-1.5">
+                                {epuise ? (
+                                  <div className="text-[10px] text-gray-400 font-semibold text-center">Indisponible</div>
+                                ) : qte === 0 ? (
+                                  <button onClick={() => setQte(p.id, 1)}
+                                    className="w-full h-8 bg-green-700 text-white rounded-xl text-xl font-light flex items-center justify-center shadow-sm active:scale-95 transition-transform">
+                                    +
+                                  </button>
+                                ) : (
+                                  <div className="flex items-center justify-between">
+                                    <button onClick={() => setQte(p.id, -1)}
+                                      className="w-8 h-8 bg-white border border-green-200 rounded-xl text-green-800 text-lg font-bold flex items-center justify-center active:scale-90 transition-transform shadow-sm">
+                                      −
+                                    </button>
+                                    <span className="font-bold text-green-900 text-sm">{qte}</span>
+                                    <button onClick={() => setQte(p.id, 1)}
+                                      className="w-8 h-8 bg-green-700 rounded-xl text-white text-lg font-bold flex items-center justify-center active:scale-90 transition-transform shadow-sm">
+                                      +
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
                     </div>
-                  )
-                })}
-              </div>
+                  </div>
+                )
+              })}
             </div>
           )
         })}
