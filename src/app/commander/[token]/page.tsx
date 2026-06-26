@@ -153,6 +153,37 @@ export default function CommanderPage() {
     return lignesPanier.some(p => !recurrentes.find(r => r.produit_id === p.id))
   })()
 
+  async function commanderHabituelle() {
+    if (!client || recurrentes.length === 0 || sending) return
+    setSending(true)
+    const res = await fetch(`/api/commander/${token}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        lignes: recurrentes.map(l => ({
+          produit_id: l.produit_id, designation: l.designation,
+          reference: l.reference, quantite: l.quantite,
+          prix_ht: l.prix_ht, tva_pct: l.tva_pct,
+        })),
+        message: '',
+        date_livraison: jourChoisi
+          ? prochaineDate(jourChoisi).toISOString().slice(0, 10)
+          : null,
+      }),
+    })
+    const data = await res.json()
+    setSending(false)
+    if (res.ok) {
+      setBlNumero(data.numero)
+      const p: Panier = {}
+      recurrentes.forEach(l => { p[l.produit_id] = l.quantite })
+      setPanier(p)
+      setEcran('confirmation')
+    } else {
+      alert('Erreur lors de la commande. Veuillez réessayer.')
+    }
+  }
+
   async function sauvegarderHabituelle() {
     setSauvegarde('saving')
     await fetch(`/api/commande-recurrente/${token}`, {
@@ -333,129 +364,145 @@ export default function CommanderPage() {
         {categories.length > 1 && (
           <div ref={catNavRef}
             className="bg-cream/95 backdrop-blur border-b border-green-100 flex gap-1.5 overflow-x-auto px-3 py-2 no-scrollbar">
-            {categories.map(cat => (
-              <button key={cat} data-cat={cat} onClick={() => scrollTocat(cat)}
-                className={`shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-colors
-                  ${catActive === cat ? 'bg-green-700 text-white' : 'bg-white text-green-800 border border-green-100 active:bg-green-50'}`}>
-                <span>{CAT_EMOJI[cat]}</span><span>{CAT_LABEL[cat]}</span>
-              </button>
-            ))}
+            {categories.map(cat => {
+              const catQte = produits.filter(p => p.categorie === cat).reduce((s, p) => s + (panier[p.id] || 0), 0)
+              const actif  = catActive === cat
+              return (
+                <button key={cat} data-cat={cat} onClick={() => scrollTocat(cat)}
+                  className={`shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-colors
+                    ${actif ? 'bg-green-700 text-white' : 'bg-white text-green-800 border border-green-100 active:bg-green-50'}`}>
+                  <span>{CAT_EMOJI[cat]}</span>
+                  <span>{CAT_LABEL[cat]}</span>
+                  {catQte > 0 && (
+                    <span className={`ml-0.5 min-w-[16px] h-4 px-1 rounded-full text-[10px] font-bold flex items-center justify-center
+                      ${actif ? 'bg-white/30 text-white' : 'bg-green-700 text-white'}`}>
+                      {catQte}
+                    </span>
+                  )}
+                </button>
+              )
+            })}
           </div>
         )}
       </div>
 
-      <div className="max-w-lg mx-auto px-4 pt-5 space-y-6">
-
-        {/* ── Bandeau commande habituelle ── */}
-        {hasHabituelle && (
-          <div className="bg-white rounded-2xl border border-green-200 p-4 shadow-sm space-y-3">
-            <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 bg-green-100 rounded-full flex items-center justify-center text-lg shrink-0">🔁</div>
-              <div>
-                <div className="font-serif text-green-900 text-lg leading-tight">Votre commande habituelle</div>
-                <div className="text-xs text-gray-500">{recurrentes.length} produit{recurrentes.length > 1 ? 's' : ''} enregistré{recurrentes.length > 1 ? 's' : ''}</div>
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              {recurrentes.map((l, i) => (
-                <div key={i} className="flex items-center justify-between text-sm">
-                  <span className="text-gray-700">{l.designation}</span>
-                  <span className="font-bold text-green-800 bg-green-50 px-2 py-0.5 rounded-full text-xs">× {l.quantite}</span>
+      {/* ── Bouton 1 clic commande habituelle ── */}
+      {hasHabituelle && (
+        <div className="max-w-lg mx-auto px-4 pt-4">
+          <button onClick={commanderHabituelle} disabled={sending}
+            className="w-full bg-green-800 text-white rounded-2xl shadow-lg active:bg-green-900 disabled:opacity-60 transition-colors overflow-hidden">
+            <div className="flex items-center gap-3 px-4 py-3.5">
+              <span className="text-2xl shrink-0">🔁</span>
+              <div className="flex-1 text-left">
+                <div className="font-bold text-sm leading-tight">
+                  {sending ? 'Envoi en cours…' : 'Commander ma commande habituelle'}
                 </div>
+                <div className="text-green-300 text-xs mt-0.5">
+                  {recurrentes.length} produit{recurrentes.length > 1 ? 's' : ''}
+                  {jourChoisi && ` · livraison ${jourChoisi}`}
+                </div>
+              </div>
+              <span className="text-green-400 text-xl shrink-0">›</span>
+            </div>
+            <div className="px-4 pb-3 flex gap-2 overflow-x-auto no-scrollbar">
+              {recurrentes.map((l, i) => (
+                <span key={i} className="shrink-0 bg-green-700/60 text-white text-[10px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap">
+                  {l.designation} ×{l.quantite}
+                </span>
               ))}
             </div>
-            <button
-              onClick={() => {
-                const p: Panier = {}
-                recurrentes.forEach(l => { p[l.produit_id] = l.quantite })
-                setPanier(p)
-                // scroll vers le bas pour confirmer
-                setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }), 100)
-              }}
-              className="w-full py-3 rounded-xl bg-green-700 text-white font-bold text-sm active:bg-green-800">
-              ✓ Reprendre cette commande
-            </button>
-            <button
-              onClick={() => setPanier({})}
-              className="w-full py-2 rounded-xl text-xs text-gray-400">
-              Repartir de zéro
-            </button>
-          </div>
-        )}
+          </button>
+          <button onClick={() => setPanier({})}
+            className="w-full py-2 text-xs text-green-600/60 text-center mt-1">
+            Ou personnaliser ma commande ↓
+          </button>
+        </div>
+      )}
 
-        {/* ── Produits par catégorie ── */}
+      {/* ── Produits par catégorie — liste compacte ── */}
+      <div className="max-w-lg mx-auto pt-2">
         {categories.map(cat => {
           const prods = produits.filter(p => p.categorie === cat)
           if (prods.length === 0) return null
           return (
             <div key={cat} data-cat={cat} ref={el => { sectionRefs.current[cat] = el }}>
-              <div className="flex items-baseline gap-2 mb-3">
-                <span className="text-lg">{CAT_EMOJI[cat]}</span>
-                <h2 className="font-serif text-green-900 text-xl">{CAT_LABEL[cat]}</h2>
-                <span className="text-xs text-green-600/70 ml-auto">{prods.length} produit{prods.length > 1 ? 's' : ''}</span>
+              {/* Titre section sticky */}
+              <div className="sticky z-10 flex items-center gap-2 px-4 py-2.5 bg-cream/95 backdrop-blur border-b border-green-100"
+                style={{ top: categories.length > 1 ? '88px' : '56px' }}>
+                <span className="text-base">{CAT_EMOJI[cat]}</span>
+                <h2 className="font-serif text-green-900 text-lg flex-1">{CAT_LABEL[cat]}</h2>
+                <span className="text-xs text-green-600/50">{prods.length}</span>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              {/* Lignes produits */}
+              <div className="divide-y divide-green-50/80">
                 {prods.map(p => {
                   const qte    = panier[p.id] || 0
                   const epuise = p.quantite_dispo != null && p.quantite_dispo <= 0
                   return (
-                    <div key={p.id}
-                      className={`bg-white rounded-3xl overflow-hidden border transition-all
-                        ${qte > 0 ? 'border-green-600 shadow-lg shadow-green-900/5' : epuise ? 'border-gray-100 opacity-60' : 'border-green-100/60 shadow-sm'}`}>
+                    <div key={p.id} className={`flex items-center gap-3 px-4 py-3 transition-colors
+                      ${qte > 0 ? 'bg-green-50/60' : ''} ${epuise ? 'opacity-50' : ''}`}>
 
-                      <div className="relative w-full aspect-square bg-gradient-to-br from-green-50 to-green-100 overflow-hidden">
+                      {/* Thumbnail */}
+                      <div className="relative w-[60px] h-[60px] rounded-2xl overflow-hidden bg-gradient-to-br from-green-50 to-green-100 shrink-0">
                         {p.photo_url ? (
                           <Image src={p.photo_url} alt={p.designation} fill
-                            className="object-cover" sizes="(max-width:640px) 45vw, 200px" />
+                            className="object-cover" sizes="60px" />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center">
-                            <span className="text-6xl opacity-25">{CAT_EMOJI[cat]}</span>
+                            <span className="text-3xl opacity-20">{CAT_EMOJI[cat]}</span>
                           </div>
                         )}
-                        {p.bio && (
-                          <div className="absolute top-2 left-2 bg-white/95 text-green-700 text-[9px] font-bold px-2 py-0.5 rounded-full shadow-sm tracking-wide">BIO</div>
-                        )}
                         {qte > 0 && (
-                          <div className="absolute top-2 right-2 bg-green-700 text-white text-sm font-bold w-7 h-7 rounded-full flex items-center justify-center shadow-lg">{qte}</div>
+                          <div className="absolute -top-1 -right-1 bg-green-700 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center shadow-md">
+                            {qte}
+                          </div>
                         )}
                         {epuise && (
-                          <div className="absolute inset-0 bg-white/60 flex items-center justify-center">
-                            <span className="text-xs font-bold text-gray-500 bg-white/90 px-2 py-0.5 rounded-full">Épuisé</span>
+                          <div className="absolute inset-0 bg-white/70 flex items-center justify-center">
+                            <span className="text-[9px] font-bold text-gray-400">Épuisé</span>
                           </div>
                         )}
                       </div>
 
-                      <div className="p-3">
-                        <div className="font-serif text-[15px] text-green-900 leading-snug mb-1">{p.designation}</div>
-                        {p.description && (
-                          <div className="text-[11px] text-gray-400 leading-snug mb-1.5 line-clamp-2">
-                            {p.description.split('💧')[0].trim()}
-                          </div>
-                        )}
-                        <div className="flex items-center justify-between mb-2">
-                          {p.prix_ht > 0
-                            ? <span className="text-sm text-green-700 font-bold">{p.prix_ht.toFixed(2)} €<span className="text-[11px] font-normal text-green-600/70">/{p.unite}</span></span>
-                            : <span />}
+                      {/* Infos */}
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-semibold text-green-900 leading-snug">
+                          {p.designation}
+                          {p.bio && <span className="ml-1.5 text-[9px] font-bold text-green-600 bg-green-100 px-1.5 py-0.5 rounded-full">BIO</span>}
+                        </div>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          {p.prix_ht > 0 && (
+                            <span className="text-xs text-green-700 font-semibold">
+                              {p.prix_ht.toFixed(2)} €<span className="text-green-500/70 font-normal">/{p.unite}</span>
+                            </span>
+                          )}
                           {p.quantite_dispo != null && p.quantite_dispo > 0 && p.quantite_dispo <= 5 && (
-                            <span className="text-[10px] font-bold text-clay">⚡{p.quantite_dispo}</span>
+                            <span className="text-[10px] font-bold text-orange-500">⚡{p.quantite_dispo} restant{p.quantite_dispo > 1 ? 's' : ''}</span>
                           )}
                         </div>
+                      </div>
 
+                      {/* Contrôles */}
+                      <div className="shrink-0">
                         {epuise ? (
-                          <div className="w-full py-2.5 rounded-2xl bg-gray-100 text-gray-400 text-xs font-semibold text-center">Indisponible</div>
+                          <span className="text-[10px] text-gray-400 font-semibold px-2">N/D</span>
                         ) : qte === 0 ? (
                           <button onClick={() => setQte(p.id, 1)}
-                            className="w-full py-2.5 rounded-2xl bg-green-700 text-white text-sm font-bold active:bg-green-800 transition-colors">
-                            + Ajouter
+                            className="w-10 h-10 bg-green-700 text-white rounded-2xl text-2xl font-light flex items-center justify-center shadow-sm active:scale-90 transition-transform leading-none">
+                            +
                           </button>
                         ) : (
-                          <div className="flex items-center justify-between bg-green-50 rounded-2xl p-1 gap-1">
+                          <div className="flex items-center gap-1.5">
                             <button onClick={() => setQte(p.id, -1)}
-                              className="w-10 h-10 flex items-center justify-center bg-white rounded-xl text-green-800 font-bold text-xl shadow-sm active:scale-95 transition-transform">−</button>
-                            <span className="font-bold text-green-900 text-lg min-w-[1.5rem] text-center">{qte}</span>
+                              className="w-9 h-9 bg-white border border-green-200 rounded-xl text-green-800 text-xl font-bold flex items-center justify-center active:scale-90 transition-transform shadow-sm">
+                              −
+                            </button>
+                            <span className="w-6 text-center font-bold text-green-900 text-sm">{qte}</span>
                             <button onClick={() => setQte(p.id, 1)}
-                              className="w-10 h-10 flex items-center justify-center bg-green-700 rounded-xl text-white font-bold text-xl shadow-sm active:bg-green-800 active:scale-95">+</button>
+                              className="w-9 h-9 bg-green-700 rounded-xl text-white text-xl font-bold flex items-center justify-center active:scale-90 transition-transform shadow-sm">
+                              +
+                            </button>
                           </div>
                         )}
                       </div>
@@ -466,6 +513,9 @@ export default function CommanderPage() {
             </div>
           )
         })}
+      </div>
+
+      <div className="max-w-lg mx-auto px-4 pt-5 space-y-6">
 
         {/* Jour de livraison */}
         {(() => {
