@@ -73,6 +73,7 @@ export default function TachesPage() {
   const [bilanOuvert, setBilanOuvert]   = useState(false)
   const [notesJour, setNotesJour]       = useState('')
   const [copie, setCopie]               = useState(false)
+  const [pauseDeduction, setPauseDeduction] = useState(0)
   const [ajoutOuvert, setAjoutOuvert]   = useState(false)
   const [nouvTitre, setNouvTitre]       = useState('')
   const [nouvPriorite, setNouvPriorite] = useState('moyenne')
@@ -237,7 +238,9 @@ export default function TachesPage() {
       txt += `\n⚠ Reportées (${nonFaites.length}) :\n`
       nonFaites.forEach(t => { txt += `• ${t.titre}\n` })
     }
-    if (totalMinsAuj > 0) txt += `\n⏱ Total : ${fmtMins(totalMinsAuj)}`
+    const netMins = Math.max(0, totalMinsAuj - pauseDeduction)
+    if (netMins > 0) txt += `\n⏱ Total : ${fmtMins(netMins)}`
+    if (pauseDeduction > 0) txt += ` (pause déduite : ${fmtMins(pauseDeduction)})`
     return txt
   }
 
@@ -316,7 +319,7 @@ export default function TachesPage() {
 
         {tachesAuj.length > 0 && (
           <div className="fixed bottom-[calc(56px+env(safe-area-inset-bottom))] left-0 right-0 px-4 py-3 z-20 bg-gradient-to-t from-white via-white/90 to-transparent pt-6">
-            <button onClick={() => setBilanOuvert(true)}
+            <button onClick={() => { setBilanOuvert(true); setPauseDeduction(0) }}
               className="w-full max-w-2xl mx-auto block bg-green-800 text-white font-bold py-4 rounded-2xl shadow-xl active:scale-95 transition-transform text-sm">
               📋 Clôturer la journée
             </button>
@@ -772,9 +775,36 @@ export default function TachesPage() {
                     <div className="text-[10px] text-amber-600 font-semibold uppercase">reportées</div>
                   </div>
                   <div className="bg-blue-50 rounded-2xl p-3 text-center">
-                    <div className="text-2xl font-bold text-blue-800">{fmtMins(totalMinsAuj) || '—'}</div>
+                    <div className="text-2xl font-bold text-blue-800">{fmtMins(Math.max(0, totalMinsAuj - pauseDeduction)) || '—'}</div>
                     <div className="text-[10px] text-blue-600 font-semibold uppercase">loggées</div>
                   </div>
+                </div>
+
+                {/* Correcteur de pause */}
+                <div className="bg-gray-50 rounded-2xl p-3 border border-gray-100">
+                  <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">⏸ Déduire une pause oubliée</div>
+                  <div className="flex items-center gap-2">
+                    {[15, 30, 60].map(m => (
+                      <button key={m} onClick={() => setPauseDeduction(d => Math.max(0, d - m))}
+                        className="flex-1 py-1.5 rounded-xl bg-white border border-gray-200 text-xs font-semibold text-gray-600 active:bg-gray-100">
+                        −{m < 60 ? `${m}min` : '1h'}
+                      </button>
+                    ))}
+                    <div className="w-14 text-center font-bold text-sm text-gray-800">
+                      {pauseDeduction > 0 ? `−${fmtMins(pauseDeduction)}` : '0'}
+                    </div>
+                    {[15, 30, 60].map(m => (
+                      <button key={m} onClick={() => setPauseDeduction(d => Math.min(totalMinsAuj, d + m))}
+                        className="flex-1 py-1.5 rounded-xl bg-white border border-gray-200 text-xs font-semibold text-gray-600 active:bg-gray-100">
+                        +{m < 60 ? `${m}min` : '1h'}
+                      </button>
+                    ))}
+                  </div>
+                  {pauseDeduction > 0 && (
+                    <button onClick={() => setPauseDeduction(0)} className="mt-2 text-xs text-gray-400 underline w-full text-center">
+                      Remettre à zéro
+                    </button>
+                  )}
                 </div>
 
                 {/* Résumé auto */}
