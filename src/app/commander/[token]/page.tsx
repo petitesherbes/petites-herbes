@@ -435,30 +435,34 @@ export default function CommanderPage() {
                 <span className="text-xs text-green-600/50">{prods.length}</span>
               </div>
 
-              {/* Lignes produits */}
-              <div className="divide-y divide-green-50/80">
+              {/* Grille 2 colonnes */}
+              <div className="grid grid-cols-2 gap-2 p-2">
                 {prods.map(p => {
                   const qte    = panier[p.id] || 0
                   const epuise = p.quantite_dispo != null && p.quantite_dispo <= 0
                   return (
-                    <div key={p.id} className={`flex items-center gap-2.5 px-4 py-2 transition-colors
-                      ${qte > 0 ? 'bg-green-50/60' : ''} ${epuise ? 'opacity-50' : ''}`}>
+                    <div key={p.id} className={`rounded-2xl overflow-hidden border transition-colors
+                      ${qte > 0 ? 'border-green-400 bg-green-50/60' : 'border-green-100 bg-white'}
+                      ${epuise ? 'opacity-50' : ''}`}>
 
-                      {/* Thumbnail — tap = fiche */}
+                      {/* Photo — tap = fiche */}
                       <button onClick={() => p.description && setFicheId(p.id)}
-                        className={`relative w-[48px] h-[48px] rounded-xl overflow-hidden bg-gradient-to-br from-green-50 to-green-100 shrink-0 ${p.description ? 'active:scale-95 transition-transform' : ''}`}>
+                        className={`relative w-full aspect-[4/3] bg-gradient-to-br from-green-50 to-green-100 block ${p.description ? 'active:opacity-80 transition-opacity' : ''}`}>
                         {p.photo_url ? (
                           <Image src={p.photo_url} alt={p.designation} fill
-                            className="object-cover" sizes="48px" />
+                            className="object-cover" sizes="50vw" />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center">
-                            <span className="text-2xl opacity-20">{CAT_EMOJI[cat]}</span>
+                            <span className="text-3xl opacity-20">{CAT_EMOJI[cat]}</span>
                           </div>
                         )}
                         {qte > 0 && (
-                          <div className="absolute -top-1 -right-1 bg-green-700 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center shadow-md">
+                          <div className="absolute top-1.5 right-1.5 bg-green-700 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center shadow-md">
                             {qte}
                           </div>
+                        )}
+                        {p.description && (
+                          <div className="absolute top-1.5 left-1.5 bg-black/30 text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center">ℹ</div>
                         )}
                         {epuise && (
                           <div className="absolute inset-0 bg-white/70 flex items-center justify-center">
@@ -467,48 +471,46 @@ export default function CommanderPage() {
                         )}
                       </button>
 
-                      {/* Infos — tap nom = fiche */}
-                      <button onClick={() => p.description && setFicheId(p.id)}
-                        className="flex-1 min-w-0 text-left">
-                        <div className="text-sm font-semibold text-green-900 leading-snug">
-                          {p.designation}
-                          {p.bio && <span className="ml-1.5 text-[9px] font-bold text-green-600 bg-green-100 px-1.5 py-0.5 rounded-full">BIO</span>}
-                          {p.description && <span className="ml-1 text-green-400 text-[10px]">ℹ</span>}
-                        </div>
-                        <div className="flex items-center gap-2 mt-0.5">
+                      {/* Infos */}
+                      <div className="px-2 pt-1.5 pb-2">
+                        <button onClick={() => p.description && setFicheId(p.id)} className="text-left w-full">
+                          <div className="text-xs font-semibold text-green-900 leading-tight line-clamp-2">
+                            {p.designation}
+                            {p.bio && <span className="ml-1 text-[8px] font-bold text-green-600 bg-green-100 px-1 py-0.5 rounded-full">BIO</span>}
+                          </div>
                           {p.prix_ht > 0 && (
-                            <span className="text-xs text-green-700 font-semibold">
+                            <div className="text-[11px] text-green-700 font-semibold mt-0.5">
                               {p.prix_ht.toFixed(2)} €<span className="text-green-500/70 font-normal">/{p.unite}</span>
-                            </span>
+                            </div>
                           )}
                           {p.quantite_dispo != null && p.quantite_dispo > 0 && p.quantite_dispo <= 5 && (
-                            <span className="text-[10px] font-bold text-orange-500">⚡{p.quantite_dispo} restant{p.quantite_dispo > 1 ? 's' : ''}</span>
+                            <div className="text-[10px] font-bold text-orange-500">⚡{p.quantite_dispo} restant{p.quantite_dispo > 1 ? 's' : ''}</div>
                           )}
-                        </div>
-                      </button>
+                        </button>
 
-                      {/* Contrôles */}
-                      <div className="shrink-0">
-                        {epuise ? (
-                          <span className="text-[10px] text-gray-400 font-semibold px-2">N/D</span>
-                        ) : qte === 0 ? (
-                          <button onClick={() => setQte(p.id, 1)}
-                            className="w-9 h-9 bg-green-700 text-white rounded-xl text-xl font-light flex items-center justify-center shadow-sm active:scale-90 transition-transform leading-none">
-                            +
-                          </button>
-                        ) : (
-                          <div className="flex items-center gap-1.5">
-                            <button onClick={() => setQte(p.id, -1)}
-                              className="w-9 h-9 bg-white border border-green-200 rounded-xl text-green-800 text-xl font-bold flex items-center justify-center active:scale-90 transition-transform shadow-sm">
-                              −
-                            </button>
-                            <span className="w-6 text-center font-bold text-green-900 text-sm">{qte}</span>
+                        {/* Contrôles */}
+                        <div className="mt-1.5">
+                          {epuise ? (
+                            <div className="text-[10px] text-gray-400 font-semibold text-center">Indisponible</div>
+                          ) : qte === 0 ? (
                             <button onClick={() => setQte(p.id, 1)}
-                              className="w-9 h-9 bg-green-700 rounded-xl text-white text-xl font-bold flex items-center justify-center active:scale-90 transition-transform shadow-sm">
+                              className="w-full h-8 bg-green-700 text-white rounded-xl text-xl font-light flex items-center justify-center shadow-sm active:scale-95 transition-transform">
                               +
                             </button>
-                          </div>
-                        )}
+                          ) : (
+                            <div className="flex items-center justify-between">
+                              <button onClick={() => setQte(p.id, -1)}
+                                className="w-8 h-8 bg-white border border-green-200 rounded-xl text-green-800 text-lg font-bold flex items-center justify-center active:scale-90 transition-transform shadow-sm">
+                                −
+                              </button>
+                              <span className="font-bold text-green-900 text-sm">{qte}</span>
+                              <button onClick={() => setQte(p.id, 1)}
+                                className="w-8 h-8 bg-green-700 rounded-xl text-white text-lg font-bold flex items-center justify-center active:scale-90 transition-transform shadow-sm">
+                                +
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   )
