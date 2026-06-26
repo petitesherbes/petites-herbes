@@ -1080,7 +1080,7 @@ function CahierTab({ zones, especes, especesSerre, produits, entrees, onSaved, o
                           <div className="text-xs text-gray-400 mt-0.5 flex flex-wrap gap-2">
                             {e.zone && <span>📍 {(e.zone as { nom: string }).nom}</span>}
                             {e.quantite && <span>{e.quantite} {e.unite}</span>}
-                            {e.auteur && e.auteur !== 'Moi' && <span>👤 {e.auteur}</span>}
+                            {e.auteur && e.auteur !== 'Moi' && <span>{e.auteur === 'Lucas' ? '🧑‍🌾' : '👨‍🌾'} {e.auteur}</span>}
                             {e.notes && <span className="italic">&ldquo;{e.notes}&rdquo;</span>}
                           </div>
                         </div>
@@ -1153,7 +1153,7 @@ function CahierTab({ zones, especes, especesSerre, produits, entrees, onSaved, o
                           </div>
                           <div className="text-xs text-gray-400 mt-0.5 flex flex-wrap gap-2">
                             {e.quantite && <span>{e.quantite} {e.unite}</span>}
-                            {e.auteur && e.auteur !== 'Moi' && <span>👤 {e.auteur}</span>}
+                            {e.auteur && e.auteur !== 'Moi' && <span>{e.auteur === 'Lucas' ? '🧑‍🌾' : '👨‍🌾'} {e.auteur}</span>}
                             {e.notes && <span className="italic">&ldquo;{e.notes}&rdquo;</span>}
                           </div>
                         </div>
@@ -1440,7 +1440,7 @@ function AgendaTab({ taches, zones, especes, catalogueTaches, zoneTaches, onSave
             {!editAuteur ? (
               <button onClick={() => { setAuteurDraft(auteur); setEditAuteur(true) }}
                 className="bg-white/20 text-white text-xs px-2 py-0.5 rounded-full flex items-center gap-1">
-                👤 {auteur}
+                {auteur === 'Lucas' ? '🧑‍🌾' : '👨‍🌾'} {auteur}
               </button>
             ) : (
               <form onSubmit={e => { e.preventDefault(); const v = auteurDraft.trim(); if (v) { setAuteur(v); localStorage.setItem('terrain_auteur', v) }; setEditAuteur(false) }}
@@ -1722,7 +1722,7 @@ function AgendaTab({ taches, zones, especes, catalogueTaches, zoneTaches, onSave
               <div className="flex flex-wrap gap-3">
                 {Object.entries(tempsParPersonne).sort((a, b) => b[1] - a[1]).map(([nom, min]) => (
                   <div key={nom} className={`flex items-center gap-1.5 text-xs font-semibold ${nom === auteur ? 'text-green-800' : 'text-blue-700'}`}>
-                    <span>{nom === auteur ? '👤' : '🧑‍🌾'} {nom}</span>
+                    <span>{nom === 'Lucas' ? '🧑‍🌾' : '👨‍🌾'} {nom}</span>
                     <span className="bg-white px-1.5 py-0.5 rounded-full border border-current">{formatDuree(min)}</span>
                   </div>
                 ))}
@@ -1741,7 +1741,7 @@ function AgendaTab({ taches, zones, especes, catalogueTaches, zoneTaches, onSave
                   return (
                     <div key={nom}>
                       <div className={`text-xs font-bold mb-1.5 ${nom === auteur ? 'text-green-800' : 'text-blue-700'}`}>
-                        {nom === auteur ? '👤' : '🧑‍🌾'} {nom}
+                        {nom === 'Lucas' ? '🧑‍🌾' : '👨‍🌾'} {nom}
                       </div>
                       <div className="space-y-1">
                         {tachesPersonne.map(({ tache, minutes, chrono }) => (
@@ -2669,7 +2669,7 @@ function HeuresTab({ taches, entrees, zones, pointages, onSaved }: {
             onClick={() => { setAuteur(a); if (typeof window !== 'undefined') localStorage.setItem('terrain_auteur', a) }}
             className={`flex-1 py-3.5 rounded-2xl font-bold text-base border-2 active:scale-95 transition-transform
               ${auteur === a ? 'bg-green-700 text-white border-green-700' : 'bg-white text-gray-600 border-gray-200'}`}>
-            👤 {a}
+            {a === 'Lucas' ? '🧑‍🌾' : '👨‍🌾'} {a}
           </button>
         ))}
       </div>
@@ -2894,7 +2894,7 @@ function HeuresTab({ taches, entrees, zones, pointages, onSaved }: {
         return (
           <div className="rounded-2xl border border-blue-100 overflow-hidden">
             <div className="px-4 py-3 bg-blue-700 text-white font-bold text-sm flex items-center justify-between">
-              <span>👤 Mes tâches — {auteur}</span>
+              <span>{auteur === 'Lucas' ? '🧑‍🌾' : '👨‍🌾'} Mes tâches — {auteur}</span>
               <span className="text-blue-200 text-xs font-normal">{tachesDate.filter(t => aTravaillerSur(t)).length}/{tachesDate.length} sélectionnées</span>
             </div>
             <div className="divide-y divide-blue-50">

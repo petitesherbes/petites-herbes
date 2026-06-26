@@ -50,6 +50,8 @@ export default function NouveauSemisPage() {
   const [editTemplate, setEditTemplate] = useState<Template | null>(null)
   const [editTemplateNom, setEditTemplateNom] = useState('')
   const [savingTemplate, setSavingTemplate] = useState(false)
+  const [ajoutTplFmt, setAjoutTplFmt] = useState<'TAPIS' | 'TERREAU' | 'GODET'>('TAPIS')
+  const [ajoutTplEspId, setAjoutTplEspId] = useState('')
   const [saveAsTemplate, setSaveAsTemplate] = useState(false)
   const [nouveauTemplateName, setNouveauTemplateName] = useState('')
   const [avertissements, setAvertissements] = useState<string[]>([])
@@ -186,6 +188,25 @@ export default function NouveauSemisPage() {
     setTemplates(prev => prev.map(t => t.id === editTemplate?.id
       ? { ...t, templates_lignes: (t.templates_lignes || []).filter(l => l.id !== ligneId) }
       : t))
+  }
+
+  async function ajouterLigneTpl() {
+    if (!editTemplate || !ajoutTplEspId) return
+    setSavingTemplate(true)
+    const ordre = (editTemplate.templates_lignes || []).length
+    const { data } = await supabase.from('templates_lignes')
+      .insert({ template_id: editTemplate.id, espece_id: ajoutTplEspId, format: ajoutTplFmt, quantite: 1, ordre })
+      .select('id, template_id, espece_id, format, quantite, ordre, espece:especes(id, nom, en_taches)')
+      .single()
+    if (data) {
+      const ligne = data as unknown as TemplateLigne
+      setEditTemplate(prev => prev ? { ...prev, templates_lignes: [...(prev.templates_lignes || []), ligne] } : null)
+      setTemplates(prev => prev.map(t => t.id === editTemplate.id
+        ? { ...t, templates_lignes: [...(t.templates_lignes || []), ligne] }
+        : t))
+      setAjoutTplEspId('')
+    }
+    setSavingTemplate(false)
   }
 
   async function changerQteTpl(ligneId: string, nouvelleQte: number) {
@@ -612,6 +633,31 @@ export default function NouveauSemisPage() {
                 <div className="text-sm text-gray-400 text-center py-4">Template vide — supprimez-le ou revenez pour l&apos;utiliser tel quel</div>
               )}
             </div>
+
+            {/* Ajouter une ligne */}
+            <div className="border-t border-gray-100 pt-3 space-y-2">
+              <div className="text-xs font-bold text-gray-400 uppercase tracking-wide">Ajouter une ligne</div>
+              <div className="flex gap-1.5">
+                {(['TAPIS', 'TERREAU', 'GODET'] as const).map(fmt => (
+                  <button key={fmt} onClick={() => setAjoutTplFmt(fmt)}
+                    className={`flex-1 py-2 rounded-lg text-xs font-bold border transition-colors ${ajoutTplFmt === fmt ? 'bg-green-700 text-white border-green-700' : 'bg-white text-gray-500 border-gray-200'}`}>
+                    {fmt === 'TAPIS' ? '🟩' : fmt === 'TERREAU' ? '🟫' : '🟧'} {fmt.toLowerCase()}
+                  </button>
+                ))}
+              </div>
+              <select value={ajoutTplEspId} onChange={e => setAjoutTplEspId(e.target.value)}
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-green-400">
+                <option value="">— Choisir une espèce —</option>
+                {especes.map(e => (
+                  <option key={e.id} value={e.id}>{e.nom}</option>
+                ))}
+              </select>
+              <button onClick={ajouterLigneTpl} disabled={!ajoutTplEspId || savingTemplate}
+                className="w-full py-2.5 bg-green-700 text-white text-sm font-semibold rounded-xl disabled:opacity-40 active:scale-95 transition-transform">
+                {savingTemplate ? '…' : '+ Ajouter'}
+              </button>
+            </div>
+
             <button onClick={supprimerTemplate}
               className="w-full py-2.5 border border-red-100 text-red-400 text-sm rounded-xl active:bg-red-50 transition-colors">
               Supprimer ce template

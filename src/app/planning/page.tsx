@@ -93,6 +93,11 @@ export default function TachesPage() {
   // Bilan
   const [bilanWeekOffset, setBilanWeekOffset] = useState(0)
 
+  // Auteur log temps
+  const [auteurTemps, setAuteurTemps] = useState<string>(
+    typeof window !== 'undefined' ? localStorage.getItem('taches_auteur') || 'Antoine' : 'Antoine'
+  )
+
   const todayStr = format(new Date(), 'yyyy-MM-dd')
 
   useEffect(() => { charger() }, [])
@@ -132,16 +137,24 @@ export default function TachesPage() {
 
   async function logguerTemps(tacheId: string, minutes: number) {
     setSavingTemps(true)
-    const payload = { tache_id: tacheId, date: todayStr, auteur: 'Antoine', minutes }
+    const payload = { tache_id: tacheId, date: todayStr, auteur: auteurTemps, minutes }
     if (!navigator.onLine) {
       await queueMutation({ table: 'taches_temps', method: 'insert', payload })
     } else {
       await supabase.from('taches_temps').insert(payload)
     }
     setTaches(prev => prev.map(t => t.id === tacheId
-      ? { ...t, temps: [...(t.temps ?? []), { id: `tmp-${Date.now()}`, minutes, date: todayStr, auteur: 'Antoine' }] }
+      ? { ...t, temps: [...(t.temps ?? []), { id: `tmp-${Date.now()}`, minutes, date: todayStr, auteur: auteurTemps }] }
       : t))
     setSavingTemps(false)
+  }
+
+  async function supprimerTemps(entryId: string, tacheId: string) {
+    if (entryId.startsWith('tmp-')) return
+    await supabase.from('taches_temps').delete().eq('id', entryId)
+    setTaches(prev => prev.map(t => t.id === tacheId
+      ? { ...t, temps: (t.temps ?? []).filter(x => x.id !== entryId) }
+      : t))
   }
 
   async function ajouterTache() {
@@ -584,14 +597,45 @@ export default function TachesPage() {
               <button onClick={() => setSheetId(null)} className="w-9 h-9 flex items-center justify-center rounded-full bg-gray-100 text-gray-500 text-lg shrink-0">✕</button>
             </div>
             <div className="px-5 py-4 space-y-4">
+              {/* Sélecteur d'auteur */}
               <div>
-                <div className="flex items-baseline gap-3 mb-3">
+                <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Pour qui</div>
+                <div className="flex gap-2">
+                  {(['Antoine', 'Lucas'] as const).map(a => (
+                    <button key={a}
+                      onClick={() => { setAuteurTemps(a); localStorage.setItem('taches_auteur', a) }}
+                      className={`flex-1 py-2.5 rounded-xl text-sm font-bold border-2 transition-colors active:scale-95
+                        ${auteurTemps === a ? 'bg-green-700 text-white border-green-700' : 'bg-white text-gray-500 border-gray-200'}`}>
+                      {a === 'Lucas' ? '🧑‍🌾' : '👨‍🌾'} {a}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Entrées du jour + boutons */}
+              <div>
+                <div className="flex items-baseline gap-3 mb-2">
                   <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Temps aujourd&apos;hui</span>
                   {minsJour(sheetTache, todayStr) > 0 && (
                     <span className="text-xl font-bold text-green-700">{fmtMins(minsJour(sheetTache, todayStr))}</span>
                   )}
                   {minsJour(sheetTache, todayStr) === 0 && <span className="text-sm text-gray-300">Rien encore</span>}
                 </div>
+                {sheetTache.temps.filter(x => x.date === todayStr).length > 0 && (
+                  <div className="space-y-1.5 mb-3">
+                    {sheetTache.temps.filter(x => x.date === todayStr).map(x => (
+                      <div key={x.id} className="flex items-center justify-between bg-gray-50 rounded-xl px-3 py-2">
+                        <span className="text-sm font-semibold text-gray-700">
+                          {x.auteur === 'Lucas' ? '🧑‍🌾' : '👨‍🌾'} {x.auteur} — {fmtMins(x.minutes)}
+                        </span>
+                        <button onClick={() => supprimerTemps(x.id, sheetTache.id)}
+                          className="text-gray-300 text-xl leading-none active:text-red-400 w-8 h-8 flex items-center justify-center rounded-lg">
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <div className="grid grid-cols-4 gap-2">
                   {[5, 15, 30, 60].map(mins => (
                     <button key={mins} onClick={() => logguerTemps(sheetTache.id, mins)} disabled={savingTemps}
