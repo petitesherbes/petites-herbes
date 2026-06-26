@@ -57,14 +57,17 @@ export default function CommanderPage() {
   const [ecran, setEcran]       = useState<Ecran>('chargement')
   const [sending, setSending]   = useState(false)
   const [blNumero, setBlNumero] = useState('')
-  const [catActive, setCatActive] = useState<string | null>(null)
+  const [catActive, setCatActive]       = useState<string | null>(null)
+  const [subCatActive, setSubCatActive] = useState<ProduitCategorie | null>(null)
   const [recurrentes, setRecurrentes] = useState<LigneRecurrente[]>([])
   const [sauvegarde, setSauvegarde]   = useState<'idle'|'saving'|'ok'>('idle')
   const [showSavePrompt, setShowSavePrompt] = useState(false)
   const [jourChoisi, setJourChoisi]   = useState<string | null>(null)
   const [ficheId, setFicheId]         = useState<string | null>(null)
-  const catNavRef    = useRef<HTMLDivElement>(null)
-  const sectionRefs  = useRef<Record<string, HTMLDivElement | null>>({})
+  const catNavRef       = useRef<HTMLDivElement>(null)
+  const subNavRef       = useRef<HTMLDivElement>(null)
+  const sectionRefs     = useRef<Record<string, HTMLDivElement | null>>({})
+  const subSectionRefs  = useRef<Record<string, HTMLDivElement | null>>({})
 
   const charger = useCallback(async () => {
     const { data: c } = await supabase
@@ -132,10 +135,37 @@ export default function CommanderPage() {
     if (btn) btn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
   }, [catActive])
 
+  // Observer sous-sections Micropousses
+  useEffect(() => {
+    if (ecran !== 'commande') return
+    const observer = new IntersectionObserver(
+      entries => {
+        for (const e of entries) {
+          if (e.isIntersecting) setSubCatActive(e.target.getAttribute('data-subcat') as ProduitCategorie)
+        }
+      },
+      { rootMargin: '-30% 0px -60% 0px', threshold: 0 }
+    )
+    Object.values(subSectionRefs.current).forEach(el => { if (el) observer.observe(el) })
+    return () => observer.disconnect()
+  }, [ecran, produits])
+
+  useEffect(() => {
+    if (!subCatActive || !subNavRef.current) return
+    const btn = subNavRef.current.querySelector(`[data-subcat="${subCatActive}"]`) as HTMLElement
+    if (btn) btn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
+  }, [subCatActive])
+
   function scrollTocat(id: string) {
     const el = sectionRefs.current[id]
     if (!el) return
     window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 172, behavior: 'smooth' })
+  }
+
+  function scrollToSubCat(cat: ProduitCategorie) {
+    const el = subSectionRefs.current[cat]
+    if (!el) return
+    window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 162, behavior: 'smooth' })
   }
 
   function setQte(produitId: string, delta: number) {
@@ -369,6 +399,25 @@ export default function CommanderPage() {
           )}
         </div>
 
+        {catActive === 'MICROPOUSSES' && (
+          <div ref={subNavRef}
+            className="bg-green-900/95 backdrop-blur flex gap-1.5 overflow-x-auto px-3 py-1.5 no-scrollbar border-t border-green-700">
+            {(['GODET','BARQUETTE','TAPIS'] as ProduitCategorie[])
+              .filter(c => produits.some(p => p.categorie === c))
+              .map(cat => {
+                const actif = subCatActive === cat
+                return (
+                  <button key={cat} data-subcat={cat} onClick={() => scrollToSubCat(cat)}
+                    className={`shrink-0 flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition-colors
+                      ${actif ? 'bg-white text-green-800' : 'bg-green-700/60 text-green-100 active:bg-green-700'}`}>
+                    <span>{CAT_EMOJI[cat]}</span>
+                    <span>{CAT_LABEL[cat]}</span>
+                  </button>
+                )
+              })}
+          </div>
+        )}
+
         {superCatsActives.length > 1 && (
           <div ref={catNavRef}
             className="bg-cream/95 backdrop-blur border-b border-green-100 flex gap-1.5 overflow-x-auto px-3 py-2 no-scrollbar">
@@ -444,14 +493,15 @@ export default function CommanderPage() {
               {sc.cats.map(cat => {
                 const prods = produits.filter(p => p.categorie === cat)
                 if (prods.length === 0) return null
+                const multiSub = sc.cats.filter(c => produits.some(p => p.categorie === c)).length > 1
                 return (
-                  <div key={cat}>
-                    {/* Sous-titre (uniquement si plusieurs sous-parties) */}
-                    {sc.cats.filter(c => produits.some(p => p.categorie === c)).length > 1 && (
-                      <div className="flex items-center gap-2 px-4 py-1.5 bg-cream/95 backdrop-blur border-b border-green-100 sticky z-[9]"
-                        style={{ top: `calc(${topOffset} + 38px)` }}>
-                        <span className="text-xs">{CAT_EMOJI[cat]}</span>
-                        <span className="text-xs font-semibold text-green-700">{CAT_LABEL[cat]}</span>
+                  <div key={cat} data-subcat={cat}
+                    ref={el => { subSectionRefs.current[cat] = el }}>
+                    {/* Sous-titre simple (non-sticky, le sub-nav en header suffit) */}
+                    {multiSub && (
+                      <div className="flex items-center gap-2 px-4 py-2 border-b border-green-100 bg-green-50/50">
+                        <span className="text-sm">{CAT_EMOJI[cat]}</span>
+                        <span className="text-sm font-semibold text-green-800">{CAT_LABEL[cat]}</span>
                         <span className="text-xs text-green-500/50 ml-auto">{prods.length}</span>
                       </div>
                     )}
