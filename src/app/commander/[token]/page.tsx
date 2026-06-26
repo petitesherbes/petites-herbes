@@ -55,6 +55,7 @@ export default function CommanderPage() {
   const [sauvegarde, setSauvegarde]   = useState<'idle'|'saving'|'ok'>('idle')
   const [showSavePrompt, setShowSavePrompt] = useState(false)
   const [jourChoisi, setJourChoisi]   = useState<string | null>(null)
+  const [ficheId, setFicheId]         = useState<string | null>(null)
   const catNavRef    = useRef<HTMLDivElement>(null)
   const sectionRefs  = useRef<Record<string, HTMLDivElement | null>>({})
 
@@ -443,8 +444,9 @@ export default function CommanderPage() {
                     <div key={p.id} className={`flex items-center gap-3 px-4 py-3 transition-colors
                       ${qte > 0 ? 'bg-green-50/60' : ''} ${epuise ? 'opacity-50' : ''}`}>
 
-                      {/* Thumbnail */}
-                      <div className="relative w-[60px] h-[60px] rounded-2xl overflow-hidden bg-gradient-to-br from-green-50 to-green-100 shrink-0">
+                      {/* Thumbnail — tap = fiche */}
+                      <button onClick={() => p.description && setFicheId(p.id)}
+                        className={`relative w-[60px] h-[60px] rounded-2xl overflow-hidden bg-gradient-to-br from-green-50 to-green-100 shrink-0 ${p.description ? 'active:scale-95 transition-transform' : ''}`}>
                         {p.photo_url ? (
                           <Image src={p.photo_url} alt={p.designation} fill
                             className="object-cover" sizes="60px" />
@@ -463,13 +465,15 @@ export default function CommanderPage() {
                             <span className="text-[9px] font-bold text-gray-400">Épuisé</span>
                           </div>
                         )}
-                      </div>
+                      </button>
 
-                      {/* Infos */}
-                      <div className="flex-1 min-w-0">
+                      {/* Infos — tap nom = fiche */}
+                      <button onClick={() => p.description && setFicheId(p.id)}
+                        className="flex-1 min-w-0 text-left">
                         <div className="text-sm font-semibold text-green-900 leading-snug">
                           {p.designation}
                           {p.bio && <span className="ml-1.5 text-[9px] font-bold text-green-600 bg-green-100 px-1.5 py-0.5 rounded-full">BIO</span>}
+                          {p.description && <span className="ml-1 text-green-400 text-[10px]">ℹ</span>}
                         </div>
                         <div className="flex items-center gap-2 mt-0.5">
                           {p.prix_ht > 0 && (
@@ -481,7 +485,7 @@ export default function CommanderPage() {
                             <span className="text-[10px] font-bold text-orange-500">⚡{p.quantite_dispo} restant{p.quantite_dispo > 1 ? 's' : ''}</span>
                           )}
                         </div>
-                      </div>
+                      </button>
 
                       {/* Contrôles */}
                       <div className="shrink-0">
@@ -565,6 +569,86 @@ export default function CommanderPage() {
           <div className="text-center text-sm text-green-700 font-semibold">✅ Commande habituelle mise à jour</div>
         )}
       </div>
+
+      {/* ── Fiche produit ── */}
+      {ficheId && (() => {
+        const p = produits.find(x => x.id === ficheId)
+        if (!p) return null
+        const qte = panier[p.id] || 0
+        const epuise = p.quantite_dispo != null && p.quantite_dispo <= 0
+        const conservation = p.description?.match(/[💧❄️][\s\S]+/)?.[0] ?? null
+        const descBody = p.description?.replace(/\n*[💧❄️][\s\S]+/, '').trim() ?? ''
+        return (
+          <div className="fixed inset-0 bg-black/60 z-50 flex items-end" onClick={() => setFicheId(null)}>
+            <div className="bg-white w-full max-w-lg mx-auto rounded-t-3xl overflow-hidden shadow-2xl max-h-[88vh] flex flex-col"
+              onClick={e => e.stopPropagation()}>
+              {/* Photo */}
+              <div className="relative w-full aspect-[4/3] bg-gradient-to-br from-green-50 to-green-100 shrink-0">
+                {p.photo_url
+                  ? <Image src={p.photo_url} alt={p.designation} fill className="object-cover" sizes="512px" />
+                  : <div className="w-full h-full flex items-center justify-center text-7xl opacity-15">{CAT_EMOJI[p.categorie]}</div>
+                }
+                <button onClick={() => setFicheId(null)}
+                  className="absolute top-3 right-3 w-8 h-8 bg-black/40 text-white rounded-full flex items-center justify-center text-lg leading-none">
+                  ×
+                </button>
+                {p.bio && (
+                  <div className="absolute top-3 left-3 bg-white/95 text-green-700 text-[10px] font-bold px-2.5 py-1 rounded-full shadow">BIO</div>
+                )}
+              </div>
+
+              {/* Contenu scrollable */}
+              <div className="overflow-y-auto flex-1 px-5 py-4 space-y-4">
+                <div>
+                  <h2 className="font-serif text-green-900 text-xl leading-snug">{p.designation}</h2>
+                  {p.prix_ht > 0 && (
+                    <p className="text-green-700 font-semibold mt-1">
+                      {p.prix_ht.toFixed(2)} €<span className="text-green-500 font-normal text-sm">/{p.unite}</span>
+                    </p>
+                  )}
+                </div>
+
+                {descBody && (
+                  <p className="text-sm text-gray-700 leading-relaxed">{descBody}</p>
+                )}
+
+                {conservation && (
+                  <div className="bg-blue-50 border border-blue-100 rounded-2xl px-4 py-3">
+                    <p className="text-xs text-blue-800 leading-relaxed">{conservation}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Contrôles fixes en bas */}
+              <div className="px-5 py-4 border-t border-gray-100 shrink-0" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}>
+                {epuise ? (
+                  <div className="w-full py-4 rounded-2xl bg-gray-100 text-gray-400 text-sm font-semibold text-center">Indisponible</div>
+                ) : qte === 0 ? (
+                  <button onClick={() => { setQte(p.id, 1); setFicheId(null) }}
+                    className="w-full py-4 rounded-2xl bg-green-700 text-white font-bold text-base active:bg-green-800 shadow-lg">
+                    + Ajouter au panier
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-3">
+                    <button onClick={() => setQte(p.id, -1)}
+                      className="w-14 h-14 bg-gray-100 rounded-2xl text-green-800 text-2xl font-bold flex items-center justify-center active:scale-90 transition-transform">
+                      −
+                    </button>
+                    <div className="flex-1 text-center">
+                      <span className="text-2xl font-bold text-green-900">{qte}</span>
+                      <span className="text-sm text-gray-400 ml-1">{qte > 1 ? p.unite + 's' : p.unite}</span>
+                    </div>
+                    <button onClick={() => setQte(p.id, 1)}
+                      className="w-14 h-14 bg-green-700 rounded-2xl text-white text-2xl font-bold flex items-center justify-center active:scale-90 transition-transform">
+                      +
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* ── Bandeau panier sticky ── */}
       {nbArticles > 0 && (

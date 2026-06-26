@@ -947,6 +947,7 @@ function ProduitModal({ produit, onClose, onSave }: {
     unite:       produit?.unite  || 'unite',
     bio:         produit?.bio ?? false,
     photo_url:   produit?.photo_url || '',
+    description: produit?.description || '',
   })
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -1004,6 +1005,7 @@ function ProduitModal({ produit, onClose, onSave }: {
       unite:       form.unite,
       bio:         form.bio,
       photo_url:   form.photo_url || null,
+      description: form.description || null,
     }
     if (produit) {
       await supabase.from('produits').update(data).eq('id', produit.id)
@@ -1113,6 +1115,20 @@ function ProduitModal({ produit, onClose, onSave }: {
               className="w-5 h-5 accent-green-700" />
             <label htmlFor="bio" className="text-sm font-medium">Certifie BIO*</label>
           </div>
+        </div>
+
+        <div>
+          <label className="text-xs text-gray-500 mb-1 block">Description boutique</label>
+          <textarea
+            value={form.description}
+            onChange={e => setForm(p => ({ ...p, description: e.target.value }))}
+            placeholder={"Saveur, aspect, usage...\n\n💧 Conseil de conservation (sur une nouvelle ligne)"}
+            rows={5}
+            className="w-full border border-gray-200 rounded-lg p-2.5 text-sm resize-none focus:outline-none focus:border-green-400"
+          />
+          <p className="text-[10px] text-gray-400 mt-1">
+            Commencer une ligne par 💧 ou ❄️ pour le conseil de conservation — il s&apos;affiche séparément dans la fiche.
+          </p>
         </div>
 
         <div className="flex gap-2 pt-2">
