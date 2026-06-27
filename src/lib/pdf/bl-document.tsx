@@ -12,7 +12,9 @@ Font.register({
   family: 'Roboto',
   fonts: [
     { src: path.join(FONTS_DIR, 'Roboto.ttf'), fontWeight: 'normal' },
+    { src: path.join(FONTS_DIR, 'Roboto.ttf'), fontWeight: 'normal', fontStyle: 'italic' },
     { src: path.join(FONTS_DIR, 'Roboto-Bold.ttf'), fontWeight: 'bold' },
+    { src: path.join(FONTS_DIR, 'Roboto-Bold.ttf'), fontWeight: 'bold', fontStyle: 'italic' },
   ],
 })
 
