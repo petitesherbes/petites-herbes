@@ -76,14 +76,19 @@ export async function GET(
     })),
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const buffer = await renderToBuffer(React.createElement(BLDocument, { bl, params: params_docs }) as any)
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const buffer = await renderToBuffer(React.createElement(BLDocument, { bl, params: params_docs }) as any)
 
-  return new Response(new Uint8Array(buffer), {
-    status: 200,
-    headers: {
-      'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename="BL-${bl.numero}.pdf"`,
-    },
-  })
+    return new Response(new Uint8Array(buffer), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename="BL-${bl.numero}.pdf"`,
+      },
+    })
+  } catch (e) {
+    console.error('PDF BL generation error:', e)
+    return NextResponse.json({ error: String(e) }, { status: 500 })
+  }
 }
