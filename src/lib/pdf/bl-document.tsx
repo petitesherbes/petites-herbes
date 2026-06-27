@@ -2,19 +2,23 @@
 import React from 'react'
 import { Document, Page, Text, View, StyleSheet, Font, Image } from '@react-pdf/renderer'
 import type { DocumentProps } from '@react-pdf/renderer'
-import path from 'path'
 import { ParamsDocs, BLPDF } from './types'
 
-// Enregistrement des polices (chemin absolu vers public/fonts)
-const FONTS_DIR = path.join(process.cwd(), 'public', 'fonts')
+// Sur Vercel, les polices doivent être chargées via HTTP (pas filesystem)
+function fontUrl(filename: string): string {
+  const base = process.env.NEXT_PUBLIC_VERCEL_URL
+    ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`
+    : 'http://localhost:3000'
+  return `${base}/fonts/${filename}`
+}
 
 Font.register({
   family: 'Roboto',
   fonts: [
-    { src: path.join(FONTS_DIR, 'Roboto.ttf'), fontWeight: 'normal' },
-    { src: path.join(FONTS_DIR, 'Roboto.ttf'), fontWeight: 'normal', fontStyle: 'italic' },
-    { src: path.join(FONTS_DIR, 'Roboto-Bold.ttf'), fontWeight: 'bold' },
-    { src: path.join(FONTS_DIR, 'Roboto-Bold.ttf'), fontWeight: 'bold', fontStyle: 'italic' },
+    { src: fontUrl('Roboto.ttf'), fontWeight: 'normal' },
+    { src: fontUrl('Roboto.ttf'), fontWeight: 'normal', fontStyle: 'italic' },
+    { src: fontUrl('Roboto-Bold.ttf'), fontWeight: 'bold' },
+    { src: fontUrl('Roboto-Bold.ttf'), fontWeight: 'bold', fontStyle: 'italic' },
   ],
 })
 
