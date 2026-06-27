@@ -3,6 +3,10 @@ export interface ParamsDocs {
   adresse: string
   code_postal: string
   ville: string
+  // Adresse d'exploitation (ferme) — si renseignée, utilisée sur les BL à la place du siège
+  adresse_exploitation: string | null
+  code_postal_exploitation: string | null
+  ville_exploitation: string | null
   telephone: string
   email: string
   activite: string
@@ -16,6 +20,7 @@ export interface ParamsDocs {
   bic: string
   titulaire_iban: string
   logo_url: string | null
+  couleur_principale: string | null
   mention_reserve_propriete: string
   mention_article_441: string
   conditions_reglement: string

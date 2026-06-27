@@ -29,6 +29,10 @@ const PARAMS_FALLBACK: ParamsDocs = {
   mention_article_441: "Article D 441-5 du code de commerce : le montant de l'indemnité forfaitaire pour frais de recouvrement due au créancier en cas de retard de paiement est fixée à 40 €.",
   conditions_reglement: 'Comptant à réception de facture',
   delai_paiement_jours: 0,
+  adresse_exploitation: '270 avenue du Caucadis',
+  code_postal_exploitation: '83310',
+  ville_exploitation: 'Grimaud',
+  couleur_principale: '#1B5E20',
   prochain_numero_facture: 485,
 }
 

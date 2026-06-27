@@ -6,40 +6,40 @@ import { ParamsDocs, BLPDF } from './types'
 
 // Polices PDF intégrées — aucun chargement réseau nécessaire
 
-const GREEN = '#1B5E20'
-const LIGHT_GREEN = '#E8F5E9'
 const GRAY = '#666666'
 const LIGHT_GRAY = '#F5F5F5'
 
-const s = StyleSheet.create({
-  page:          { padding: 30, fontSize: 9, fontFamily: 'Helvetica', color: '#333' },
-  headerRow:     { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 },
-  headerLeft:    { flex: 1 },
-  headerRight:   { alignItems: 'flex-end' },
-  companyName:   { fontSize: 14, fontWeight: 'bold', color: GREEN, marginBottom: 3 },
-  companyLine:   { fontSize: 8.5, color: GRAY, marginBottom: 1.5 },
-  companyActiv:  { fontSize: 8, color: '#888', fontFamily: 'Helvetica-Oblique', marginTop: 3 },
-  docLabel:      { fontSize: 8, color: GRAY, textTransform: 'uppercase', letterSpacing: 1 },
-  docNumero:     { fontSize: 18, fontWeight: 'bold', color: GREEN, marginTop: 2 },
-  docDate:       { fontSize: 8.5, color: GRAY, marginTop: 2 },
-  separator:     { borderBottomWidth: 1.5, borderBottomColor: GREEN, marginBottom: 14 },
-  clientBox:     { backgroundColor: LIGHT_GRAY, padding: 10, marginBottom: 10, borderRadius: 3 },
-  clientName:    { fontSize: 9.5, fontWeight: 'bold', marginBottom: 2 },
-  clientLine:    { fontSize: 8.5, color: GRAY, marginBottom: 1 },
-  livLabel:      { fontSize: 7.5, color: '#999', marginBottom: 10 },
-  tableHeader:   { flexDirection: 'row', borderBottomWidth: 1.5, borderBottomColor: '#222', paddingBottom: 4, marginBottom: 2 },
-  thRef:         { width: 60, fontSize: 8, fontWeight: 'bold', color: GRAY },
-  thDesig:       { flex: 1, fontSize: 8, fontWeight: 'bold', color: GRAY },
-  thQte:         { width: 40, fontSize: 8, fontWeight: 'bold', color: GRAY, textAlign: 'right' },
-  row:           { flexDirection: 'row', paddingVertical: 3.5 },
-  rowAlt:        { backgroundColor: LIGHT_GRAY },
-  tdRef:         { width: 60, fontSize: 8, color: '#999' },
-  tdDesig:       { flex: 1, fontSize: 8.5 },
-  tdQte:         { width: 40, fontSize: 8.5, fontWeight: 'bold', textAlign: 'right' },
-  footer:        { position: 'absolute', bottom: 20, left: 30, right: 30, borderTopWidth: 0.5, borderTopColor: '#ccc', paddingTop: 6 },
-  footerText:    { fontSize: 7, color: '#aaa', textAlign: 'center', lineHeight: 1.6 },
-  logo:          { width: 60, height: 30, objectFit: 'contain', marginBottom: 4 },
-})
+function makeStyles(green: string) {
+  return StyleSheet.create({
+    page:        { padding: 30, fontSize: 9, fontFamily: 'Helvetica', color: '#333' },
+    headerRow:   { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 },
+    headerLeft:  { flex: 1 },
+    headerRight: { alignItems: 'flex-end' },
+    companyName: { fontSize: 14, fontWeight: 'bold', color: green, marginBottom: 3 },
+    companyLine: { fontSize: 8.5, color: GRAY, marginBottom: 1.5 },
+    companyActiv:{ fontSize: 8, color: '#888', fontFamily: 'Helvetica-Oblique', marginTop: 3 },
+    docLabel:    { fontSize: 8, color: GRAY, textTransform: 'uppercase', letterSpacing: 1 },
+    docNumero:   { fontSize: 18, fontWeight: 'bold', color: green, marginTop: 2 },
+    docDate:     { fontSize: 8.5, color: GRAY, marginTop: 2 },
+    separator:   { borderBottomWidth: 1.5, borderBottomColor: green, marginBottom: 14 },
+    clientBox:   { backgroundColor: LIGHT_GRAY, padding: 10, marginBottom: 10, borderRadius: 3 },
+    clientName:  { fontSize: 9.5, fontWeight: 'bold', marginBottom: 2 },
+    clientLine:  { fontSize: 8.5, color: GRAY, marginBottom: 1 },
+    livLabel:    { fontSize: 7.5, color: '#999', marginBottom: 10 },
+    tableHeader: { flexDirection: 'row', borderBottomWidth: 1.5, borderBottomColor: '#222', paddingBottom: 4, marginBottom: 2 },
+    thRef:       { width: 60, fontSize: 8, fontWeight: 'bold', color: GRAY },
+    thDesig:     { flex: 1, fontSize: 8, fontWeight: 'bold', color: GRAY },
+    thQte:       { width: 40, fontSize: 8, fontWeight: 'bold', color: GRAY, textAlign: 'right' },
+    row:         { flexDirection: 'row', paddingVertical: 3.5 },
+    rowAlt:      { backgroundColor: LIGHT_GRAY },
+    tdRef:       { width: 60, fontSize: 8, color: '#999' },
+    tdDesig:     { flex: 1, fontSize: 8.5 },
+    tdQte:       { width: 40, fontSize: 8.5, fontWeight: 'bold', textAlign: 'right' },
+    footer:      { position: 'absolute', bottom: 20, left: 30, right: 30, borderTopWidth: 0.5, borderTopColor: '#ccc', paddingTop: 6 },
+    footerText:  { fontSize: 7, color: '#aaa', textAlign: 'center', lineHeight: 1.6 },
+    logo:        { width: 60, height: 30, objectFit: 'contain', marginBottom: 4 },
+  })
+}
 
 interface Props {
   bl: BLPDF
@@ -47,10 +47,19 @@ interface Props {
 }
 
 export default function BLDocument({ bl, params }: Props): React.ReactElement<DocumentProps, any> {
+  const green = params.couleur_principale || '#1B5E20'
+  const s = makeStyles(green)
+
   const dateFormatee = new Date(bl.date_livraison).toLocaleDateString('fr-FR', {
     day: '2-digit', month: '2-digit', year: '2-digit'
   })
 
+  // Adresse affichée dans l'en-tête : exploitation si renseignée, sinon siège
+  const adrPrincipale  = params.adresse_exploitation  || params.adresse
+  const cpPrincipal    = params.code_postal_exploitation || params.code_postal
+  const villePrincipale = params.ville_exploitation   || params.ville
+
+  // Pied de page toujours avec le siège légal
   const ligneAdresse = [
     bl.client.adresse,
     [bl.client.code_postal, bl.client.ville].filter(Boolean).join(' '),
@@ -58,7 +67,7 @@ export default function BLDocument({ bl, params }: Props): React.ReactElement<Do
   ].filter(Boolean).join(', ')
 
   const footerLine1 = `${params.nom} - ${params.adresse} - ${params.code_postal} ${params.ville.toUpperCase()}`
-  const footerLine2 = `Au capital de ${params.capital}€ - RCS ${params.rcs} N°SIRET : ${params.siret} - TVA Intra. : ${params.tva_intra} - APE/NAF : ${params.ape_naf}${params.certification_bio ? `\n* Certifié par ${params.certification_bio}` : ''}`
+  const footerLine2 = `Au capital de ${params.capital}€ - RCS ${params.rcs} N°SIRET : ${params.siret} - TVA Intra. : ${params.tva_intra} - APE/NAF : ${params.ape_naf}${params.certification_bio ? ` * Certifié par ${params.certification_bio}` : ''}`
 
   return (
     <Document creator="GAEC Les Petites Herbes" producer="Petites Herbes App">
@@ -69,8 +78,8 @@ export default function BLDocument({ bl, params }: Props): React.ReactElement<Do
           <View style={s.headerLeft}>
             {params.logo_url && <Image src={params.logo_url} style={s.logo} />}
             <Text style={s.companyName}>{params.nom}</Text>
-            <Text style={s.companyLine}>{params.adresse}</Text>
-            <Text style={s.companyLine}>{params.code_postal} {params.ville}</Text>
+            <Text style={s.companyLine}>{adrPrincipale}</Text>
+            <Text style={s.companyLine}>{cpPrincipal} {villePrincipale}</Text>
             <Text style={s.companyLine}>Tél : {params.telephone}</Text>
             <Text style={s.companyLine}>Email : {params.email}</Text>
             {params.activite && <Text style={s.companyActiv}>{params.activite}</Text>}
@@ -116,7 +125,7 @@ export default function BLDocument({ bl, params }: Props): React.ReactElement<Do
           </View>
         ))}
 
-        {/* Pied de page fixe */}
+        {/* Pied de page fixe — siège légal */}
         <View style={s.footer} fixed>
           <Text style={s.footerText}>{footerLine1}</Text>
           <Text style={s.footerText}>{footerLine2}</Text>

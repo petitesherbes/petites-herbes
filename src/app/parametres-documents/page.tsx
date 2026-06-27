@@ -6,9 +6,13 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import type { ParamsDocs } from '@/lib/pdf/types'
 
-type Form = Omit<ParamsDocs, 'prochain_numero_facture' | 'logo_url' | 'delai_paiement_jours'> & {
+type Form = Omit<ParamsDocs, 'prochain_numero_facture' | 'logo_url' | 'delai_paiement_jours' | 'couleur_principale' | 'adresse_exploitation' | 'code_postal_exploitation' | 'ville_exploitation'> & {
   prochain_numero_facture: string
   delai_paiement_jours: string
+  couleur_principale: string
+  adresse_exploitation: string
+  code_postal_exploitation: string
+  ville_exploitation: string
 }
 
 const DEFAUT: Form = {
@@ -16,6 +20,9 @@ const DEFAUT: Form = {
   adresse: '15 rue François Arago',
   code_postal: '83310',
   ville: 'Cogolin',
+  adresse_exploitation: '270 avenue du Caucadis',
+  code_postal_exploitation: '83310',
+  ville_exploitation: 'Grimaud',
   telephone: '06 09 93 75 89 / 07 71 63 16 53',
   email: 'petitesherbes@gmail.com',
   activite: 'Producteur de micro pousses, plantes aromatiques et médicinales',
@@ -28,6 +35,7 @@ const DEFAUT: Form = {
   iban: 'FR76 1027 8091 1400 0203 1770 467',
   bic: 'CMCIFR2A',
   titulaire_iban: 'GAEC Les Petites Herbes',
+  couleur_principale: '#1B5E20',
   mention_reserve_propriete: "En application de la loi n° 80335 du 12 mai 1980 relative aux clauses de réserve de propriété dans les contrats de vente, les produits vendus restent notre propriété jusqu'à paiement complet de la facture.",
   mention_article_441: "Article D 441-5 du code de commerce : le montant de l'indemnité forfaitaire pour frais de recouvrement due au créancier en cas de retard de paiement est fixée à 40 €. Cette indemnité sera due de plein droit et sans formalités par le professionnel en situation de retard. Escompte pour paiement anticipé : néant.",
   conditions_reglement: 'Comptant à réception de facture',
@@ -59,6 +67,9 @@ export default function ParametresDocumentsPage() {
         adresse: data.adresse || '',
         code_postal: data.code_postal || '',
         ville: data.ville || '',
+        adresse_exploitation: data.adresse_exploitation || '',
+        code_postal_exploitation: data.code_postal_exploitation || '',
+        ville_exploitation: data.ville_exploitation || '',
         telephone: data.telephone || '',
         email: data.email || '',
         activite: data.activite || '',
@@ -71,6 +82,7 @@ export default function ParametresDocumentsPage() {
         iban: data.iban || '',
         bic: data.bic || '',
         titulaire_iban: data.titulaire_iban || '',
+        couleur_principale: data.couleur_principale || '#1B5E20',
         mention_reserve_propriete: data.mention_reserve_propriete || '',
         mention_article_441: data.mention_article_441 || '',
         conditions_reglement: data.conditions_reglement || '',
@@ -103,6 +115,10 @@ export default function ParametresDocumentsPage() {
       logo_url: logoUrl,
       delai_paiement_jours: parseInt(form.delai_paiement_jours) || 0,
       prochain_numero_facture: parseInt(form.prochain_numero_facture) || 485,
+      adresse_exploitation: form.adresse_exploitation || null,
+      code_postal_exploitation: form.code_postal_exploitation || null,
+      ville_exploitation: form.ville_exploitation || null,
+      couleur_principale: form.couleur_principale || null,
       updated_at: new Date().toISOString(),
     }
     if (rowId) {
@@ -213,14 +229,45 @@ export default function ParametresDocumentsPage() {
           </div>
 
           {input('Nom *', 'nom', 'GAEC Les Petites Herbes')}
-          {input('Adresse', 'adresse', '15 rue François Arago')}
-          <div className="grid grid-cols-2 gap-3">
-            {input('Code postal', 'code_postal', '83310')}
-            {input('Ville', 'ville', 'Cogolin')}
+
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-3">
+            <div className="text-xs font-semibold text-amber-800">🏛 Siège social (mentions légales)</div>
+            {input('Adresse siège', 'adresse', '15 rue François Arago')}
+            <div className="grid grid-cols-2 gap-3">
+              {input('Code postal', 'code_postal', '83310')}
+              {input('Ville', 'ville', 'Cogolin')}
+            </div>
           </div>
+
+          <div className="bg-green-50 border border-green-200 rounded-xl p-3 space-y-3">
+            <div className="text-xs font-semibold text-green-800">🌱 Adresse d&apos;exploitation (ferme) — affichée sur les BL</div>
+            <div className="text-xs text-green-600">Laissez vide pour utiliser l&apos;adresse du siège sur les BL.</div>
+            {input('Adresse ferme', 'adresse_exploitation', '270 avenue du Caucadis')}
+            <div className="grid grid-cols-2 gap-3">
+              {input('Code postal', 'code_postal_exploitation', '83310')}
+              {input('Ville', 'ville_exploitation', 'Grimaud')}
+            </div>
+          </div>
+
           {input('Téléphone', 'telephone', '06 09 93 75 89')}
           {input('Email', 'email', 'petitesherbes@gmail.com', 'email')}
           {textarea('Activité (ligne sous le nom)', 'activite', 2)}
+
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Couleur principale des documents</label>
+            <div className="flex items-center gap-3">
+              <input type="color" value={form.couleur_principale}
+                onChange={e => setForm(f => ({ ...f, couleur_principale: e.target.value }))}
+                className="w-12 h-10 rounded-lg border border-gray-200 cursor-pointer p-0.5" />
+              <input type="text" value={form.couleur_principale}
+                onChange={e => setForm(f => ({ ...f, couleur_principale: e.target.value }))}
+                placeholder="#1B5E20"
+                className="flex-1 border border-gray-200 rounded-lg p-2.5 text-sm font-mono focus:outline-none focus:border-green-400" />
+              <button onClick={() => setForm(f => ({ ...f, couleur_principale: '#1B5E20' }))}
+                className="text-xs text-gray-400 hover:text-gray-600 px-2">Réinit.</button>
+            </div>
+            <div className="mt-2 h-6 rounded-lg" style={{ backgroundColor: form.couleur_principale }} />
+          </div>
         </div>
       )}
 
