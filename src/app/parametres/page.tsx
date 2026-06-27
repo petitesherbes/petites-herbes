@@ -159,6 +159,7 @@ function ReglagesPanel({ router, tapis, setTapis, godets, setGodets, sauvegarder
 
   const sections = [
     { key: 'production', icon: '📦', label: 'Production',      desc: 'Séries, coûts, stock' },
+    { key: 'documents',  icon: '📄', label: 'Documents & BL',  desc: 'Logo, adresse, couleur, mentions légales' },
     { key: 'affichage',  icon: '🎨', label: 'Affichage',       desc: 'Couleurs, navigation' },
     { key: 'comm',       icon: '📧', label: 'Communication',   desc: 'Email récapitulatif' },
     { key: 'export',     icon: '💾', label: 'Export données',  desc: 'CSV, sauvegarde' },
@@ -212,6 +213,21 @@ function ReglagesPanel({ router, tapis, setTapis, godets, setGodets, sauvegarder
                       <span className="font-medium text-green-800 text-xs">🌾 Stock & produits</span>
                       <span className="text-green-600">›</span>
                     </button>
+                  </div>
+                </div>
+              )}
+              {s.key === 'documents'  && (
+                <div className="p-4 space-y-2">
+                  <button onClick={() => router.push('/parametres-documents')}
+                    className="w-full flex items-center justify-between px-4 py-3 bg-green-50 border border-green-200 rounded-xl active:bg-green-100 transition-colors">
+                    <div className="text-left">
+                      <div className="font-semibold text-green-900 text-sm">⚙️ Paramètres documents</div>
+                      <div className="text-xs text-green-600 mt-0.5">Logo, adresse ferme, couleur, mentions légales</div>
+                    </div>
+                    <span className="text-green-500 text-lg">›</span>
+                  </button>
+                  <div className="bg-gray-50 rounded-xl px-4 py-3 text-xs text-gray-500 leading-relaxed">
+                    Configurez l&apos;en-tête de vos bons de livraison : logo, adresse d&apos;exploitation, couleur principale, et toutes les mentions légales.
                   </div>
                 </div>
               )}
