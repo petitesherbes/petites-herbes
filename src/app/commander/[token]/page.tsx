@@ -64,6 +64,7 @@ export default function CommanderPage() {
   const [showSavePrompt, setShowSavePrompt] = useState(false)
   const [jourChoisi, setJourChoisi]   = useState<string | null>(null)
   const [ficheId, setFicheId]         = useState<string | null>(null)
+  const [showCommanderModal, setShowCommanderModal] = useState(false)
   const catNavRef       = useRef<HTMLDivElement>(null)
   const subNavRef       = useRef<HTMLDivElement>(null)
   const sectionRefs     = useRef<Record<string, HTMLDivElement | null>>({})
@@ -594,42 +595,6 @@ export default function CommanderPage() {
       </div>
 
       <div className="max-w-lg mx-auto px-4 pt-5 space-y-6">
-
-        {/* Jour de livraison */}
-        {(() => {
-          const joursDispo = (client?.jours_livraison?.length ? client.jours_livraison : TOUS_JOURS) as string[]
-          return (
-            <div>
-              <label className="block font-serif text-green-900 text-lg mb-2.5">📅 Jour de livraison</label>
-              <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${joursDispo.length}, 1fr)` }}>
-                {joursDispo.map(j => (
-                  <button key={j} onClick={() => setJourChoisi(j)}
-                    className={`py-3 px-2 rounded-2xl border-2 text-center transition-colors
-                      ${jourChoisi === j
-                        ? 'border-green-600 bg-green-50'
-                        : 'border-green-100 bg-white active:bg-green-50'}`}>
-                    <div className={`text-sm font-bold capitalize ${jourChoisi === j ? 'text-green-800' : 'text-gray-600'}`}>
-                      {j}
-                    </div>
-                    <div className={`text-[11px] mt-0.5 ${jourChoisi === j ? 'text-green-600' : 'text-gray-400'}`}>
-                      {prochaineDate(j).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )
-        })()}
-
-        {/* Message libre */}
-        <div>
-          <label className="block font-serif text-green-900 text-lg mb-2.5">Un mot pour nous ?</label>
-          <textarea value={message} onChange={e => setMessage(e.target.value)}
-            placeholder="Instructions particulières, heure préférée..."
-            rows={3}
-            className="w-full border-2 border-green-100 rounded-2xl p-3 text-sm focus:border-green-600 focus:outline-none resize-none bg-white" />
-        </div>
-
         {produits.length === 0 && (
           <div className="text-center py-14 text-gray-400">
             <div className="text-5xl mb-3">🌱</div>
@@ -637,8 +602,6 @@ export default function CommanderPage() {
             <p className="text-xs mt-1 text-gray-400">Aucun produit disponible pour le moment. Revenez bientôt !</p>
           </div>
         )}
-
-        {/* Indicateur sauvegarde */}
         {sauvegarde === 'ok' && (
           <div className="text-center text-sm text-green-700 font-semibold">✅ Commande habituelle mise à jour</div>
         )}
@@ -724,6 +687,84 @@ export default function CommanderPage() {
         )
       })()}
 
+      {/* ── Modal confirmation commande ── */}
+      {showCommanderModal && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-end" onClick={() => setShowCommanderModal(false)}>
+          <div className="bg-white w-full max-w-lg mx-auto rounded-t-3xl shadow-2xl overflow-hidden"
+            onClick={e => e.stopPropagation()}>
+
+            {/* Poignée */}
+            <div className="flex justify-center pt-3 pb-1">
+              <div className="w-10 h-1 bg-gray-200 rounded-full" />
+            </div>
+
+            <div className="px-5 pb-2 pt-1">
+              <h2 className="font-serif text-green-900 text-xl">Valider la commande</h2>
+            </div>
+
+            {/* Récap panier */}
+            <div className="px-5 pb-3 max-h-36 overflow-y-auto">
+              {lignesPanier.map(p => (
+                <div key={p.id} className="flex justify-between items-center py-1.5 border-b border-gray-50 last:border-0">
+                  <span className="text-sm text-gray-800 leading-tight">
+                    {p.designation}{p.bio && <span className="ml-1 text-[10px] font-bold text-green-600">BIO</span>}
+                  </span>
+                  <span className="text-sm font-bold text-green-800 ml-2 shrink-0">× {panier[p.id]}</span>
+                </div>
+              ))}
+              {totalHT > 0 && (
+                <div className="flex justify-between items-center pt-2 mt-1">
+                  <span className="text-xs text-gray-400">Total HT</span>
+                  <span className="text-base font-bold text-green-800">{totalHT.toFixed(2)} €</span>
+                </div>
+              )}
+            </div>
+
+            <div className="px-5 pb-3 space-y-4 border-t border-gray-100 pt-4">
+              {/* Jour de livraison */}
+              {(() => {
+                const joursDispo = (client?.jours_livraison?.length ? client.jours_livraison : TOUS_JOURS) as string[]
+                return (
+                  <div>
+                    <label className="block text-sm font-semibold text-green-900 mb-2">📅 Jour de livraison</label>
+                    <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${joursDispo.length}, 1fr)` }}>
+                      {joursDispo.map(j => (
+                        <button key={j} onClick={() => setJourChoisi(j)}
+                          className={`py-2.5 px-2 rounded-xl border-2 text-center transition-colors
+                            ${jourChoisi === j
+                              ? 'border-green-600 bg-green-50'
+                              : 'border-green-100 bg-white active:bg-green-50'}`}>
+                          <div className={`text-xs font-bold capitalize ${jourChoisi === j ? 'text-green-800' : 'text-gray-600'}`}>{j}</div>
+                          <div className={`text-[10px] mt-0.5 ${jourChoisi === j ? 'text-green-600' : 'text-gray-400'}`}>
+                            {prochaineDate(j).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })()}
+
+              {/* Note */}
+              <div>
+                <label className="block text-sm font-semibold text-green-900 mb-2">Un mot pour nous ? <span className="font-normal text-gray-400">(facultatif)</span></label>
+                <textarea value={message} onChange={e => setMessage(e.target.value)}
+                  placeholder="Heure préférée, instructions particulières…"
+                  rows={2}
+                  className="w-full border-2 border-green-100 rounded-xl p-3 text-sm focus:border-green-600 focus:outline-none resize-none bg-white" />
+              </div>
+
+              {/* Bouton confirmer */}
+              <button onClick={() => { setShowCommanderModal(false); commander() }} disabled={sending}
+                className="w-full bg-green-800 text-white py-4 rounded-2xl font-bold text-base shadow-lg disabled:opacity-60 active:bg-green-900"
+                style={{ marginBottom: 'env(safe-area-inset-bottom)' }}>
+                {sending ? 'Envoi en cours…' : `✓ Confirmer — ${totalHT > 0 ? totalHT.toFixed(2) + ' €' : lignesPanier.length + ' produit' + (lignesPanier.length > 1 ? 's' : '')}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Bandeau panier sticky ── */}
       {nbArticles > 0 && (
         <div className="fixed bottom-0 left-0 right-0 px-4 pb-6 pt-2 bg-gradient-to-t from-cream via-cream/90 to-transparent">
@@ -736,10 +777,10 @@ export default function CommanderPage() {
                 {sauvegarde === 'saving' ? 'Sauvegarde…' : '💾 Mettre à jour ma commande habituelle'}
               </button>
             )}
-            <button onClick={commander} disabled={sending}
+            <button onClick={() => setShowCommanderModal(true)} disabled={sending}
               className="w-full bg-green-800 text-white py-4 rounded-2xl font-bold text-base shadow-2xl disabled:opacity-60 flex items-center justify-between px-5 active:bg-green-900">
               <span className="bg-green-600 text-white text-sm font-bold w-8 h-8 rounded-full flex items-center justify-center shrink-0">{nbArticles}</span>
-              <span className="flex-1 text-center">{sending ? 'Envoi en cours...' : 'Commander maintenant'}</span>
+              <span className="flex-1 text-center">Commander maintenant</span>
               {totalHT > 0
                 ? <span className="text-green-200 font-semibold text-sm shrink-0">{totalHT.toFixed(2)} €</span>
                 : <span className="w-8" />}
