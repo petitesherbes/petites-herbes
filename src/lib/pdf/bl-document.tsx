@@ -6,8 +6,8 @@ import { ParamsDocs, BLPDF } from './types'
 
 // Sur Vercel, les polices doivent être chargées via HTTP (pas filesystem)
 function fontUrl(filename: string): string {
-  const base = process.env.NEXT_PUBLIC_VERCEL_URL
-    ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`
+  const base = process.env.VERCEL_URL
+    ? `https://${process.env.VERCEL_URL}`
     : 'http://localhost:3000'
   return `${base}/fonts/${filename}`
 }
