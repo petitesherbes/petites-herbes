@@ -1,26 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React from 'react'
-import { Document, Page, Text, View, StyleSheet, Font, Image } from '@react-pdf/renderer'
+import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer'
 import type { DocumentProps } from '@react-pdf/renderer'
 import { ParamsDocs, BLPDF } from './types'
 
-// Sur Vercel, les polices doivent être chargées via HTTP (pas filesystem)
-function fontUrl(filename: string): string {
-  const base = process.env.VERCEL_URL
-    ? `https://${process.env.VERCEL_URL}`
-    : 'http://localhost:3000'
-  return `${base}/fonts/${filename}`
-}
-
-Font.register({
-  family: 'Roboto',
-  fonts: [
-    { src: fontUrl('Roboto.ttf'), fontWeight: 'normal' },
-    { src: fontUrl('Roboto.ttf'), fontWeight: 'normal', fontStyle: 'italic' },
-    { src: fontUrl('Roboto-Bold.ttf'), fontWeight: 'bold' },
-    { src: fontUrl('Roboto-Bold.ttf'), fontWeight: 'bold', fontStyle: 'italic' },
-  ],
-})
+// Polices PDF intégrées — aucun chargement réseau nécessaire
 
 const GREEN = '#1B5E20'
 const LIGHT_GREEN = '#E8F5E9'
@@ -28,13 +12,13 @@ const GRAY = '#666666'
 const LIGHT_GRAY = '#F5F5F5'
 
 const s = StyleSheet.create({
-  page:          { padding: 30, fontSize: 9, fontFamily: 'Roboto', color: '#333' },
+  page:          { padding: 30, fontSize: 9, fontFamily: 'Helvetica', color: '#333' },
   headerRow:     { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 },
   headerLeft:    { flex: 1 },
   headerRight:   { alignItems: 'flex-end' },
   companyName:   { fontSize: 14, fontWeight: 'bold', color: GREEN, marginBottom: 3 },
   companyLine:   { fontSize: 8.5, color: GRAY, marginBottom: 1.5 },
-  companyActiv:  { fontSize: 8, color: '#888', fontStyle: 'italic', marginTop: 3 },
+  companyActiv:  { fontSize: 8, color: '#888', fontFamily: 'Helvetica-Oblique', marginTop: 3 },
   docLabel:      { fontSize: 8, color: GRAY, textTransform: 'uppercase', letterSpacing: 1 },
   docNumero:     { fontSize: 18, fontWeight: 'bold', color: GREEN, marginTop: 2 },
   docDate:       { fontSize: 8.5, color: GRAY, marginTop: 2 },
