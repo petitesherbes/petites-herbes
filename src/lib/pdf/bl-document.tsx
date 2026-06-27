@@ -6,38 +6,66 @@ import { ParamsDocs, BLPDF } from './types'
 
 // Polices PDF intégrées — aucun chargement réseau nécessaire
 
-const GRAY = '#666666'
-const LIGHT_GRAY = '#F5F5F5'
+const GRAY  = '#555555'
+const LGRAY = '#F4F4F4'
 
 function makeStyles(green: string) {
   return StyleSheet.create({
-    page:        { padding: 30, fontSize: 9, fontFamily: 'Helvetica', color: '#333' },
-    headerRow:   { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 },
-    headerLeft:  { flex: 1 },
-    headerRight: { alignItems: 'flex-end' },
-    companyName: { fontSize: 14, fontWeight: 'bold', color: green, marginBottom: 3 },
-    companyLine: { fontSize: 8.5, color: GRAY, marginBottom: 1.5 },
-    companyActiv:{ fontSize: 8, color: '#888', fontFamily: 'Helvetica-Oblique', marginTop: 3 },
-    docLabel:    { fontSize: 8, color: GRAY, textTransform: 'uppercase', letterSpacing: 1 },
-    docNumero:   { fontSize: 18, fontWeight: 'bold', color: green, marginTop: 2 },
-    docDate:     { fontSize: 8.5, color: GRAY, marginTop: 2 },
-    separator:   { borderBottomWidth: 1.5, borderBottomColor: green, marginBottom: 14 },
-    clientBox:   { backgroundColor: LIGHT_GRAY, padding: 10, marginBottom: 10, borderRadius: 3 },
-    clientName:  { fontSize: 9.5, fontWeight: 'bold', marginBottom: 2 },
-    clientLine:  { fontSize: 8.5, color: GRAY, marginBottom: 1 },
-    livLabel:    { fontSize: 7.5, color: '#999', marginBottom: 10 },
-    tableHeader: { flexDirection: 'row', borderBottomWidth: 1.5, borderBottomColor: '#222', paddingBottom: 4, marginBottom: 2 },
-    thRef:       { width: 60, fontSize: 8, fontWeight: 'bold', color: GRAY },
-    thDesig:     { flex: 1, fontSize: 8, fontWeight: 'bold', color: GRAY },
-    thQte:       { width: 40, fontSize: 8, fontWeight: 'bold', color: GRAY, textAlign: 'right' },
-    row:         { flexDirection: 'row', paddingVertical: 3.5 },
-    rowAlt:      { backgroundColor: LIGHT_GRAY },
-    tdRef:       { width: 60, fontSize: 8, color: '#999' },
-    tdDesig:     { flex: 1, fontSize: 8.5 },
-    tdQte:       { width: 40, fontSize: 8.5, fontWeight: 'bold', textAlign: 'right' },
-    footer:      { position: 'absolute', bottom: 20, left: 30, right: 30, borderTopWidth: 0.5, borderTopColor: '#ccc', paddingTop: 6 },
-    footerText:  { fontSize: 7, color: '#aaa', textAlign: 'center', lineHeight: 1.6 },
-    logo:        { width: 60, height: 30, objectFit: 'contain', marginBottom: 4 },
+    page:       { fontFamily: 'Helvetica', fontSize: 9, color: '#333', backgroundColor: '#fff' },
+
+    // ── Bandeau supérieur coloré ──────────────────────────────────
+    topBand:    { backgroundColor: green, height: 5 },
+
+    // ── En-tête ──────────────────────────────────────────────────
+    header:     { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingHorizontal: 28, paddingTop: 18, paddingBottom: 14 },
+    headerLeft: { flex: 1, flexDirection: 'column' },
+    logo:       { width: 110, height: 55, objectFit: 'contain', marginBottom: 8 },
+    logoPlaceholder: { width: 0, height: 0 },
+    companyName:{ fontSize: 13, fontFamily: 'Helvetica-Bold', color: green, marginBottom: 2 },
+    companyLine:{ fontSize: 8, color: GRAY, marginBottom: 1.5, lineHeight: 1.4 },
+    companyActiv:{ fontSize: 7.5, color: '#888', fontFamily: 'Helvetica-Oblique', marginTop: 3 },
+
+    // Bloc BL (droite)
+    headerRight:{ alignItems: 'flex-end', minWidth: 120 },
+    blBadge:    { backgroundColor: green, borderRadius: 3, paddingHorizontal: 10, paddingVertical: 4, marginBottom: 6 },
+    blBadgeText:{ fontSize: 8, color: '#fff', fontFamily: 'Helvetica-Bold', textTransform: 'uppercase', letterSpacing: 1 },
+    blNumero:   { fontSize: 22, fontFamily: 'Helvetica-Bold', color: green, marginBottom: 2 },
+    blDate:     { fontSize: 8.5, color: GRAY },
+
+    // ── Séparateur ───────────────────────────────────────────────
+    sep:        { borderBottomWidth: 1, borderBottomColor: green, marginHorizontal: 28, marginBottom: 14 },
+
+    // ── Corps ────────────────────────────────────────────────────
+    body:       { paddingHorizontal: 28 },
+    twoCol:     { flexDirection: 'row', gap: 12, marginBottom: 12 },
+    clientBox:  { flex: 1, backgroundColor: LGRAY, borderRadius: 4, padding: 10 },
+    clientLabel:{ fontSize: 7, color: green, fontFamily: 'Helvetica-Bold', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 5 },
+    clientName: { fontSize: 10, fontFamily: 'Helvetica-Bold', marginBottom: 3 },
+    clientLine: { fontSize: 8, color: GRAY, marginBottom: 1.5 },
+
+    livBox:     { flex: 1, borderWidth: 1, borderColor: '#ddd', borderRadius: 4, padding: 10 },
+    livLabel:   { fontSize: 7, color: GRAY, fontFamily: 'Helvetica-Bold', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 5 },
+    livLine:    { fontSize: 8, color: GRAY, marginBottom: 1.5 },
+
+    // ── Tableau produits ─────────────────────────────────────────
+    tableHead:  { flexDirection: 'row', backgroundColor: green, borderRadius: 3, paddingVertical: 5, paddingHorizontal: 8, marginBottom: 1 },
+    thRef:      { width: 55, fontSize: 7.5, fontFamily: 'Helvetica-Bold', color: '#fff' },
+    thDesig:    { flex: 1, fontSize: 7.5, fontFamily: 'Helvetica-Bold', color: '#fff' },
+    thQte:      { width: 36, fontSize: 7.5, fontFamily: 'Helvetica-Bold', color: '#fff', textAlign: 'right' },
+    row:        { flexDirection: 'row', paddingVertical: 4, paddingHorizontal: 8 },
+    rowAlt:     { backgroundColor: LGRAY },
+    tdRef:      { width: 55, fontSize: 8, color: '#999' },
+    tdDesig:    { flex: 1, fontSize: 8.5 },
+    tdQte:      { width: 36, fontSize: 8.5, fontFamily: 'Helvetica-Bold', textAlign: 'right', color: green },
+    rowDivider: { borderBottomWidth: 0.5, borderBottomColor: '#e8e8e8', marginHorizontal: 8 },
+
+    // ── Pied de page fixe ────────────────────────────────────────
+    footer:     { position: 'absolute', bottom: 0, left: 0, right: 0 },
+    footerBand: { backgroundColor: green, height: 3 },
+    footerBody: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 28, paddingVertical: 6, borderTopWidth: 0.5, borderTopColor: '#ddd', gap: 8 },
+    footerLogo: { width: 28, height: 14, objectFit: 'contain', opacity: 0.7 },
+    footerText: { flex: 1, fontSize: 6.5, color: '#aaa', lineHeight: 1.6 },
+    pageNum:    { fontSize: 7, color: '#bbb', textAlign: 'right' },
   })
 }
 
@@ -51,84 +79,109 @@ export default function BLDocument({ bl, params }: Props): React.ReactElement<Do
   const s = makeStyles(green)
 
   const dateFormatee = new Date(bl.date_livraison).toLocaleDateString('fr-FR', {
-    day: '2-digit', month: '2-digit', year: '2-digit'
+    weekday: 'long', day: '2-digit', month: 'long', year: 'numeric'
   })
 
-  // Adresse affichée dans l'en-tête : exploitation si renseignée, sinon siège
-  const adrPrincipale  = params.adresse_exploitation  || params.adresse
-  const cpPrincipal    = params.code_postal_exploitation || params.code_postal
-  const villePrincipale = params.ville_exploitation   || params.ville
+  // Adresse d'exploitation sur le BL, siège en pied de page légal
+  const adrBL  = params.adresse_exploitation  || params.adresse
+  const cpBL   = params.code_postal_exploitation || params.code_postal
+  const vilBL  = params.ville_exploitation   || params.ville
 
-  // Pied de page toujours avec le siège légal
-  const ligneAdresse = [
-    bl.client.adresse,
-    [bl.client.code_postal, bl.client.ville].filter(Boolean).join(' '),
-    bl.client.pays && bl.client.pays !== 'FRANCE' ? bl.client.pays : null,
-  ].filter(Boolean).join(', ')
-
-  const footerLine1 = `${params.nom} - ${params.adresse} - ${params.code_postal} ${params.ville.toUpperCase()}`
-  const footerLine2 = `Au capital de ${params.capital}€ - RCS ${params.rcs} N°SIRET : ${params.siret} - TVA Intra. : ${params.tva_intra} - APE/NAF : ${params.ape_naf}${params.certification_bio ? ` * Certifié par ${params.certification_bio}` : ''}`
+  const footerLegal = [
+    `${params.nom} — ${params.adresse}, ${params.code_postal} ${params.ville.toUpperCase()}`,
+    `SIRET : ${params.siret}  ·  TVA : ${params.tva_intra}  ·  RCS ${params.rcs}  ·  APE ${params.ape_naf}`,
+    params.certification_bio ? `Certifié Agriculture Biologique : ${params.certification_bio}` : '',
+  ].filter(Boolean).join('\n')
 
   return (
     <Document creator="GAEC Les Petites Herbes" producer="Petites Herbes App">
       <Page size="A4" style={s.page}>
 
-        {/* En-tête */}
-        <View style={s.headerRow}>
+        {/* Bandeau couleur haut */}
+        <View style={s.topBand} fixed />
+
+        {/* ── En-tête ── */}
+        <View style={s.header}>
           <View style={s.headerLeft}>
-            {params.logo_url && <Image src={params.logo_url} style={s.logo} />}
+            {params.logo_url
+              ? <Image src={params.logo_url} style={s.logo} />
+              : null
+            }
             <Text style={s.companyName}>{params.nom}</Text>
-            <Text style={s.companyLine}>{adrPrincipale}</Text>
-            <Text style={s.companyLine}>{cpPrincipal} {villePrincipale}</Text>
-            <Text style={s.companyLine}>Tél : {params.telephone}</Text>
-            <Text style={s.companyLine}>Email : {params.email}</Text>
-            {params.activite && <Text style={s.companyActiv}>{params.activite}</Text>}
+            <Text style={s.companyLine}>{adrBL}</Text>
+            <Text style={s.companyLine}>{cpBL} {vilBL}</Text>
+            <Text style={s.companyLine}>Tél. {params.telephone}</Text>
+            <Text style={s.companyLine}>{params.email}</Text>
+            {params.activite ? <Text style={s.companyActiv}>{params.activite}</Text> : null}
           </View>
+
           <View style={s.headerRight}>
-            <Text style={s.docLabel}>Bon de livraison</Text>
-            <Text style={s.docNumero}>N° {bl.numero}</Text>
-            <Text style={s.docDate}>Le : {dateFormatee}</Text>
+            <View style={s.blBadge}><Text style={s.blBadgeText}>Bon de livraison</Text></View>
+            <Text style={s.blNumero}>N° {bl.numero}</Text>
+            <Text style={s.blDate}>{dateFormatee}</Text>
           </View>
         </View>
 
-        <View style={s.separator} />
+        <View style={s.sep} />
 
-        {/* Bloc client */}
-        <View style={s.clientBox}>
-          <Text style={s.clientName}>{bl.client.nom}</Text>
-          {bl.client.adresse && <Text style={s.clientLine}>{bl.client.adresse}</Text>}
-          {(bl.client.code_postal || bl.client.ville) && (
-            <Text style={s.clientLine}>{bl.client.code_postal} {bl.client.ville}</Text>
-          )}
-          <Text style={s.clientLine}>{bl.client.pays || 'FRANCE'}</Text>
-          {bl.client.tva_intra && <Text style={[s.clientLine, { marginTop: 2 }]}>{bl.client.tva_intra}</Text>}
-          {bl.client.siret && <Text style={s.clientLine}>{bl.client.siret}</Text>}
-        </View>
+        {/* ── Corps ── */}
+        <View style={s.body}>
 
-        {/* Adresse de livraison */}
-        <Text style={s.livLabel}>
-          Adresse de livraison : {bl.client.nom} {ligneAdresse ? '· ' + ligneAdresse : ''}
-        </Text>
+          {/* Destinataire + adresse livraison */}
+          <View style={s.twoCol}>
+            <View style={s.clientBox}>
+              <Text style={s.clientLabel}>Destinataire</Text>
+              <Text style={s.clientName}>{bl.client.nom}</Text>
+              {bl.client.adresse ? <Text style={s.clientLine}>{bl.client.adresse}</Text> : null}
+              {(bl.client.code_postal || bl.client.ville)
+                ? <Text style={s.clientLine}>{bl.client.code_postal} {bl.client.ville}</Text>
+                : null}
+              <Text style={s.clientLine}>{bl.client.pays || 'FRANCE'}</Text>
+              {bl.client.tva_intra ? <Text style={[s.clientLine, { marginTop: 3 }]}>TVA : {bl.client.tva_intra}</Text> : null}
+              {bl.client.siret ? <Text style={s.clientLine}>SIRET : {bl.client.siret}</Text> : null}
+            </View>
 
-        {/* Tableau */}
-        <View style={s.tableHeader}>
-          <Text style={s.thRef}>Réf.</Text>
-          <Text style={s.thDesig}>Désignation</Text>
-          <Text style={s.thQte}>Qté</Text>
-        </View>
-
-        {bl.lignes.map((l, i) => (
-          <View key={i} style={[s.row, i % 2 !== 0 ? s.rowAlt : {}]}>
-            <Text style={s.tdRef}>{l.reference || ''}</Text>
-            <Text style={s.tdDesig}>{l.designation}</Text>
-            <Text style={s.tdQte}>{l.quantite}</Text>
+            <View style={s.livBox}>
+              <Text style={s.livLabel}>Adresse de livraison</Text>
+              <Text style={[s.livLine, { fontFamily: 'Helvetica-Bold', fontSize: 9, color: '#333' }]}>{bl.client.nom}</Text>
+              {bl.client.adresse ? <Text style={s.livLine}>{bl.client.adresse}</Text> : null}
+              {(bl.client.code_postal || bl.client.ville)
+                ? <Text style={s.livLine}>{bl.client.code_postal} {bl.client.ville}</Text>
+                : null}
+            </View>
           </View>
-        ))}
 
-        {/* Pied de page fixe — siège légal */}
+          {/* Tableau produits */}
+          <View style={s.tableHead}>
+            <Text style={s.thRef}>Réf.</Text>
+            <Text style={s.thDesig}>Désignation</Text>
+            <Text style={s.thQte}>Qté</Text>
+          </View>
+
+          {bl.lignes.map((l, i) => (
+            <View key={i}>
+              <View style={[s.row, i % 2 !== 0 ? s.rowAlt : {}]}>
+                <Text style={s.tdRef}>{l.reference || ''}</Text>
+                <Text style={s.tdDesig}>{l.designation}</Text>
+                <Text style={s.tdQte}>{l.quantite}</Text>
+              </View>
+              {i % 2 === 0 ? <View style={s.rowDivider} /> : null}
+            </View>
+          ))}
+        </View>
+
+        {/* ── Pied de page fixe ── */}
         <View style={s.footer} fixed>
-          <Text style={s.footerText}>{footerLine1}</Text>
-          <Text style={s.footerText}>{footerLine2}</Text>
+          <View style={s.footerBody}>
+            {params.logo_url
+              ? <Image src={params.logo_url} style={s.footerLogo} />
+              : null}
+            <Text style={s.footerText}>{footerLegal}</Text>
+            <Text style={s.pageNum} render={({ pageNumber, totalPages }) =>
+              totalPages > 1 ? `${pageNumber} / ${totalPages}` : ''
+            } />
+          </View>
+          <View style={s.footerBand} />
         </View>
 
       </Page>
