@@ -16,6 +16,11 @@ export async function POST(req: NextRequest) {
     return Response.json({ error: 'file, bucket et path sont requis' }, { status: 400 })
   }
 
+  const BUCKETS_AUTORISES = ['especes-photos', 'documents', 'logos']
+  if (!BUCKETS_AUTORISES.includes(bucket)) {
+    return Response.json({ error: 'Bucket non autorisé' }, { status: 400 })
+  }
+
   if (file.size > 10 * 1024 * 1024) {
     return Response.json({ error: 'Fichier trop volumineux (max 10 Mo)' }, { status: 413 })
   }

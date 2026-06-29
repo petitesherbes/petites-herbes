@@ -4,3 +4,12 @@
 // L'adresse de test onboarding@resend.dev ne peut envoyer qu'à votre propre adresse.
 export const EMAIL_FROM =
   process.env.EMAIL_FROM || 'GAEC Les Petites Herbes <onboarding@resend.dev>'
+
+export function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;')
+}

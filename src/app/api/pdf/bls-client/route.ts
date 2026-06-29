@@ -4,37 +4,9 @@ import { renderToBuffer } from '@react-pdf/renderer'
 import React from 'react'
 import BLsClientDocument from '@/lib/pdf/bls-client-document'
 import { ParamsDocs, BLPDF } from '@/lib/pdf/types'
+import { PARAMS_FALLBACK } from '@/lib/pdf/params-fallback'
 
 export const dynamic = 'force-dynamic'
-
-const PARAMS_FALLBACK: ParamsDocs = {
-  nom: 'GAEC Les Petites Herbes',
-  adresse: '15 rue François Arago',
-  code_postal: '83310',
-  ville: 'Cogolin',
-  telephone: '06 09 93 75 89 / 07 71 63 16 53',
-  email: 'petitesherbes@gmail.com',
-  activite: 'Producteur de micro pousses, plantes aromatiques et médicinales',
-  siret: '983 294 703 00019',
-  rcs: 'FREJUS',
-  capital: '2000',
-  tva_intra: 'FR 49 983 294 703',
-  ape_naf: '7010Z',
-  certification_bio: 'FR-BIO-01',
-  iban: 'FR76 1027 8091 1400 0203 1770 467',
-  bic: 'CMCIFR2A',
-  titulaire_iban: 'GAEC Les Petites Herbes',
-  logo_url: null,
-  mention_reserve_propriete: '',
-  mention_article_441: '',
-  conditions_reglement: 'Comptant à réception de facture',
-  delai_paiement_jours: 0,
-  adresse_exploitation: '270 avenue du Caucadis',
-  code_postal_exploitation: '83310',
-  ville_exploitation: 'Grimaud',
-  couleur_principale: '#1B5E20',
-  prochain_numero_facture: 485,
-}
 
 // POST /api/pdf/bls-client
 // body: { client_id: string, debut?: string, fin?: string }

@@ -68,7 +68,7 @@ export async function POST(
   }
 
   const lignes = [...(bl.bl_lignes || [])].sort((a: { ordre: number }, b: { ordre: number }) => a.ordre - b.ordre)
-  const dateFormatee = format(parseISO(bl.date_livraison), 'dd MMMM yyyy', { locale: fr })
+  const dateFormatee = format(parseISO(bl.date_livraison + 'T12:00:00'), 'dd MMMM yyyy', { locale: fr })
   const totalHT  = lignes.reduce((s: number, l: { prix_ht: number; quantite: number }) => s + l.prix_ht * l.quantite, 0)
   const totalTTC = lignes.reduce((s: number, l: { prix_ht: number; quantite: number; tva_pct: number }) => s + l.prix_ht * l.quantite * (1 + l.tva_pct / 100), 0)
 

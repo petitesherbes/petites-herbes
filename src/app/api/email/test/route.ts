@@ -13,6 +13,7 @@ export async function POST() {
     })
     return NextResponse.json({ ok: true })
   } catch (err) {
-    return NextResponse.json({ error: 'Erreur' }, { status: 500 })
+    console.error('email/test error:', err)
+    return NextResponse.json({ error: String(err) }, { status: 500 })
   }
 }

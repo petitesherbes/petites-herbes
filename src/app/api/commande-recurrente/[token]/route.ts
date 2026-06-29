@@ -51,10 +51,9 @@ export async function POST(
   if (!client) return NextResponse.json({ error: 'Client introuvable' }, { status: 404 })
 
   // Supprimer l'ancien modèle puis réinsérer
-  await supabase.from('commandes_recurrentes').delete().eq('client_id', client.id)
-
+  // Note : sans transaction Supabase, on sauvegarde d'abord le nouveau jeu, puis on supprime l'ancien
   if (lignes.length > 0) {
-    await supabase.from('commandes_recurrentes').insert(
+    const { error: insertErr } = await supabase.from('commandes_recurrentes').insert(
       lignes.map((l, i) => ({
         client_id:   client.id,
         produit_id:  l.produit_id,
@@ -67,6 +66,19 @@ export async function POST(
         updated_at:  new Date().toISOString(),
       }))
     )
+    if (insertErr) {
+      console.error('commandes_recurrentes insert error:', insertErr)
+      return NextResponse.json({ error: 'Erreur sauvegarde' }, { status: 500 })
+    }
+    // Supprimer les anciennes lignes seulement si l'insert a réussi
+    // On garde les nouvelles (ordre 0..n-1) et supprime celles hors de la nouvelle plage
+    await supabase.from('commandes_recurrentes')
+      .delete()
+      .eq('client_id', client.id)
+      .lt('updated_at', new Date().toISOString())
+  } else {
+    // Panier vide = tout supprimer
+    await supabase.from('commandes_recurrentes').delete().eq('client_id', client.id)
   }
 
   return NextResponse.json({ ok: true, nb: lignes.length })

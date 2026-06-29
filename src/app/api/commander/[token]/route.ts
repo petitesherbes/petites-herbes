@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { EMAIL_FROM } from '@/lib/email'
+import { EMAIL_FROM, escapeHtml } from '@/lib/email'
 import { createClient } from '@supabase/supabase-js'
 import { Resend } from 'resend'
 import { format } from 'date-fns'
@@ -200,7 +200,7 @@ export async function POST(
         <td>Livraison :</td><td style="color:#1B5E20;text-transform:capitalize;">${dateLivraisonFormatee}</td>
       </tr>
     </table>
-    ${message ? `<div style="background:#f9f9f9;border-left:3px solid #1B5E20;padding:10px 14px;margin:12px 0;font-size:13px;color:#555;">Message : ${message}</div>` : ''}
+    ${message ? `<div style="background:#f9f9f9;border-left:3px solid #1B5E20;padding:10px 14px;margin:12px 0;font-size:13px;color:#555;">Message : ${escapeHtml(String(message))}</div>` : ''}
     <table width="100%" style="border-collapse:collapse;margin-top:16px;">
       <thead>
         <tr style="background:#f5f5f5;">

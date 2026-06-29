@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { Resend } from 'resend'
-import { EMAIL_FROM } from '@/lib/email'
+import { EMAIL_FROM, escapeHtml } from '@/lib/email'
 
 export const JOURS_LIVRAISON = ['mardi', 'jeudi', 'vendredi'] as const
 export type JourRappel = (typeof JOURS_LIVRAISON)[number]
@@ -176,15 +176,13 @@ export async function envoyerRappelsEmail(jour: string, message?: string): Promi
   const nbProduits = produits.length
 
   const resend = new Resend(process.env.RESEND_API_KEY)
-  const errors: string[] = []
-  let nbOk = 0
 
-  for (const client of clients) {
+  const resultats = await Promise.allSettled(clients.map(client => {
     const lien = `${baseUrl}/commander/${client.order_token}`
 
     const msgPersonnalise = message
       ? `<div style="background:#f0fdf4;border-left:4px solid #16a34a;border-radius:0 8px 8px 0;padding:12px 16px;margin:0 0 16px 0;font-size:14px;color:#166534;line-height:1.6;">
-          ${message.replace(/\n/g, '<br>')}
+          ${escapeHtml(message).replace(/\n/g, '<br>')}
         </div>`
       : ''
 
@@ -250,18 +248,20 @@ export async function envoyerRappelsEmail(jour: string, message?: string): Promi
 </body>
 </html>`
 
-    try {
-      await resend.emails.send({
-        from: EMAIL_FROM,
-        to: [client.email!],
-        subject: `🌿 ${nbProduits > 0 ? `${nbProduits} produits disponibles` : 'Rappel commande'} — livraison ${jourLabel}`,
-        html,
-      })
-      nbOk++
-    } catch (e) {
-      errors.push(`${client.nom}: ${e}`)
-    }
-  }
+    return resend.emails.send({
+      from: EMAIL_FROM,
+      to: [client.email!],
+      subject: `🌿 ${nbProduits > 0 ? `${nbProduits} produits disponibles` : 'Rappel commande'} — livraison ${jourLabel}`,
+      html,
+    })
+  }))
+
+  const errors: string[] = []
+  let nbOk = 0
+  resultats.forEach((r, i) => {
+    if (r.status === 'fulfilled') { nbOk++ }
+    else { errors.push(`${clients[i].nom}: ${r.reason}`) }
+  })
 
   await supabase.from('rappels_envoyes').insert({ jour_livraison: jour, nb_envoyes: nbOk })
 
