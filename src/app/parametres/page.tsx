@@ -794,6 +794,15 @@ function EspeceModal({ espece, onClose, onSave }: { espece: Espece; onClose: () 
   const [section, setSection] = useState<'TAPIS' | 'TERREAU'>(
     espece.section === 'TAPIS' ? 'TAPIS' : 'TERREAU'
   )
+  const defaultFormats: string[] = espece.formats_autorises?.length
+    ? espece.formats_autorises
+    : espece.section === 'TAPIS' ? ['TAPIS'] : ['GODET', 'TERREAU']
+  const [formatsAutorises, setFormatsAutorises] = useState<string[]>(defaultFormats)
+  function toggleFormat(f: string) {
+    setFormatsAutorises(prev =>
+      prev.includes(f) ? prev.filter(x => x !== f) : [...prev, f]
+    )
+  }
 
   // ─── Opérations de culture ─────────────────────────────────────────────────
   const [operations, setOperations] = useState<{ id: string; titre: string; ordre: number }[]>([])
@@ -870,6 +879,7 @@ function EspeceModal({ espece, onClose, onSave }: { espece: Espece; onClose: () 
       prix_graine_kg: n(form.prix_graine_kg),
       stock_actuel_g: parseFloat(form.stock_actuel_g) || 0,
       photo_url:      photoUrl,
+      formats_autorises: formatsAutorises,
     }).eq('id', espece.id)
     setSaving(false); onSave(); onClose()
   }
@@ -938,6 +948,23 @@ function EspeceModal({ espece, onClose, onSave }: { espece: Espece; onClose: () 
               </button>
             ))}
           </div>
+        </div>
+
+        <div>
+          <label className="block text-xs text-gray-500 mb-1.5">Formats disponibles dans les semis</label>
+          <div className="flex gap-2">
+            {(['TAPIS', 'GODET', 'TERREAU'] as const).map(f => {
+              const on = formatsAutorises.includes(f)
+              return (
+                <button key={f} onClick={() => toggleFormat(f)}
+                  className={`flex-1 py-2 rounded-xl border-2 text-xs font-bold transition-colors
+                    ${on ? 'bg-green-700 border-green-700 text-white' : 'bg-white border-gray-200 text-gray-400'}`}>
+                  {f === 'TAPIS' ? '🟩 Tapis' : f === 'GODET' ? '🪴 Godet' : '🟫 Caisse'}
+                </button>
+              )
+            })}
+          </div>
+          <div className="text-[10px] text-gray-400 mt-1">Cochez tous les formats dans lesquels cette espèce peut être semée.</div>
         </div>
 
         <div className="grid grid-cols-2 gap-3">

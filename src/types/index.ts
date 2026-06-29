@@ -22,6 +22,8 @@ export interface Espece {
   actif: boolean
   en_taches: boolean
   created_at: string
+  // Formats explicitement autorisés — null = comportement par section (rétrocompatible)
+  formats_autorises: string[] | null
 }
 
 export interface Contenant {

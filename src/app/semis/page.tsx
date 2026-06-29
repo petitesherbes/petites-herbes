@@ -238,9 +238,10 @@ export default function NouveauSemisPage() {
   }
 
   function especesPourFormat(fmt: Format) {
-    return especes.filter(e =>
-      fmt === 'TAPIS' ? e.section === 'TAPIS' : (e.section === 'TERREAU' || e.section === 'GODETS')
-    )
+    return especes.filter(e => {
+      if (e.formats_autorises?.length) return e.formats_autorises.includes(fmt)
+      return fmt === 'TAPIS' ? e.section === 'TAPIS' : (e.section === 'TERREAU' || e.section === 'GODETS')
+    })
   }
 
   const calculerLigne = useCallback((l: LigneAvecId) => {
