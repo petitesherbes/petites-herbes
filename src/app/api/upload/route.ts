@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
     return Response.json({ error: 'file, bucket et path sont requis' }, { status: 400 })
   }
 
-  const BUCKETS_AUTORISES = ['especes-photos', 'documents', 'logos']
+  const BUCKETS_AUTORISES = ['especes-photos', 'documents', 'logos', 'product-photos', 'cahier-photos']
   if (!BUCKETS_AUTORISES.includes(bucket)) {
     return Response.json({ error: 'Bucket non autorisé' }, { status: 400 })
   }
