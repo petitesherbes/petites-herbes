@@ -294,9 +294,14 @@ export default function TachesPage() {
                       {t.titre}
                     </div>
                     <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                      {rep && !faite && (
-                        <span className="text-[10px] font-semibold text-orange-600 bg-orange-100 px-1.5 py-0.5 rounded-full">⚠ reportée</span>
-                      )}
+                      {rep && !faite && (() => {
+                        const jours = Math.round((new Date(todayStr).getTime() - new Date(t.date_echeance!).getTime()) / 86400000)
+                        return (
+                          <span className="text-[10px] font-semibold text-orange-600 bg-orange-100 px-1.5 py-0.5 rounded-full">
+                            ⚠ reportée{jours > 0 ? ` · ${jours}j` : ''}
+                          </span>
+                        )
+                      })()}
                       {t.type === 'recurrente' && (
                         <span className="text-[10px] text-green-600 bg-green-50 px-1.5 py-0.5 rounded-full">🔁</span>
                       )}
